@@ -438,6 +438,9 @@ def assemble(records):
         page_blocks, page_defs, orphans = split_page(rec["page"], text)
         defs.extend(page_defs)
         for i, block in enumerate(page_blocks):
+            if block.startswith("#") and len(block) > 150:
+                # A paragraph the model marked as a heading by mistake.
+                block = block.lstrip("#").strip()
             if block.startswith("#"):
                 if rec["page"] == 1:
                     # The cover's big words are not chapters.
