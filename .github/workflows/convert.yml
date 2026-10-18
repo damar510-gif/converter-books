@@ -30,6 +30,9 @@ on:
         type: string
         default: 'gemini-3.8-flash'
 
+permissions:
+  contents: write
+
 jobs:
   convert:
     runs-on: ubuntu-latest
@@ -95,6 +98,7 @@ jobs:
           GEMINI_FALLBACK_MODEL: ${{ inputs.fallback_model }}
           BOOK_TITLE: ${{ inputs.title }}
           BOOK_PAGES: ${{ inputs.pages }}
+          PYTHONUNBUFFERED: '1'
         run: |
           set +e
           ARGS=(-o "$EPUB_OUTPUT" --work-dir work --report report.md --keep-markdown)
@@ -123,6 +127,33 @@ jobs:
             ${{ env.EPUB_OUTPUT }}.md
             report.md
           if-no-files-found: warn
+
+      # The book and its text are also kept in the "results" branch, so they can be
+      # downloaded straight from the repository page.
+      - name: Save to results branch
+        if: always() && steps.convert.outputs.code != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          [ -f "$EPUB_OUTPUT" ] || exit 0
+          NAME="${EPUB_OUTPUT%.epub}"
+          URL="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          TMP=$(mktemp -d)
+          if git ls-remote --exit-code --heads origin results >/dev/null 2>&1; then
+            git clone -q --depth 1 --branch results "$URL" "$TMP"
+          else
+            git init -q -b results "$TMP"
+            git -C "$TMP" remote add origin "$URL"
+          fi
+          mkdir -p "$TMP/$NAME"
+          cp "$EPUB_OUTPUT" "$TMP/$NAME/"
+          [ -f "$EPUB_OUTPUT.md" ] && cp "$EPUB_OUTPUT.md" "$TMP/$NAME/text.md"
+          cp report.md "$TMP/$NAME/report.md"
+          cd "$TMP"
+          git add -A
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit -q -m "Result: $NAME (run ${GITHUB_RUN_NUMBER})" || exit 0
+          git push -q origin results
 
       - name: Fail if pages are missing
         if: steps.convert.outputs.code != '0'
