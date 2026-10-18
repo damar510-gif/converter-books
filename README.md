@@ -52,6 +52,8 @@ The script detects pages without a text layer and sends each one to Gemini on it
 - A **report** (`report.md`) lists any missing pages, and the script exits with code 2 when the book is incomplete.
 - Headings, footnotes and poetry are kept: each article becomes a chapter in the table of contents.
 - `--pages 1-20` converts part of a book (useful for a quick test).
+- **Missing-lines review**: when Tesseract is installed, each page is compared with a Tesseract reading; pages whose text lost lines are re-read once (`--review-limit`, default 60 pages).
+- The table of contents lists the main articles only (one short text request picks them), and the EPUB carries the original page numbers (a page list), so readers can show the book's own 246 pages.
 
 ## GitHub Actions Usage
 

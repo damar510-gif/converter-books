@@ -47,8 +47,8 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install Pandoc
-        run: sudo apt-get update && sudo apt-get install -y pandoc
+      - name: Install Pandoc and Tesseract
+        run: sudo apt-get update && sudo apt-get install -y pandoc tesseract-ocr tesseract-ocr-ara
 
       - name: Install Python Dependencies
         run: |

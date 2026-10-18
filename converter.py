@@ -3,10 +3,12 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import threading
 import time
+import zipfile
 from concurrent.futures import ThreadPoolExecutor
 
 import pymupdf
@@ -116,7 +118,7 @@ def parse_pages(spec, count):
 
 def page_image(doc, page):
     """PNG bytes of the page at its scan's native resolution (at least 200 dpi otherwise)."""
-    images = page.get_images()
+    images = page.get_images(full=True)
     if len(images) == 1:
         xref = images[0][0]
         try:
@@ -227,9 +229,10 @@ class GeminiOCR:
         self.limiter.wait()
         with self.lock:
             self.requests[model] = self.requests.get(model, 0) + 1
+        contents = [prompt] if png is None else [types.Part.from_bytes(data=png, mime_type="image/png"), prompt]
         response = self.client.models.generate_content(
             model=model,
-            contents=[types.Part.from_bytes(data=png, mime_type="image/png"), prompt],
+            contents=contents,
             config=self._config(),
         )
         finish = ""
@@ -427,7 +430,11 @@ def assemble(records):
     # Each block is [text, kind]; notes sit between pages without breaking a
     # sentence that continues on the next page.
     blocks, defs, last_heading = [], [], None
+    marker = ""
     for rec in records:
+        # An empty span at the start of each page; add_page_list() turns it into the
+        # EPUB page marker, so readers can show the book's own page numbers.
+        marker += f"[]{{#pg-{rec['page']} .pagebreak}}"
         text = rec.get("text") or ""
         if rec["status"] == "text-layer":
             text = re.sub(r"[ \t]*\n(?!\s*\n)", " ", text)
@@ -450,6 +457,11 @@ def assemble(records):
                     continue
                 else:
                     last_heading = block
+            if marker and not block.startswith("#"):
+                # Not inside a heading: the marker would also land in the table of contents.
+                m = re.match(r"^(#{1,6} |\| |> )?", block)
+                block = block[:m.end()] + marker + block[m.end():]
+                marker = ""
             if i == 0 and is_paragraph(block):
                 j = len(blocks) - 1
                 while j >= 0 and blocks[j][1] == "note":
@@ -461,8 +473,217 @@ def assemble(records):
             blocks.append([block, "body"])
         for note in orphans:
             blocks.append([f"::: note\n{note}\n:::", "note"])
+    if marker:
+        blocks.append([marker, "body"])
     out = "\n\n".join(b for b, _ in blocks)
     return out + ("\n\n" + "\n\n".join(defs) if defs else "") + "\n"
+
+
+def add_page_list(epub_path):
+    """Marks the page spans as EPUB page breaks and adds the page list to the
+    navigation document, rewriting the EPUB in place."""
+    with zipfile.ZipFile(epub_path) as zin:
+        names = zin.namelist()
+        items = {n: zin.read(n) for n in names}
+    span = re.compile(r'<span (?:id="pg-(\d+)" class="pagebreak"|class="pagebreak" id="pg-(\d+)")></span>')
+    entries = []
+    for name in sorted(n for n in names if n.startswith("EPUB/text/") and n.endswith(".xhtml")):
+        html = items[name].decode("utf-8")
+
+        def mark(m):
+            n = m.group(1) or m.group(2)
+            entries.append((int(n), name[len("EPUB/"):]))
+            return f'<span epub:type="pagebreak" role="doc-pagebreak" id="pg-{n}" aria-label="{n}"></span>'
+
+        items[name] = span.sub(mark, html).encode("utf-8")
+    if not entries or "EPUB/nav.xhtml" not in items:
+        return 0
+    entries.sort()
+    links = "".join(f'<li><a href="{href}#pg-{n}">{n}</a></li>' for n, href in entries)
+    nav = items["EPUB/nav.xhtml"].decode("utf-8")
+    nav = nav.replace("</body>", f'<nav epub:type="page-list" id="page-list" hidden="hidden"><ol>{links}</ol></nav>\n</body>', 1)
+    items["EPUB/nav.xhtml"] = nav.encode("utf-8")
+    tmp = epub_path + ".tmp"
+    with zipfile.ZipFile(tmp, "w") as zout:
+        zout.writestr(zipfile.ZipInfo("mimetype"), items.pop("mimetype", b"application/epub+zip"),
+                      compress_type=zipfile.ZIP_STORED)
+        for name in names:
+            if name in items:
+                zout.writestr(name, items[name], compress_type=zipfile.ZIP_DEFLATED)
+    os.replace(tmp, epub_path)
+    return len(entries)
+
+
+ARTICLES_PROMPT = """هذه قائمة مرقمة بالعناوين الكبيرة التي وُجدت في كتاب عربي، ومع كل عنوان بداية النص الذي يليه.
+المطلوب: حدد العناوين التي تبدأ مقالاً أو بحثاً أو فصلاً رئيسياً مستقلاً في الكتاب (في كتب المقالات يكون عادة اسم الكتاب المدروس ومؤلفه، ويليه اسم كاتب المقال).
+العناوين الداخلية داخل المقال (أقسامه، نصوصه، نماذجه، تراجم، أبواب فرعية) وصفحات الغلاف والعنوان ليست رئيسية.
+أجب بـ JSON فقط بهذا الشكل: {{"main": [أرقام العناوين الرئيسية]}}
+
+{items}"""
+
+
+def keep_main_headings(md, ocr, cache_dir):
+    """Leaves "# " only on the headings that start a main article, so the table of
+    contents lists articles alone; the others become sub-headings in the text."""
+    lines = md.split("\n")
+    heads = [i for i, line in enumerate(lines) if line.startswith("# ")]
+    if len(heads) < 2:
+        return md
+
+    def plain(line):
+        return re.sub(r"\[\]\{[^}]*\}", "", line).lstrip("#").strip()
+
+    items = []
+    for k, i in enumerate(heads, 1):
+        after = " ".join(plain(l) for l in lines[i + 1:i + 6] if l.strip() and not l.startswith("["))[:160]
+        items.append(f"{k}. {plain(lines[i])}\n   ← {after}")
+    key = hashlib.sha256("\n".join(items).encode("utf-8")).hexdigest()[:16]
+    path = os.path.join(cache_dir, "articles.json")
+    main = None
+    if os.path.exists(path):
+        with open(path, encoding="utf-8") as f:
+            saved = json.load(f)
+        if saved.get("key") == key:
+            main = set(saved["main"])
+    if main is None:
+        if not ocr:
+            return md
+        try:
+            text, _ = ocr.read(None, ARTICLES_PROMPT.format(items="\n".join(items)), ocr.model)
+            main = set(int(n) for n in json.loads(re.search(r"\{.*\}", text, re.S).group(0))["main"])
+        except Exception as e:
+            print(f"Could not pick the main articles, keeping all headings: {e}")
+            return md
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump({"key": key, "main": sorted(main)}, f)
+    if not main:
+        return md
+    for k, i in enumerate(heads, 1):
+        if k not in main:
+            lines[i] = "#" + lines[i]
+    print(f"Table of contents: {len(main)} main articles out of {len(heads)} headings")
+    return "\n".join(lines)
+
+
+def norm_words(text):
+    text = re.sub(r"[\u064B-\u0652\u0640]", "", text)
+    text = re.sub("[إأآا]", "ا", text)
+    text = text.replace("ى", "ي").replace("ة", "ه").replace("ؤ", "و").replace("ئ", "ي")
+    return [w for w in re.findall(r"[\u0621-\u064A]+", text) if len(w) > 2]
+
+
+def tesseract_text(png):
+    try:
+        r = subprocess.run(["tesseract", "stdin", "stdout", "-l", "ara", "--psm", "3"],
+                           input=png, capture_output=True, timeout=180,
+                           # One thread per process: we already run several in parallel.
+                           env={**os.environ, "OMP_THREAD_LIMIT": "1"})
+        return r.stdout.decode("utf-8", "ignore")
+    except Exception as e:
+        print(f"  tesseract failed: {e}")
+        return ""
+
+
+def missing_lines(tess, text, vocab):
+    """Lines Tesseract saw on the page that the model's text does not contain.
+    Tesseract makes many letter mistakes, so only lines made mostly of words that
+    appear elsewhere in the book count, and a line is missing when almost none of
+    its word pairs are in the page text."""
+    w = norm_words(text)
+    pairs = set(zip(w, w[1:]))
+    out = []
+    for line in tess.split("\n"):
+        lw = norm_words(line)
+        if len(lw) < 5:
+            continue
+        known = sum(x in vocab for x in lw) / len(lw)
+        lp = list(zip(lw, lw[1:]))
+        if known >= 0.7 and sum(x in pairs for x in lp) / len(lp) <= 0.15:
+            out.append(line.strip())
+    return out
+
+
+REVIEW_HINT = """
+
+تنبيه مهم: قراءة سابقة لهذه الصفحة أسقطت أسطراً. انسخ كل سطر في الصفحة دون استثناء، في العمودين، من أول سطر إلى آخر سطر.
+من الأسطر التي سقطت (مكتوبة بقارئ آلي فيها أخطاء حروف، فاعتمد على الصورة لا عليها):
+{lines}"""
+
+
+def review_pages(ocr, filepath, records, cache_dir, limit, workers):
+    """Re-reads pages whose text lost lines; keeps whichever reading lost fewer."""
+    stats = {"checked": 0, "flagged": 0, "improved": 0}
+    if not shutil.which("tesseract"):
+        print("Tesseract is not installed; skipping the missing-lines review.")
+        return stats
+    vocab = set()
+    for rec in records:
+        vocab.update(norm_words(rec.get("text") or ""))
+    todo = [r for r in records if r["status"] == "ok" and "ink" in r and not r.get("reviewed")]
+    tess_dir = os.path.join(cache_dir, "tesseract")
+    os.makedirs(tess_dir, exist_ok=True)
+
+    def check(rec):
+        path = os.path.join(tess_dir, f"{rec['page']:04d}.txt")
+        if os.path.exists(path):
+            with open(path, encoding="utf-8") as f:
+                tess = f.read()
+        else:
+            local = pymupdf.open(filepath)
+            png, _ = page_image(local, local[rec["page"] - 1])
+            local.close()
+            tess = tesseract_text(png)
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(tess)
+        return rec, tess, missing_lines(tess, rec["text"], vocab)
+
+    def save(rec):
+        with open(os.path.join(cache_dir, f"{rec['page']:04d}.json"), "w", encoding="utf-8") as f:
+            json.dump(rec, f, ensure_ascii=False)
+
+    with ThreadPoolExecutor(max_workers=os.cpu_count() or 2) as pool:
+        checked = list(pool.map(check, todo))
+    stats["checked"] = len(checked)
+    flagged = sorted((c for c in checked if c[2]), key=lambda c: -len(c[2]))
+    for rec, _, miss in checked:
+        if not miss:
+            rec["reviewed"] = True
+            save(rec)
+    stats["flagged"] = len(flagged)
+    print(f"Review: {len(flagged)} of {len(checked)} pages seem to miss lines; re-reading up to {limit}")
+
+    def reread(item):
+        rec, tess, miss = item
+        local = pymupdf.open(filepath)
+        try:
+            png, pix = page_image(local, local[rec["page"] - 1])
+        finally:
+            local.close()
+        spread = pix.width > pix.height * 1.15
+        prompt = OCR_PROMPT.format(spread=SPREAD_HINT if spread else "")
+        prompt += REVIEW_HINT.format(lines="\n".join(f"- {l}" for l in miss[:4]))
+        try:
+            text, finish = ocr.read(png, prompt, ocr.model)
+        except QuotaExhausted:
+            ocr.quota_hit.set()
+            return
+        except Exception as e:
+            print(f"  review page {rec['page']}: {str(e)[:120]}")
+            return
+        text = clean_ocr(text)
+        after = missing_lines(tess, text, vocab) if text and "MAX_TOKENS" not in finish else miss
+        better = len(after) < len(miss)
+        if better:
+            rec["text"] = text
+            stats["improved"] += 1
+        rec["reviewed"] = True
+        rec["review"] = {"before": len(miss), "after": min(len(after), len(miss))}
+        save(rec)
+        print(f"  review page {rec['page']}: missing lines {len(miss)} -> {rec['review']['after']}")
+
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        list(pool.map(reread, flagged[:limit]))
+    return stats
 
 
 def run_pandoc(md_path, output_path, title, cover_path=None, toc=True):
@@ -478,7 +699,7 @@ def run_pandoc(md_path, output_path, title, cover_path=None, toc=True):
     if os.path.exists(css):
         cmd.extend(["--css", css])
     if toc:
-        cmd.extend(["--toc", "--toc-depth=2"])
+        cmd.extend(["--toc", "--toc-depth=1"])
     if cover_path and os.path.exists(cover_path):
         cmd.extend(["--epub-cover-image", cover_path])
     print(f"Running pandoc to generate {output_path}...")
@@ -486,7 +707,7 @@ def run_pandoc(md_path, output_path, title, cover_path=None, toc=True):
     print(f"Successfully generated EPUB: {output_path}")
 
 
-def write_report(path, records, selected, ocr, quota_stopped):
+def write_report(path, records, selected, ocr, quota_stopped, review=None):
     by_status = {}
     for rec in records:
         by_status.setdefault(rec["status"], []).append(rec["page"])
@@ -498,6 +719,9 @@ def write_report(path, records, selected, ocr, quota_stopped):
     for key, label in names.items():
         if key in by_status:
             lines.append(f"- {label}: {len(by_status[key])}")
+    if review and review.get("checked"):
+        lines.append(f"- مراجعة الأسطر الساقطة: فُحصت {review['checked']} صفحة، "
+                     f"وأعيدت قراءة {review['flagged']}، وتحسنت {review['improved']}")
     if ocr:
         for model, n in ocr.requests.items():
             lines.append(f"- طلبات {model} في هذا التشغيل: {n}")
@@ -570,18 +794,26 @@ def generate_epub_from_pdf(filepath, output_path, args):
         for i, rec in pool.map(work, selected):
             results[i] = rec
 
-    quota_stopped = bool(ocr and ocr.quota_hit.is_set())
     records = [results[i] or {"page": i + 1, "status": "pending"} for i in selected]
-    missing = write_report(args.report, records, selected, ocr, quota_stopped)
+    review = None
+    if ocr and args.review_limit > 0 and not ocr.quota_hit.is_set():
+        review = review_pages(ocr, filepath, records, cache_dir, args.review_limit, args.workers)
+    quota_stopped = bool(ocr and ocr.quota_hit.is_set())
+
+    md = assemble(records)
+    if not args.pages:
+        md = keep_main_headings(md, ocr, cache_dir)
+    missing = write_report(args.report, records, selected, ocr, quota_stopped, review)
 
     md_path = output_path + ".md"
     with open(md_path, "w", encoding="utf-8") as f:
-        f.write(assemble(records))
+        f.write(md)
 
     cover_path = output_path + ".cover.png"
     has_cover = extract_cover_from_pdf(doc, cover_path)
     try:
         run_pandoc(md_path, output_path, args.title, cover_path if has_cover else None)
+        print(f"Page list: {add_page_list(output_path)} pages")
     finally:
         if has_cover and os.path.exists(cover_path):
             os.remove(cover_path)
@@ -646,7 +878,9 @@ def main():
     parser.add_argument("--fallback-model", default=os.environ.get("GEMINI_FALLBACK_MODEL", "gemini-3.8-flash"))
     parser.add_argument("--fallback-limit", type=int, default=15,
                         help="Max requests to the fallback model per run (its daily limit is small)")
-    parser.add_argument("--rpm", type=float, default=12, help="Requests per minute to stay under")
+    parser.add_argument("--rpm", type=float, default=10, help="Requests per minute to stay under")
+    parser.add_argument("--review-limit", type=int, default=60,
+                        help="Max pages re-read because they seem to miss lines (needs tesseract; 0 = off)")
     parser.add_argument("--workers", type=int, default=4)
     parser.add_argument("--keep-markdown", action="store_true")
     args = parser.parse_args()
