@@ -37,6 +37,19 @@ OCR_PROMPT = """أنت تنسخ صفحة واحدة من كتاب عربي مم�
 - لا تكتب أي تعليق أو شرح أو مقدمة، فقط نص الصفحة.
 - إن كانت الصفحة فارغة أو صورة بلا نص فاكتب فقط: [[EMPTY]]"""
 
+# Finish reasons where the model refused the page instead of reading it.
+BLOCKED_REASONS = ("PROHIBITED_CONTENT", "SAFETY", "RECITATION", "BLOCKLIST", "SPII", "OTHER")
+
+SAFETY_OFF = [
+    types.SafetySetting(category=c, threshold=types.HarmBlockThreshold.BLOCK_NONE)
+    for c in (
+        types.HarmCategory.HARM_CATEGORY_HARASSMENT,
+        types.HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+        types.HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
+        types.HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+    )
+]
+
 SPREAD_HINT = "- هذه الصورة فيها صفحتان من الكتاب متجاورتان: انسخ الصفحة اليمنى كاملة أولاً ثم اليسرى.\n"
 
 
@@ -123,6 +136,58 @@ def page_image(doc, page):
     return pix.tobytes("png"), pix
 
 
+def split_rects(page, pix):
+    """Two clips of the page in reading order: right/left column at the gutter when
+    there is one, otherwise top/bottom halves at the emptiest row."""
+    gray = pymupdf.Pixmap(pymupdf.csGRAY, pix) if pix.n > 1 else pymupdf.Pixmap(pix)
+    if gray.alpha:
+        gray = pymupdf.Pixmap(gray, 0)
+    gray.shrink(2)
+    w, h, data = gray.width, gray.height, gray.samples
+    stride = len(data) // h
+
+    def dark_in_column(x):
+        return sum(1 for y in range(int(h * 0.1), int(h * 0.9)) if data[y * stride + x] < 110)
+
+    def dark_in_row(y):
+        row = data[y * stride:y * stride + w]
+        return sum(1 for v in row if v < 110)
+
+    sx = page.rect.width / w
+    sy = page.rect.height / h
+    gutter = min(range(int(w * 0.42), int(w * 0.58)), key=dark_in_column)
+    if dark_in_column(gutter) <= h * 0.005:
+        x = gutter * sx
+        return [pymupdf.Rect(x, 0, page.rect.width, page.rect.height), pymupdf.Rect(0, 0, x, page.rect.height)]
+    cut = min(range(int(h * 0.4), int(h * 0.6)), key=dark_in_row)
+    y = cut * sy
+    return [pymupdf.Rect(0, 0, page.rect.width, y), pymupdf.Rect(0, y, page.rect.width, page.rect.height)]
+
+
+def read_in_halves(ocr, page, pix, prompt, model):
+    """Reads a refused page as two separate clips; refusals are often triggered by
+    the page as a whole, not by either part."""
+    dpi = max(150, round(72 * pix.width / page.rect.width))
+    parts, finish = [], ""
+    for rect in split_rects(page, pix):
+        png = page.get_pixmap(clip=rect, dpi=dpi).tobytes("png")
+        text, finish = ocr.read(png, prompt, model)
+        text = clean_ocr(text)
+        if not text or any(r in finish for r in BLOCKED_REASONS):
+            return "", finish
+        if text != "[[EMPTY]]":
+            parts.append(text)
+    joined = ""
+    for part in parts:
+        if not joined:
+            joined = part
+        elif joined.rstrip().endswith(TERMINAL) or not is_paragraph(part.lstrip()):
+            joined = joined.rstrip() + "\n\n" + part.lstrip()
+        else:
+            joined = joined.rstrip() + " " + part.lstrip()
+    return joined, finish
+
+
 def ink_ratio(pix):
     """Fraction of dark pixels, sampled. Tells blank pages from pages with text."""
     gray = pymupdf.Pixmap(pymupdf.csGRAY, pix) if pix.n > 1 else pix
@@ -150,9 +215,10 @@ class GeminiOCR:
 
     def _config(self):
         if not self.use_tuning:
-            return types.GenerateContentConfig(max_output_tokens=8192)
+            return types.GenerateContentConfig(max_output_tokens=8192, safety_settings=SAFETY_OFF)
         return types.GenerateContentConfig(
             max_output_tokens=8192,
+            safety_settings=SAFETY_OFF,
             media_resolution=types.MediaResolution.MEDIA_RESOLUTION_HIGH,
             thinking_config=types.ThinkingConfig(thinking_level=types.ThinkingLevel.LOW),
         )
@@ -244,10 +310,15 @@ def ocr_page(ocr, doc, index, cache_dir, total):
         rec = {"page": index + 1, "ink": round(ink, 4), "spread": spread, "status": "failed"}
         model = ocr.model
         tried = []
+        halves_tried = False
         while model:
             tried.append(model)
             try:
                 text, finish = ocr.read(png, prompt, model)
+                if not clean_ocr(text) and any(r in finish for r in BLOCKED_REASONS) and not halves_tried:
+                    halves_tried = True
+                    tried.append(model + " (halves)")
+                    text, finish = read_in_halves(ocr, page, pix, prompt, model)
             except QuotaExhausted as e:
                 if e.model == ocr.model:
                     # Primary model is out for today: stop, the page stays pending.
@@ -282,39 +353,70 @@ def ocr_page(ocr, doc, index, cache_dir, total):
 
 
 FOOTNOTE_DEF = re.compile(r"^\[\^([^\]\s]+)\]:\s*(.*)$")
+# Footnotes the model left in the book's own style: "(1) text" at the end of the page.
+PLAIN_NOTE = re.compile(r"^\(([0-9٠-٩۰-۹]{1,3})\)\s*(.+)$")
+PLAIN_REF = re.compile(r"(?<!^)\(([0-9٠-٩۰-۹]{1,3})\)", re.M)
+DIGITS = str.maketrans("٠١٢٣٤٥٦٧٨٩۰۱۲۳۴۵۶۷۸۹", "01234567890123456789")
 FOOTNOTE_REF = re.compile(r"\[\^([^\]\s]+)\](?!:)")
 TERMINAL = tuple(".!?؟:»\")…]*؛")
 
 
 def split_page(page_no, text):
-    """Splits a page into body blocks and footnote definitions with page-unique labels."""
+    """Splits a page into body blocks, footnote definitions with page-unique labels,
+    and notes whose marker could not be found in the text."""
     body_lines, notes = [], {}
     for line in text.split("\n"):
         m = FOOTNOTE_DEF.match(line.strip())
         if m:
-            notes[m.group(1)] = m.group(2).strip()
+            notes[m.group(1).translate(DIGITS)] = m.group(2).strip()
         else:
             body_lines.append(line)
+
+    # Trailing "(n) text" lines are footnotes too.
+    while body_lines and not body_lines[-1].strip():
+        body_lines.pop()
+    plain = []
+    while body_lines:
+        m = PLAIN_NOTE.match(body_lines[-1].strip())
+        if m:
+            plain.insert(0, (m.group(1).translate(DIGITS), m.group(2).strip()))
+            body_lines.pop()
+        elif not body_lines[-1].strip():
+            body_lines.pop()
+        else:
+            break
     body = "\n".join(body_lines)
 
     used = set()
 
     def ref(m):
-        label = m.group(1)
+        label = m.group(1).translate(DIGITS)
         if label in notes:
             used.add(label)
             return f"[^p{page_no}-{label}]"
-        return f"({label})"
+        return f"({m.group(1)})"
 
     body = FOOTNOTE_REF.sub(ref, body)
-    defs = []
+    for label, note in plain:
+        if label in notes:
+            continue
+        for m in PLAIN_REF.finditer(body):
+            if m.group(1).translate(DIGITS) == label:
+                body = body[:m.start()] + f"[^p{page_no}-{label}]" + body[m.end():]
+                notes[label] = note
+                used.add(label)
+                break
+        else:
+            notes[label] = note
+
+    defs, orphans = [], []
     for label, note in notes.items():
         if label in used:
             defs.append(f"[^p{page_no}-{label}]: {note}")
         else:
-            body += f"\n\n({label}) {note}"
+            orphans.append(f"({label}) {note}")
     blocks = [b.strip() for b in re.split(r"\n\s*\n", body) if b.strip()]
-    return blocks, defs
+    return blocks, defs, orphans
 
 
 def is_paragraph(block):
@@ -322,6 +424,8 @@ def is_paragraph(block):
 
 
 def assemble(records):
+    # Each block is [text, kind]; notes sit between pages without breaking a
+    # sentence that continues on the next page.
     blocks, defs, last_heading = [], [], None
     for rec in records:
         text = rec.get("text") or ""
@@ -329,22 +433,33 @@ def assemble(records):
             text = re.sub(r"[ \t]*\n(?!\s*\n)", " ", text)
         if not text:
             if rec["status"] in ("failed", "suspicious") or rec.get("missing"):
-                blocks.append(f"> **[الصفحة {rec['page']} لم تُقرأ]**")
+                blocks.append([f"> **[الصفحة {rec['page']} لم تُقرأ]**", "marker"])
             continue
-        page_blocks, page_defs = split_page(rec["page"], text)
+        page_blocks, page_defs, orphans = split_page(rec["page"], text)
         defs.extend(page_defs)
         for i, block in enumerate(page_blocks):
             if block.startswith("#"):
-                # Running headers repeated on each page come back as the same heading.
-                if block == last_heading:
+                if rec["page"] == 1:
+                    # The cover's big words are not chapters.
+                    block = block.lstrip("#").strip()
+                elif block == last_heading:
+                    # Running headers repeated on each page come back as the same heading.
                     continue
-                last_heading = block
-            if (i == 0 and blocks and is_paragraph(block) and is_paragraph(blocks[-1])
-                    and not blocks[-1].endswith(TERMINAL)):
-                blocks[-1] = blocks[-1] + " " + block
-            else:
-                blocks.append(block)
-    return "\n\n".join(blocks) + ("\n\n" + "\n\n".join(defs) if defs else "") + "\n"
+                else:
+                    last_heading = block
+            if i == 0 and is_paragraph(block):
+                j = len(blocks) - 1
+                while j >= 0 and blocks[j][1] == "note":
+                    j -= 1
+                if (j >= 0 and blocks[j][1] == "body" and is_paragraph(blocks[j][0])
+                        and not blocks[j][0].endswith(TERMINAL)):
+                    blocks[j][0] += " " + block
+                    continue
+            blocks.append([block, "body"])
+        for note in orphans:
+            blocks.append([f"::: note\n{note}\n:::", "note"])
+    out = "\n\n".join(b for b, _ in blocks)
+    return out + ("\n\n" + "\n\n".join(defs) if defs else "") + "\n"
 
 
 def run_pandoc(md_path, output_path, title, cover_path=None, toc=True):

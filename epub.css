@@ -2,3 +2,4 @@ body { direction: rtl; text-align: justify; line-height: 1.8; }
 h1, h2 { text-align: center; }
 .line-block { margin: 1em 2em; text-align: center; }
 section.footnotes, aside.footnote { font-size: 0.85em; }
+.note { font-size: 0.85em; color: #555; margin: 0.5em 0; }
