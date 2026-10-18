@@ -4,9 +4,18 @@ on:
   workflow_dispatch:
     inputs:
       input_file:
-        description: 'Path to the input file in the repository (e.g., input/book.pdf)'
-        required: true
+        description: 'Path to the input file in the repository (leave empty if using file_url)'
+        required: false
         type: string
+      file_url:
+        description: 'Direct download URL for the book file (optional)'
+        required: false
+        type: string
+      model:
+        description: 'Gemini model to use'
+        required: false
+        type: string
+        default: 'gemini-3.5-flash-lite'
 
 jobs:
   convert:
@@ -29,16 +38,42 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      - name: Download File if URL provided
+        id: download_file
+        if: ${{ inputs.file_url != '' }}
+        run: |
+          # Try to get the filename from the URL, otherwise default
+          URL="${{ inputs.file_url }}"
+          FILENAME=$(basename "${URL%%\?*}")
+          if [[ ! "$FILENAME" =~ \.(pdf|docx|txt)$ ]]; then
+            FILENAME="downloaded_book.pdf"
+          fi
+
+          wget -q -O "$FILENAME" "$URL"
+          echo "DOWNLOADED_FILE=$FILENAME" >> $GITHUB_ENV
+
       - name: Run Conversion Script
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_MODEL: ${{ inputs.model }}
         run: |
+          if [ -n "${{ env.DOWNLOADED_FILE }}" ]; then
+            TARGET_FILE="${{ env.DOWNLOADED_FILE }}"
+          else
+            TARGET_FILE="${{ inputs.input_file }}"
+          fi
+
+          if [ -z "$TARGET_FILE" ]; then
+            echo "Error: You must provide either input_file or file_url."
+            exit 1
+          fi
+
           # Generate base output filename
-          FILENAME=$(basename "${{ inputs.input_file }}")
+          FILENAME=$(basename "$TARGET_FILE")
           BASENAME="${FILENAME%.*}"
           OUTPUT_PATH="${BASENAME}.epub"
 
-          python converter.py "${{ inputs.input_file }}" -o "$OUTPUT_PATH"
+          python converter.py "$TARGET_FILE" -o "$OUTPUT_PATH"
 
           # Set the output path as an environment variable for the next step
           echo "EPUB_OUTPUT=$OUTPUT_PATH" >> $GITHUB_ENV

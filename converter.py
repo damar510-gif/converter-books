@@ -1,31 +1,61 @@
 import argparse
 import sys
 import os
+import re
+import time
 import pymupdf
 import subprocess
 from google import genai
 from google.genai import types
 
-def extract_text_with_gemini(image_bytes):
+def apply_smart_indexing(text):
+    """
+    Applies smart markdown indexing (TOC) to unformatted Arabic text.
+    """
+    # Main headings: كتاب، باب، مقدمة، خاتمة
+    text = re.sub(r'^\s*(كتاب|باب|مقدمة|المقدمة|خاتمة|الخاتمة)\b(.*?)$', r'# \1\2', text, flags=re.MULTILINE)
+
+    # Subheadings: فصل، مبحث
+    text = re.sub(r'^\s*(فصل|الفصل|مبحث|المبحث)\b(.*?)$', r'## \1\2', text, flags=re.MULTILINE)
+
+    return text
+
+def extract_text_with_gemini_batch(images_bytes):
     api_key = os.environ.get("GEMINI_API_KEY")
     if not api_key:
-        print("Warning: GEMINI_API_KEY environment variable not set. Skipping OCR for scanned page.")
+        print("Warning: GEMINI_API_KEY environment variable not set. Skipping OCR for scanned pages.")
         return ""
+
+    model = os.environ.get("GEMINI_MODEL", "gemini-3.5-flash-lite")
 
     try:
         client = genai.Client(api_key=api_key)
+        prompt = "Extract the Arabic text from these images. Output only the text in sequence, maintaining the original paragraphs and structure. Keep it RTL compatible."
 
-        # We use a system instruction to ensure it outputs raw Arabic text properly.
-        prompt = "Extract the Arabic text from this image. Output only the text, maintaining the original paragraphs and structure. Keep it RTL compatible."
+        contents = []
+        for img_bytes in images_bytes:
+            contents.append(types.Part.from_bytes(data=img_bytes, mime_type='image/png'))
+        contents.append(prompt)
 
-        response = client.models.generate_content(
-            model='gemini-2.5-flash',
-            contents=[
-                types.Part.from_bytes(data=image_bytes, mime_type='image/png'),
-                prompt
-            ]
-        )
-        return response.text + "\n\n"
+        try:
+            response = client.models.generate_content(
+                model=model,
+                contents=contents
+            )
+            time.sleep(4.5) # Rate limit handling
+            return response.text + "\n\n"
+        except Exception as api_err:
+            if '429' in str(api_err) or 'quota' in str(api_err).lower():
+                print(f"Rate limit or quota hit with {model}. Falling back to gemini-3.1-flash-lite...")
+                response = client.models.generate_content(
+                    model='gemini-3.1-flash-lite',
+                    contents=contents
+                )
+                time.sleep(4.5)
+                return response.text + "\n\n"
+            else:
+                raise api_err
+
     except Exception as e:
         print(f"Error calling Gemini API: {e}")
         return ""
@@ -47,23 +77,43 @@ def extract_cover_from_pdf(filepath, cover_path):
 def generate_epub_from_pdf(filepath, output_path, cover_path=None):
     doc = pymupdf.open(filepath)
     full_text = ""
+
+    scanned_batch = []
+
     for page in doc:
         text = page.get_text()
 
         # If the page has very little text, it might be a scanned page.
         if len(text.strip()) < 50:
-            print(f"Page {page.number} seems to be scanned or empty. Attempting OCR...")
-            # Convert page to image
             pix = page.get_pixmap()
-            image_bytes = pix.tobytes("png")
+            scanned_batch.append(pix.tobytes("png"))
 
-            ocr_text = extract_text_with_gemini(image_bytes)
-            if ocr_text:
-                full_text += ocr_text
-            else:
-                full_text += text + "\n\n"
+            # Process batch if it reaches 10 pages
+            if len(scanned_batch) == 10:
+                print(f"Processing batch of 10 scanned pages...")
+                ocr_text = extract_text_with_gemini_batch(scanned_batch)
+                if ocr_text:
+                    full_text += ocr_text
+                scanned_batch = []
         else:
+            # Process any pending scanned batch before appending raw text
+            if scanned_batch:
+                print(f"Processing batch of {len(scanned_batch)} scanned pages...")
+                ocr_text = extract_text_with_gemini_batch(scanned_batch)
+                if ocr_text:
+                    full_text += ocr_text
+                scanned_batch = []
+
             full_text += text + "\n\n"
+
+    # Process any remaining scanned pages in the batch
+    if scanned_batch:
+        print(f"Processing final batch of {len(scanned_batch)} scanned pages...")
+        ocr_text = extract_text_with_gemini_batch(scanned_batch)
+        if ocr_text:
+            full_text += ocr_text
+
+    full_text = apply_smart_indexing(full_text)
 
     temp_md = "temp.md"
 
@@ -79,7 +129,7 @@ lang: ar-SA
     with open(temp_md, "w", encoding="utf-8") as f:
         f.write(md_content)
 
-    cmd = ["pandoc", temp_md, "-o", output_path]
+    cmd = ["pandoc", temp_md, "-o", output_path, "--toc", "--toc-depth=2"]
     if cover_path and os.path.exists(cover_path):
         cmd.extend(["--epub-cover-image", cover_path])
 
@@ -100,6 +150,9 @@ lang: ar-SA
 def generate_epub_from_txt(filepath, output_path):
     with open(filepath, 'r', encoding='utf-8') as f:
         text = f.read()
+
+    text = apply_smart_indexing(text)
+
     temp_md = "temp.md"
 
     # Write intermediate markdown with RTL configuration
@@ -114,7 +167,7 @@ lang: ar-SA
     with open(temp_md, "w", encoding="utf-8") as f:
         f.write(md_content)
 
-    cmd = ["pandoc", temp_md, "-o", output_path]
+    cmd = ["pandoc", temp_md, "-o", output_path, "--toc", "--toc-depth=2"]
 
     try:
         print(f"Running pandoc to generate {output_path}...")
