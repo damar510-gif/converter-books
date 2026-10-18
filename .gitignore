@@ -1,0 +1,4 @@
+.pyc
+__pycache__/
+*.epub
+temp_cover.png

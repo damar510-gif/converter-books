@@ -1,0 +1,50 @@
+name: Convert Book to EPUB
+
+on:
+  workflow_dispatch:
+    inputs:
+      input_file:
+        description: 'Path to the input file in the repository (e.g., input/book.pdf)'
+        required: true
+        type: string
+
+jobs:
+  convert:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Pandoc
+        run: sudo apt-get update && sudo apt-get install -y pandoc
+
+      - name: Install Python Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run Conversion Script
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          # Generate base output filename
+          FILENAME=$(basename "${{ inputs.input_file }}")
+          BASENAME="${FILENAME%.*}"
+          OUTPUT_PATH="${BASENAME}.epub"
+
+          python converter.py "${{ inputs.input_file }}" -o "$OUTPUT_PATH"
+
+          # Set the output path as an environment variable for the next step
+          echo "EPUB_OUTPUT=$OUTPUT_PATH" >> $GITHUB_ENV
+
+      - name: Upload EPUB Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: converted-epub
+          path: ${{ env.EPUB_OUTPUT }}
