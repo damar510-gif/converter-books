@@ -11,15 +11,29 @@ on:
         description: 'Direct download URL for the book file (optional)'
         required: false
         type: string
+      title:
+        description: 'Book title (optional, defaults to the file name)'
+        required: false
+        type: string
+      pages:
+        description: 'Pages to convert, e.g. 1-20 (empty = whole book)'
+        required: false
+        type: string
       model:
-        description: 'Gemini model to use'
+        description: 'Main Gemini model'
         required: false
         type: string
         default: 'gemini-3.5-flash-lite'
+      fallback_model:
+        description: 'Stronger model for pages the main one fails (small daily limit)'
+        required: false
+        type: string
+        default: 'gemini-3.8-flash'
 
 jobs:
   convert:
     runs-on: ubuntu-latest
+    timeout-minutes: 120
 
     steps:
       - name: Checkout Repository
@@ -38,48 +52,80 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Download File if URL provided
-        id: download_file
-        if: ${{ inputs.file_url != '' }}
+      - name: Pick the book file
+        env:
+          FILE_URL: ${{ inputs.file_url }}
+          INPUT_FILE: ${{ inputs.input_file }}
         run: |
-          # Try to get the filename from the URL, otherwise default
-          URL="${{ inputs.file_url }}"
-          FILENAME=$(basename "${URL%%\?*}")
-          if [[ ! "$FILENAME" =~ \.(pdf|docx|txt)$ ]]; then
-            FILENAME="downloaded_book.pdf"
+          if [ -n "$FILE_URL" ]; then
+            FILENAME=$(basename "${FILE_URL%%\?*}")
+            if [[ ! "$FILENAME" =~ \.(pdf|docx|txt)$ ]]; then
+              FILENAME="downloaded_book.pdf"
+            fi
+            wget -q -O "$FILENAME" "$FILE_URL"
+            TARGET_FILE="$FILENAME"
+          else
+            TARGET_FILE="$INPUT_FILE"
           fi
+          if [ -z "$TARGET_FILE" ] || [ ! -f "$TARGET_FILE" ]; then
+            echo "Error: provide input_file (a file in the repository) or file_url."
+            exit 1
+          fi
+          BASENAME=$(basename "$TARGET_FILE")
+          {
+            echo "TARGET_FILE=$TARGET_FILE"
+            echo "EPUB_OUTPUT=${BASENAME%.*}.epub"
+            echo "BOOK_HASH=$(sha256sum "$TARGET_FILE" | cut -c1-16)"
+          } >> "$GITHUB_ENV"
 
-          wget -q -O "$FILENAME" "$URL"
-          echo "DOWNLOADED_FILE=$FILENAME" >> $GITHUB_ENV
+      # Pages already read in earlier runs are kept here, so a run stopped by the
+      # daily limit continues tomorrow from where it stopped.
+      - name: Restore saved progress
+        uses: actions/cache/restore@v4
+        with:
+          path: work
+          key: ocr-${{ env.BOOK_HASH }}-${{ github.run_id }}
+          restore-keys: ocr-${{ env.BOOK_HASH }}-
 
       - name: Run Conversion Script
+        id: convert
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GEMINI_MODEL: ${{ inputs.model }}
+          GEMINI_FALLBACK_MODEL: ${{ inputs.fallback_model }}
+          BOOK_TITLE: ${{ inputs.title }}
+          BOOK_PAGES: ${{ inputs.pages }}
         run: |
-          if [ -n "${{ env.DOWNLOADED_FILE }}" ]; then
-            TARGET_FILE="${{ env.DOWNLOADED_FILE }}"
-          else
-            TARGET_FILE="${{ inputs.input_file }}"
-          fi
+          set +e
+          ARGS=(-o "$EPUB_OUTPUT" --work-dir work --report report.md --keep-markdown)
+          [ -n "$BOOK_TITLE" ] && ARGS+=(--title "$BOOK_TITLE")
+          [ -n "$BOOK_PAGES" ] && ARGS+=(--pages "$BOOK_PAGES")
+          python converter.py "$TARGET_FILE" "${ARGS[@]}"
+          CODE=$?
+          echo "code=$CODE" >> "$GITHUB_OUTPUT"
+          [ -f report.md ] && cat report.md >> "$GITHUB_STEP_SUMMARY"
+          exit 0
 
-          if [ -z "$TARGET_FILE" ]; then
-            echo "Error: You must provide either input_file or file_url."
-            exit 1
-          fi
-
-          # Generate base output filename
-          FILENAME=$(basename "$TARGET_FILE")
-          BASENAME="${FILENAME%.*}"
-          OUTPUT_PATH="${BASENAME}.epub"
-
-          python converter.py "$TARGET_FILE" -o "$OUTPUT_PATH"
-
-          # Set the output path as an environment variable for the next step
-          echo "EPUB_OUTPUT=$OUTPUT_PATH" >> $GITHUB_ENV
+      - name: Save progress
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: work
+          key: ocr-${{ env.BOOK_HASH }}-${{ github.run_id }}
 
       - name: Upload EPUB Artifact
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: converted-epub
-          path: ${{ env.EPUB_OUTPUT }}
+          path: |
+            ${{ env.EPUB_OUTPUT }}
+            ${{ env.EPUB_OUTPUT }}.md
+            report.md
+          if-no-files-found: warn
+
+      - name: Fail if pages are missing
+        if: steps.convert.outputs.code != '0'
+        run: |
+          echo "The book is incomplete or the conversion failed (see report.md in the artifact). Run again to continue."
+          exit 1

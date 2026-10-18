@@ -44,7 +44,14 @@ To process scanned PDFs where pages contain images instead of text, you must pro
 export GEMINI_API_KEY="your_api_key_here"
 python converter.py scanned_book.pdf
 ```
-The script will automatically detect pages with minimal text and pass the page image to Gemini for text extraction.
+The script detects pages without a text layer and sends each one to Gemini on its own, at the scan's native resolution:
+
+- **One page per request**, paced to stay under the per-minute limit (`--rpm`, default 12).
+- **Retries** on busy/temporary errors; pages that come back empty or too short are retried once with the stronger `--fallback-model` (limited by `--fallback-limit`).
+- **Progress is saved per page** in `--work-dir` (`work/`). Running again only processes missing pages, so a run stopped by the daily limit continues the next day.
+- A **report** (`report.md`) lists any missing pages, and the script exits with code 2 when the book is incomplete.
+- Headings, footnotes and poetry are kept: each article becomes a chapter in the table of contents.
+- `--pages 1-20` converts part of a book (useful for a quick test).
 
 ## GitHub Actions Usage
 
