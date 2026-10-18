@@ -29,6 +29,10 @@ on:
         required: false
         type: string
         default: 'gemini-3.8-flash'
+      compare_models:
+        description: 'Testing only: compare these models (comma separated) on the given pages instead of converting'
+        required: false
+        type: string
 
 permissions:
   contents: write
@@ -90,8 +94,28 @@ jobs:
           key: ocr-${{ env.BOOK_HASH }}-${{ github.run_id }}
           restore-keys: ocr-${{ env.BOOK_HASH }}-
 
+      - name: Compare models
+        if: inputs.compare_models != ''
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          BOOK_PAGES: ${{ inputs.pages }}
+          MODELS: ${{ inputs.compare_models }}
+          GH_TOKEN: ${{ github.token }}
+          PYTHONUNBUFFERED: '1'
+        run: |
+          python compare_models.py "$TARGET_FILE" --pages "$BOOK_PAGES" --models "$MODELS" --out compare-out
+          cat compare-out/summary.md >> "$GITHUB_STEP_SUMMARY"
+          URL="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          TMP=$(mktemp -d)
+          git clone -q --depth 1 --branch results "$URL" "$TMP"
+          rm -rf "$TMP/compare" && mkdir -p "$TMP/compare" && cp compare-out/* "$TMP/compare/"
+          cd "$TMP" && git add -A
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit -q -m "Model comparison (run ${GITHUB_RUN_NUMBER})" && git push -q origin results
+
       - name: Run Conversion Script
         id: convert
+        if: inputs.compare_models == ''
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GEMINI_MODEL: ${{ inputs.model }}
@@ -111,14 +135,14 @@ jobs:
           exit 0
 
       - name: Save progress
-        if: always()
+        if: always() && inputs.compare_models == ''
         uses: actions/cache/save@v4
         with:
           path: work
           key: ocr-${{ env.BOOK_HASH }}-${{ github.run_id }}
 
       - name: Upload EPUB Artifact
-        if: always()
+        if: always() && inputs.compare_models == ''
         uses: actions/upload-artifact@v4
         with:
           name: converted-epub
@@ -156,7 +180,7 @@ jobs:
           git push -q origin results
 
       - name: Fail if pages are missing
-        if: steps.convert.outputs.code != '0'
+        if: inputs.compare_models == '' && steps.convert.outputs.code != '0'
         run: |
           echo "The book is incomplete or the conversion failed (see report.md in the artifact). Run again to continue."
           exit 1
