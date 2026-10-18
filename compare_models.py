@@ -6,7 +6,9 @@ import argparse
 import glob
 import json
 import os
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 
 import pymupdf
 from google import genai
@@ -33,7 +35,11 @@ def pick_models(client, wanted):
 
 
 CONFIGS = [
-    ("full", lambda: types.GenerateContentConfig(
+    ("minimal-thinking", lambda: types.GenerateContentConfig(
+        max_output_tokens=8192, safety_settings=c.SAFETY_OFF,
+        media_resolution=types.MediaResolution.MEDIA_RESOLUTION_HIGH,
+        thinking_config=types.ThinkingConfig(thinking_level=types.ThinkingLevel.MINIMAL))),
+    ("low-thinking", lambda: types.GenerateContentConfig(
         max_output_tokens=8192, safety_settings=c.SAFETY_OFF,
         media_resolution=types.MediaResolution.MEDIA_RESOLUTION_HIGH,
         thinking_config=types.ThinkingConfig(thinking_level=types.ThinkingLevel.LOW))),
@@ -57,12 +63,17 @@ def read(client, model, png, prompt, start_config):
                     config=make())
                 finish = str(r.candidates[0].finish_reason) if r.candidates else ""
                 usage = r.usage_metadata.model_dump(exclude_none=True) if r.usage_metadata else {}
-                return (r.text or "").strip(), finish, i, round(time.time() - t, 1), usage, ""
+                # Some models return thought parts even with thinking off: keep only the answer.
+                parts = r.candidates[0].content.parts if r.candidates and r.candidates[0].content else []
+                text = "".join(p.text for p in (parts or []) if p.text and not getattr(p, "thought", False))
+                return text.strip(), finish, i, round(time.time() - t, 1), usage, ""
             except Exception as e:
                 msg = str(e)
                 if "400" in msg or "INVALID_ARGUMENT" in msg:
                     print(f"  {model} rejected config '{name}': {msg[:160]}")
                     break
+                if "timed out" in msg.lower() or "timeout" in msg.lower():
+                    return "", "", i, round(time.time() - t, 1), {}, "timeout"
                 if "429" in msg or "503" in msg or "500" in msg or "UNAVAILABLE" in msg:
                     print(f"  {model}: {msg[:120]} -> wait 60s")
                     time.sleep(60)
@@ -81,7 +92,9 @@ def main():
     ap.add_argument("--gap", type=float, default=20, help="seconds between requests to one model")
     args = ap.parse_args()
 
-    client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
+    # A request that takes longer than 4 minutes counts as a failure.
+    client = genai.Client(api_key=os.environ["GEMINI_API_KEY"],
+                          http_options=types.HttpOptions(timeout=240_000))
     models = pick_models(client, [m.strip() for m in args.models.split(",") if m.strip()])
     doc = pymupdf.open(args.pdf)
     pages = [i + 1 for i in c.parse_pages(args.pages, len(doc))]
@@ -112,30 +125,43 @@ def main():
             with open(os.path.join(args.out, f"p{p:03d}-saved.md"), "w", encoding="utf-8") as f:
                 f.write(saved[p])
 
-    for model in models:
+    lock = threading.Lock()
+
+    def write_summary():
+        lines = ["| model | page | chars | missing lines | seconds | tokens (in/out/thought) | config | finish/error |",
+                 "|---|---|---|---|---|---|---|---|"]
+        for r in sorted(rows, key=lambda r: (r["model"], r["page"])):
+            lines.append(f"| {r['model']} | {r['page']} | {r['chars']} | {r['missing_lines']} | {r['seconds']} | "
+                         f"{r.get('tokens', '')} | {r['config']} | {r.get('finish', '')} {r['error'][:80]} |")
+        with open(os.path.join(args.out, "summary.md"), "w", encoding="utf-8") as f:
+            f.write("\n".join(lines) + "\n")
+        return lines
+
+    def run_model(model):
         start = 0
+        local = pymupdf.open(args.pdf)
         for p in pages:
-            png, pix = c.page_image(doc, doc[p - 1])
+            png, pix = c.page_image(local, local[p - 1])
             prompt = c.OCR_PROMPT.format(spread=c.SPREAD_HINT if pix.width > pix.height * 1.15 else "")
             text, finish, start, secs, usage, err = read(client, model, png, prompt, start)
             text = c.clean_ocr(text)
             miss = c.missing_lines(tess[p], text, vocab) if text else []
-            rows.append({"model": model, "page": p, "chars": len(text), "missing_lines": len(miss),
-                         "seconds": secs, "config": CONFIGS[start][0], "finish": finish,
-                         "tokens": usage.get("total_token_count", ""), "error": err})
-            with open(os.path.join(args.out, f"p{p:03d}-{model}.md"), "w", encoding="utf-8") as f:
-                f.write(text)
-            print(f"{model} p{p}: chars={len(text)} missing={len(miss)} {secs}s {finish} {err[:80]}")
+            tokens = (f"{usage.get('prompt_token_count', '')}/{usage.get('candidates_token_count', '')}"
+                      f"/{usage.get('thoughts_token_count', '')}")
+            with lock:
+                rows.append({"model": model, "page": p, "chars": len(text), "missing_lines": len(miss),
+                             "seconds": secs, "config": CONFIGS[start][0], "finish": finish,
+                             "tokens": tokens, "error": err})
+                with open(os.path.join(args.out, f"p{p:03d}-{model}.md"), "w", encoding="utf-8") as f:
+                    f.write(text)
+                write_summary()
+            print(f"{model} p{p}: chars={len(text)} missing={len(miss)} {secs}s {tokens} {finish} {err[:80]}")
             time.sleep(args.gap)
 
-    lines = ["| model | page | chars | missing lines | seconds | tokens | config | finish/error |",
-             "|---|---|---|---|---|---|---|---|"]
-    for r in rows:
-        lines.append(f"| {r['model']} | {r['page']} | {r['chars']} | {r['missing_lines']} | {r['seconds']} | "
-                     f"{r.get('tokens', '')} | {r['config']} | {r.get('finish', '')} {r['error'][:80]} |")
-    with open(os.path.join(args.out, "summary.md"), "w", encoding="utf-8") as f:
-        f.write("\n".join(lines) + "\n")
-    print("\n".join(lines))
+    # Each model has its own quota, so they run side by side.
+    with ThreadPoolExecutor(max_workers=len(models) or 1) as pool:
+        list(pool.map(run_model, models))
+    print("\n".join(write_summary()))
 
 
 if __name__ == "__main__":

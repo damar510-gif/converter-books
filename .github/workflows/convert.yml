@@ -96,14 +96,21 @@ jobs:
 
       - name: Compare models
         if: inputs.compare_models != ''
+        timeout-minutes: 50
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           BOOK_PAGES: ${{ inputs.pages }}
           MODELS: ${{ inputs.compare_models }}
-          GH_TOKEN: ${{ github.token }}
           PYTHONUNBUFFERED: '1'
+        run: python compare_models.py "$TARGET_FILE" --pages "$BOOK_PAGES" --models "$MODELS" --out compare-out
+
+      # Runs even when the comparison was cut short, so partial results are kept.
+      - name: Save comparison
+        if: always() && inputs.compare_models != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          python compare_models.py "$TARGET_FILE" --pages "$BOOK_PAGES" --models "$MODELS" --out compare-out
+          [ -f compare-out/summary.md ] || exit 0
           cat compare-out/summary.md >> "$GITHUB_STEP_SUMMARY"
           URL="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
           TMP=$(mktemp -d)
