@@ -31,7 +31,8 @@ const F = {
   working: '2- قيد التحويل',
   ready: '3- جاهز',
   originals: '4- الأصل',
-  problem: '5- مشكلة'
+  problem: '5- مشكلة',
+  final: '6- مكتمل'
 };
 
 const iso = (t) => new Date(t).toISOString();
@@ -521,7 +522,7 @@ test('setup creates the folders and one 10-minute trigger, stores the default br
   const roots = env.drive.children(env.drive.myDrive.id).filter((x) => x.name === F.root);
   assert.strictEqual(roots.length, 1);
   const subs = env.drive.children(roots[0].id).map((x) => x.name).sort();
-  assert.deepStrictEqual(subs, [F.inbox, F.working, F.ready, F.originals, F.problem].sort());
+  assert.deepStrictEqual(subs, [F.inbox, F.working, F.ready, F.originals, F.problem, F.final].sort());
   assert.strictEqual(env.triggers.length, 1);
   assert.strictEqual(env.triggers[0].fn, 'tick');
   assert.strictEqual(env.triggers[0].minutes, 10);
@@ -541,7 +542,7 @@ test('setup is idempotent (reuses folders, still one trigger)', () => {
   const ids2 = ['root', 'inbox', 'working', 'ready', 'originals', 'problem'].map((k) => env.props.get('FOLDER_' + k.toUpperCase()));
   assert.deepStrictEqual(ids2, ids);
   assert.strictEqual(env.drive.children(env.drive.myDrive.id).filter((x) => x.name === F.root).length, 1);
-  assert.strictEqual(env.drive.children(ids[0]).length, 5);
+  assert.strictEqual(env.drive.children(ids[0]).length, 6);
   assert.strictEqual(env.triggers.length, 1);
 });
 
@@ -691,7 +692,7 @@ test('docx, txt, upper-case and extension-less files are accepted with the right
   assert.deepStrictEqual(seen[0], [a.id, 'رواية.pdf', 'رواية']);
   assert.deepStrictEqual(seen[1], [b.id, 'مقالات.DOCX', 'مقالات']);
   assert.deepStrictEqual(seen[2], [c.id, 'نص.txt', 'نص']);
-  assert.deepStrictEqual(names(env, 'ready').filter((n) => /\.epub$/.test(n)), ['رواية.epub', 'مقالات.epub', 'نص.epub']);
+  assert.deepStrictEqual(names(env, 'final').filter((n) => /\.epub$/.test(n)), ['رواية.epub', 'مقالات.epub', 'نص.epub']);
 });
 
 test('done: EPUB and report in جاهز, original in الأصل, email with link and unsure pages', () => {
@@ -788,7 +789,7 @@ test('done without report.md still delivers; done without the EPUB file is retri
   writeStatus(env, f.id, 'done', { epub: 'أ.epub' });
   writeEpub(env, f.id, 'أ.epub');
   tick(env);
-  assert.deepStrictEqual(names(env, 'ready'), ['أ.epub']);
+  assert.deepStrictEqual(names(env, 'final'), ['أ.epub']);
   assert.strictEqual(jobs(env)[f.id].stage, 'delivered');
 });
 
