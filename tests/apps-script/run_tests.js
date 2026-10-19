@@ -732,6 +732,49 @@ test('done: EPUB and report in جاهز, original in الأصل, email with link
   assert.strictEqual(filesIn(env, 'ready').length, 2);
 });
 
+test('refine: next day an idle inbox re-runs a book with unsure pages and replaces its EPUB', () => {
+  const env = readyEnv();
+  const f = addBook(env, 'ب.pdf');
+  tick(env);
+  minutes(env, 30);
+  writeStatus(env, f.id, 'done', { epub: 'ب.epub', pages_total: 10, pages_done: 10, pages_unsure: [3, 4, 5] });
+  writeEpub(env, f.id, 'ب.epub', Buffer.from('PK old'));
+  tick(env);
+  assert.strictEqual(jobs(env)[f.id].stage, 'delivered');
+  assert.strictEqual(env.gh.dispatches.length, 1, 'no refinement on the delivery day');
+  minutes(env, 10);
+  tick(env);
+  assert.strictEqual(env.gh.dispatches.length, 1);
+
+  env.clock += 24 * 3600000;
+  tick(env);
+  assert.strictEqual(env.gh.dispatches.length, 2, 'refinement round dispatched');
+  assert.strictEqual(jobs(env)[f.id].stage, 'running');
+  minutes(env, 20);
+  writeStatus(env, f.id, 'done', { epub: 'ب.epub', pages_total: 10, pages_done: 10, pages_unsure: [5] });
+  writeEpub(env, f.id, 'ب.epub', Buffer.from('PK new'));
+  const mailsBefore = env.mails.length;
+  tick(env);
+  const epubs = filesIn(env, 'ready').filter((x) => /\.epub$/.test(x.name) && !x.trashed);
+  assert.strictEqual(epubs.length, 1, 'old EPUB replaced');
+  assert.ok(epubs[0].content.equals(Buffer.from('PK new')));
+  assert.strictEqual(env.mails.length, mailsBefore + 1);
+  assert.ok(/تحسّن/.test(env.mails[env.mails.length - 1].subject));
+
+  // A round that does not lower the count ends the refinement for this book.
+  env.clock += 24 * 3600000;
+  tick(env);
+  minutes(env, 20);
+  writeStatus(env, f.id, 'done', { epub: 'ب.epub', pages_total: 10, pages_done: 10, pages_unsure: [5] });
+  writeEpub(env, f.id, 'ب.epub', Buffer.from('PK same'));
+  tick(env);
+  assert.strictEqual(jobs(env)[f.id].refineDone, true);
+  env.clock += 24 * 3600000;
+  const n = env.gh.dispatches.length;
+  tick(env);
+  assert.strictEqual(env.gh.dispatches.length, n, 'no more rounds');
+});
+
 test('done without report.md still delivers; done without the EPUB file is retried', () => {
   const env = readyEnv();
   const f = addBook(env, 'أ.pdf');
