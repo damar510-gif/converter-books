@@ -43,10 +43,13 @@ def read_openai(model, jpeg, prompt):
             {"type": "text", "text": prompt},
         ]}],
     }
+    headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
+    if provider == "github":
+        headers.update({"Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28"})
     for attempt in range(3):
         t = time.time()
         try:
-            r = httpx.post(url, json=body, timeout=300, headers={"Authorization": f"Bearer {key}"})
+            r = httpx.post(url, json=body, timeout=300, headers=headers)
         except Exception as e:
             return "", "", round(time.time() - t, 1), {}, str(e)[:200]
         if r.status_code in (429, 500, 502, 503):
@@ -55,7 +58,10 @@ def read_openai(model, jpeg, prompt):
             continue
         if r.status_code != 200:
             return "", "", round(time.time() - t, 1), {}, f"HTTP {r.status_code} {r.text[:200]}"
-        d = r.json()
+        try:
+            d = r.json()
+        except ValueError:
+            return "", "", round(time.time() - t, 1), {}, f"not JSON: {r.text[:200]!r}"
         choice = (d.get("choices") or [{}])[0]
         text = (choice.get("message") or {}).get("content") or ""
         return text.strip(), str(choice.get("finish_reason", "")), round(time.time() - t, 1), d.get("usage") or {}, ""
@@ -73,6 +79,16 @@ def list_free_vision_models(out):
                    and "image" in ((m.get("architecture") or {}).get("input_modalities") or []))
     with open(os.path.join(out, "openrouter-free-vision.txt"), "w", encoding="utf-8") as f:
         f.write("\n".join(names) + "\n")
+    # Groq's model list needs the key; it shows which vision models the account has.
+    key = os.environ.get("GROQ_API_KEY")
+    if key:
+        try:
+            data = httpx.get("https://api.groq.com/openai/v1/models", timeout=60,
+                             headers={"Authorization": f"Bearer {key}"}).json().get("data", [])
+            with open(os.path.join(out, "groq-models.txt"), "w", encoding="utf-8") as f:
+                f.write("\n".join(sorted(m.get("id", "") for m in data)) + "\n")
+        except Exception as e:
+            print(f"Could not list Groq models: {e}")
 
 
 def pick_models(client, wanted):
@@ -194,7 +210,7 @@ def main():
         # Average agreement with the saved, checked text: the main number to compare models by.
         by_model = {}
         for r in rows:
-            if r.get("match") != "":
+            if r.get("match") not in (None, ""):
                 by_model.setdefault(r["model"], []).append(r.get("match", 0) or 0)
         lines += ["", "| model | pages | average match % |", "|---|---|---|"]
         for m, v in sorted(by_model.items(), key=lambda x: -sum(x[1]) / len(x[1])):
