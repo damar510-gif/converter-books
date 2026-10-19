@@ -813,6 +813,53 @@ test('judging: a book waiting for the judges is parked, the next book starts, th
   assert.ok(names(env, 'ready').indexOf('أول.epub') >= 0);
 });
 
+test('judgeNow: the judges see a delivered book today; a round cut short by their quota delivers and goes on', () => {
+  const env = readyEnv();
+  const f = addBook(env, 'ج.pdf');
+  tick(env);
+  minutes(env, 30);
+  writeStatus(env, f.id, 'done', { epub: 'ج.epub', pages_unsure: [1, 2, 3, 4] });
+  writeEpub(env, f.id, 'ج.epub', Buffer.from('PK old'));
+  tick(env);
+  assert.strictEqual(jobs(env)[f.id].stage, 'delivered');
+  minutes(env, 10);
+  tick(env);
+  assert.strictEqual(env.gh.dispatches.length, 1, 'no round on the delivery day by itself');
+
+  env.ctx.judgeNow();
+  assert.strictEqual(env.gh.dispatches.length, 2, 'judgeNow starts a round today');
+  assert.strictEqual(lastDispatch(env).body.inputs.result_dir, 'drive-' + f.id);
+  minutes(env, 20);
+  writeStatus(env, f.id, 'paused', { waiting_for: 'judges', epub: 'ج.epub', pages_unsure: [3, 4], pages_judging: [3, 4] });
+  writeEpub(env, f.id, 'ج.epub', Buffer.from('PK better'));
+  tick(env);
+  const epubs = filesIn(env, 'ready').filter((x) => /\.epub$/.test(x.name));
+  assert.strictEqual(epubs.length, 1, 'old EPUB replaced right away');
+  assert.ok(epubs[0].content.equals(Buffer.from('PK better')));
+  assert.ok(/تحسّن/.test(env.mails[env.mails.length - 1].subject));
+  assert.strictEqual(jobs(env)[f.id].stage, 'delivered');
+  assert.notStrictEqual(jobs(env)[f.id].refineDone, true);
+
+  // Next day: no judge quota at all, nothing improves; the book is not given up on.
+  env.clock += 24 * 3600000;
+  tick(env);
+  assert.strictEqual(env.gh.dispatches.length, 3);
+  minutes(env, 20);
+  writeStatus(env, f.id, 'paused', { waiting_for: 'judges', epub: 'ج.epub', pages_unsure: [3, 4], pages_judging: [3, 4] });
+  writeEpub(env, f.id, 'ج.epub', Buffer.from('PK same'));
+  tick(env);
+  assert.notStrictEqual(jobs(env)[f.id].refineDone, true, 'a quota-short round does not end refinement');
+  env.clock += 24 * 3600000;
+  tick(env);
+  assert.strictEqual(env.gh.dispatches.length, 4, 'and the rounds go on');
+});
+
+test('judgeNow with nothing unsure does nothing', () => {
+  const env = readyEnv();
+  assert.strictEqual(env.ctx.judgeNow(), 'nothing to judge');
+  assert.strictEqual(env.gh.dispatches.length, 0);
+});
+
 test('done without report.md still delivers; done without the EPUB file is retried', () => {
   const env = readyEnv();
   const f = addBook(env, 'أ.pdf');

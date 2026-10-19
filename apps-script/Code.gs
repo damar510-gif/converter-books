@@ -188,6 +188,46 @@ function tick() {
   return result;
 }
 
+/**
+ * Run by hand from the editor (choose judgeNow, then Run): the judges see the unsure
+ * pages today instead of waiting for the next day, for delivered books and parked
+ * ones alike. Useful when some of today's judge quota is still unused.
+ */
+function judgeNow() {
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(30000)) {
+    Logger.log('مشغول بفحص آخر، أعد المحاولة بعد دقيقة.');
+    return 'busy';
+  }
+  var count = 0;
+  try {
+    var jobs = loadJobs_();
+    Object.keys(jobs).forEach(function (id) {
+      var j = jobs[id];
+      if (!j) return;
+      if (j.stage === 'judging') {
+        j.judgeDay = '';
+        count++;
+      } else if (j.stage === 'delivered' && !j.refineDone && j.unsure > 0) {
+        j.refineDay = '';
+        count++;
+      }
+    });
+    saveJobs_(jobs);
+  } finally {
+    lock.releaseLock();
+  }
+  if (!count) {
+    Logger.log('لا يوجد كتاب فيه صفحات مشكوك فيها تنتظر الحكّام.');
+    return 'nothing to judge';
+  }
+  var result = tick();
+  Logger.log(/(judging|refining) [\w-]+: /.test(result)
+    ? 'بدأت مراجعة الحكّام الآن. تصلك رسالة بالنتيجة.'
+    : 'سيبدأ الحكّام بعد انتهاء الكتاب الجاري تحويله (يكمل تلقائياً).');
+  return result;
+}
+
 /** Status for the web page, as a JSON string (google.script.run cannot return Dates). */
 function getStatus() {
   try {
@@ -368,6 +408,9 @@ function handleStatus_(ctx, job, s) {
       // Read and checked; only the judges' quota is missing. The book stays parked in
       // "2- قيد التحويل" without holding the slot, so the next book can use the readers'
       // quota; judgeNext_ brings it back to the judges on a later Pacific day.
+      // A refinement round is different: its book is already delivered, so what the
+      // judges did today replaces it now, and the next round continues tomorrow.
+      if (job.refining) return deliver_(ctx, job, s, false);
       job.stage = 'judging';
       job.judgeDay = isDay_(s.quota_day) ? s.quota_day : pacificDay_(new Date(Date.parse(s.updated_at)));
       job.judgeRounds = (job.judgeRounds || 0) + 1;
@@ -539,8 +582,8 @@ function judgeNext_(ctx) {
   var pick = null;
   Object.keys(ctx.jobs).forEach(function (id) {
     var j = ctx.jobs[id];
-    if (j && j.stage === 'judging' && j.judgeDay < today &&
-        (!pick || String(j.judgeDay) < String(pick.judgeDay))) pick = j;
+    if (j && j.stage === 'judging' && String(j.judgeDay || '') < today &&
+        (!pick || String(j.judgeDay || '') < String(pick.judgeDay || ''))) pick = j;
   });
   if (!pick) return '';
   pick.stage = 'queued';
@@ -720,7 +763,9 @@ function deliver_(ctx, job, s, incomplete) {
     job.refining = false;
     job.oldEpubId = '';
     job.oldReportId = '';
-    if (unsure.length >= before || !unsure.length) {
+    // A round cut short by the judges' quota is not a sign the book cannot improve.
+    var cutShort = pageList_(s.pages_judging).length > 0;
+    if (!unsure.length || (unsure.length >= before && !cutShort)) {
       job.unsureList = shorten_(compressPages_(unsure), 300);
       finalize_(ctx, job, true);
       return 'refined and final (' + before + ' -> ' + unsure.length + ')';
@@ -1134,7 +1179,8 @@ function pruneJobs_(jobs) {
   var finished = finishedJobs_(jobs).filter(function (j) { return j.stage !== 'judging'; });
   finished.forEach(function (j) {
     ['name', 'driveName', 'resultDir', 'dispatchedAt', 'createdAt', 'pausedDay', 'pausedAt',
-      'pendingCount', 'noteId', 'pauseMailed', 'pagesDone', 'pagesTotal', 'pauses']
+      'pendingCount', 'noteId', 'pauseMailed', 'pagesDone', 'pagesTotal', 'pauses',
+      'judgeDay', 'judgeRounds', 'judgeMailed']
       .forEach(function (k) { delete j[k]; });
     if (j.lastError) j.lastError = shorten_(j.lastError, 120);
   });
