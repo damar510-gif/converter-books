@@ -194,6 +194,21 @@ class Pipeline(unittest.TestCase):
         self.assertEqual(code, 3)
         self.assertNotIn("gemma-4-26b-a4b-it", {m for m, _ in fake.calls})
 
+    def test_unsure_page_goes_to_arbiter_and_notice_in_book(self):
+        # The two Lite models cannot settle (their answer is too short), the arbiter can.
+        code, st, md, fake = self.run_book({
+            "gemini-3.5-flash-lite": lambda p, n: answer("قصير" if "النسخة (أ)" in p else WRONG),
+            "gemini-3.1-flash-lite": lambda p, n: answer("قصير" if "النسخة (أ)" in p else TRUE),
+            "gemini-3.8-flash": lambda p, n: answer(TRUE),
+        }, pages="30-31", extra=("--arbiter-limit", "1"))
+        recs = self.records()
+        self.assertEqual(recs[30]["check"]["state"], "reconciled")
+        self.assertEqual(recs[30]["check"]["arbiter"], "settled")
+        # Page 31 was over today's arbiter limit: still unsure, and the book says so.
+        self.assertEqual(recs[31]["check"]["state"], "unsure")
+        self.assertIn("قراءة الصفحة 31 من الأصل غير مؤكدة", md)
+        self.assertNotIn("قراءة الصفحة 30 من الأصل غير مؤكدة", md)
+
     def test_single_mode(self):
         code, st, md, fake = self.run_book({
             "gemini-3.5-flash-lite": lambda p, n: answer(TRUE),
