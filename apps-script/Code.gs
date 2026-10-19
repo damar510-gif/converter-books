@@ -322,6 +322,9 @@ function handleStatus_(ctx, job, s) {
   if (s.pages_total) job.pagesTotal = Number(s.pages_total) || 0;
   if (s.pages_done !== undefined) job.pagesDone = Number(s.pages_done) || 0;
 
+  // Failures count in a row only: any other result starts the count again.
+  if (s.state !== 'failed') job.failStreak = 0;
+
   switch (s.state) {
     case 'done':
       return deliver_(ctx, job, s, false);
@@ -387,7 +390,8 @@ function handleNoStatus_(ctx, job) {
 }
 
 function failedOrGiveUp_(ctx, job, reason) {
-  if (job.attempts < CONFIG.MAX_FAILED_ATTEMPTS) {
+  job.failStreak = (job.failStreak || 0) + 1;
+  if (job.failStreak < CONFIG.MAX_FAILED_ATTEMPTS) {
     job.lastState = 'failed';
     saveJobs_(ctx.jobs);
     return 'failed, retry: ' + dispatch_(ctx, job, true);
@@ -547,6 +551,12 @@ function deliver_(ctx, job, s, incomplete) {
     if (r.code === 404) return failedOrGiveUp_(ctx, job, 'انتهى التحويل لكن ملف الكتاب لم يُحفظ في النتائج.');
     if (r.code !== 200) {
       job.lastError = shorten_('download: ' + describeResponse_(r), 200);
+      // A file too big for Apps Script (over 50 MB) fails forever: stop after a few tries
+      // so the next books are not blocked.
+      job.downloadFails = (job.downloadFails || 0) + 1;
+      if (job.downloadFails >= 6) {
+        return giveUp_(ctx, job, 'تعذّر تنزيل ملف الكتاب من النتائج (قد يكون أكبر من 50 ميجا). الملف موجود في فرع results في GitHub.');
+      }
       saveJobs_(ctx.jobs);
       reportGitHubProblem_(ctx, r, 'download');
       return 'waiting (download failed)';
