@@ -275,6 +275,7 @@ jobs:
         run: |
           case "$CODE" in
             3) echo "Paused: today's Gemini quota is used up. Progress is saved; run the same book again tomorrow." ;;
+            4) echo "Read and checked; some unsure pages wait for tomorrow's judges. Run the same book again tomorrow." ;;
             2) echo "Some pages could not be read (see report.md). Run the same book again to retry them." ;;
             *) echo "The conversion failed (see the log above)." ;;
           esac

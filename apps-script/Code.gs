@@ -297,7 +297,10 @@ function runTick_() {
   }
   // A finished job frees the slot, so the next book can start in the same check.
   if (!activeJob_(ctx.jobs) && ctx.dispatched === 0) {
-    var started = startNext_(ctx);
+    // Parked books go back to the judges first on a new day (their quota is separate
+    // and small), then new books, then improvement rounds.
+    var judged = judgeNext_(ctx);
+    var started = judged || startNext_(ctx);
     notes.push(started);
     // Nothing new to convert: use the day's judge quota on a finished book's unsure pages.
     if (started === 'idle') notes.push(refineNext_(ctx));
@@ -331,7 +334,9 @@ function handleStatus_(ctx, job, s) {
   // Failures count in a row only: any other result starts the count again.
   if (s.state !== 'failed') job.failStreak = 0;
 
-  switch (s.state) {
+  // Waiting only for the judges is written as "paused" for older scripts.
+  var state = s.state === 'paused' && s.waiting_for === 'judges' ? 'judging' : s.state;
+  switch (state) {
     case 'done':
       return deliver_(ctx, job, s, false);
 
@@ -358,6 +363,27 @@ function handleStatus_(ctx, job, s) {
         mailPaused_(job);
       }
       return resumeIfNewDay_(ctx, job);
+
+    case 'judging':
+      // Read and checked; only the judges' quota is missing. The book stays parked in
+      // "2- قيد التحويل" without holding the slot, so the next book can use the readers'
+      // quota; judgeNext_ brings it back to the judges on a later Pacific day.
+      job.stage = 'judging';
+      job.judgeDay = isDay_(s.quota_day) ? s.quota_day : pacificDay_(new Date(Date.parse(s.updated_at)));
+      job.judgeRounds = (job.judgeRounds || 0) + 1;
+      if (job.judgeRounds > CONFIG.MAX_PAUSES) return deliver_(ctx, job, s, false);
+      saveJobs_(ctx.jobs);
+      if (!job.judgeMailed) {
+        job.judgeMailed = true;
+        saveJobs_(ctx.jobs);
+        sendMail_('ينتظر الحكّام: ' + job.title, [
+          'اكتملت قراءة «' + job.title + '»، وبقيت ' + pageList_(s.pages_judging).length +
+            ' صفحة مشكوك فيها تنتظر الحكّام، فقد انتهى رصيدهم اليوم.',
+          'يبقى الكتاب في «' + CONFIG.FOLDERS.working + '»، ويبدأ الكتاب التالي الآن.',
+          'بعد تجدد رصيد الحكّام تُعرض عليهم صفحاته أولاً، ثم يصلك الكتاب في «' + CONFIG.FOLDERS.ready + '».'
+        ]);
+      }
+      return 'judging (parked)';
 
     case 'failed':
       return failedOrGiveUp_(ctx, job, 'فشل التحويل مرتين متتاليتين.');
@@ -505,6 +531,22 @@ function finalize_(ctx, job, mail) {
   }
   lines.push('يمكنك الآن حذف ملفه الأصلي من «' + CONFIG.FOLDERS.originals + '» إن احتجت المساحة.');
   sendMail_('مكتمل: ' + job.title, lines);
+}
+
+/** Dispatches the oldest parked book whose judges' quota has renewed, or returns ''. */
+function judgeNext_(ctx) {
+  var today = pacificDay_(now_());
+  var pick = null;
+  Object.keys(ctx.jobs).forEach(function (id) {
+    var j = ctx.jobs[id];
+    if (j && j.stage === 'judging' && j.judgeDay < today &&
+        (!pick || String(j.judgeDay) < String(pick.judgeDay))) pick = j;
+  });
+  if (!pick) return '';
+  pick.stage = 'queued';
+  pick.pendingCount = false;
+  saveJobs_(ctx.jobs);
+  return 'judging ' + pick.fileId + ': ' + dispatch_(ctx, pick, false);
 }
 
 function newJob_(file) {
@@ -1088,7 +1130,8 @@ function finishedJobs_(jobs) {
 
 /** Keeps JOBS small: finished jobs are trimmed to what the page needs, oldest dropped. */
 function pruneJobs_(jobs) {
-  var finished = finishedJobs_(jobs);
+  // Parked books (judging) still need all their fields and must never be dropped.
+  var finished = finishedJobs_(jobs).filter(function (j) { return j.stage !== 'judging'; });
   finished.forEach(function (j) {
     ['name', 'driveName', 'resultDir', 'dispatchedAt', 'createdAt', 'pausedDay', 'pausedAt',
       'pendingCount', 'noteId', 'pauseMailed', 'pagesDone', 'pagesTotal', 'pauses']

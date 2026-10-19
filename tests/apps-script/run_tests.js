@@ -776,6 +776,43 @@ test('refine: next day an idle inbox re-runs a book with unsure pages and replac
   assert.strictEqual(env.gh.dispatches.length, n, 'no more rounds');
 });
 
+test('judging: a book waiting for the judges is parked, the next book starts, the parked one is judged the next day', () => {
+  const env = readyEnv();
+  const a = addBook(env, 'أول.pdf');
+  tick(env);
+  minutes(env, 3);
+  const b = addBook(env, 'ثان.pdf');
+  minutes(env, 30);
+  writeStatus(env, a.id, 'paused', { waiting_for: 'judges', epub: 'أول.epub', pages_judging: [4, 9], pages_unsure: [4, 9] });
+  tick(env);
+  assert.strictEqual(jobs(env)[a.id].stage, 'judging');
+  assert.ok(names(env, 'working').indexOf('أول.pdf') >= 0, 'parked book stays in the working folder');
+  assert.strictEqual(env.gh.dispatches.length, 2, 'the next book started right away');
+  assert.strictEqual(lastDispatch(env).body.inputs.drive_file_id, b.id);
+  assert.ok(env.mails.some((m) => /ينتظر الحكّام/.test(m.subject)));
+
+  minutes(env, 40);
+  writeStatus(env, b.id, 'done', { epub: 'ثان.epub' });
+  writeEpub(env, b.id, 'ثان.epub');
+  tick(env);
+  assert.strictEqual(jobs(env)[b.id].stage, 'delivered');
+  minutes(env, 10);
+  tick(env);
+  assert.strictEqual(env.gh.dispatches.length, 2, 'not before the judges quota renews');
+
+  env.clock += 24 * 3600000;
+  tick(env);
+  assert.strictEqual(env.gh.dispatches.length, 3);
+  assert.strictEqual(lastDispatch(env).body.inputs.drive_file_id, a.id, 'parked book first');
+  assert.strictEqual(lastDispatch(env).body.inputs.result_dir, 'drive-' + a.id);
+  minutes(env, 15);
+  writeStatus(env, a.id, 'done', { epub: 'أول.epub', pages_unsure: [9] });
+  writeEpub(env, a.id, 'أول.epub');
+  tick(env);
+  assert.strictEqual(jobs(env)[a.id].stage, 'delivered');
+  assert.ok(names(env, 'ready').indexOf('أول.epub') >= 0);
+});
+
 test('done without report.md still delivers; done without the EPUB file is retried', () => {
   const env = readyEnv();
   const f = addBook(env, 'أ.pdf');

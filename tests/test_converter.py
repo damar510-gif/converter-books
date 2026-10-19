@@ -210,9 +210,11 @@ class Pipeline(unittest.TestCase):
         # Page 31 was over today's arbiter limit: still unsure, and the book says so.
         self.assertEqual(recs[31]["check"]["state"], "unsure")
         self.assertIn("قراءة الصفحة 31 من الأصل غير مؤكدة", md)
-        # The book waits (paused) until tomorrow's judges see page 31, then finishes.
-        self.assertEqual(code, 3)
-        self.assertIn(31, st["pages_waiting"])
+        # Reading is done; only the judges are missing: the book waits for them ("judging").
+        self.assertEqual(code, 4)
+        self.assertEqual(st["state"], "paused")
+        self.assertEqual(st["waiting_for"], "judges")
+        self.assertEqual(st["pages_judging"], [31])
         code, st, md, fake = self.run_book({
             "gemini-3.5-flash-lite": lambda p, n: answer(WRONG),
             "gemini-3.1-flash-lite": lambda p, n: answer(TRUE),
