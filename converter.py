@@ -265,6 +265,8 @@ class ModelPool:
         self.requests = {}
         self.exhausted = set()
         self.no_tuning = set()
+        # Models this account does not have (404): unlike a used-up quota, they never come back.
+        self.missing = set()
         self.quota_day = ""
 
     def available(self, model):
@@ -717,6 +719,7 @@ def arbitrate(pool, filepath, records, cache_dir, models, limit):
                     if "404" in str(e) or "not found" in str(e).lower():
                         # A model name this account does not have: skip it for the run.
                         pool.exhausted.add(m)
+                        pool.missing.add(m)
                         continue
                     text, finish, model = "", f"error {str(e)[:100]}", m
                     break
@@ -1048,7 +1051,7 @@ def summarize(records, dual):
     """Book state for status.json and the report."""
     missing = [r["page"] for r in records if r["status"] in ("failed", "suspicious")]
     retry = [r["page"] for r in records if (r.get("check") or {}).get("state") == "retry"]
-    waiting = [r["page"] for r in records if r["status"] == "pending"
+    waiting = [r["page"] for r in records if r["status"] == "pending" or r.get("judge_waiting")
                or (r["status"] == "ok" and r["page"] not in retry
                    and ((r.get("check") or {}).get("v") != CHECK_VERSION or (dual and "b" not in r)))]
     unsure = [r["page"] for r in records if (r.get("check") or {}).get("state") == "unsure"]
@@ -1176,7 +1179,18 @@ def generate_epub_from_pdf(filepath, output_path, args):
         records = [rec or {"page": i + 1, "status": "pending"} for i, rec in zip(selected, tp.map(work, selected))]
     if pool:
         check_pages(pool, filepath, records, cache_dir, dual, args.workers)
-        arbitrate(pool, filepath, records, cache_dir, args.arbiter_models.split(","), args.arbiter_limit)
+        judges = [m for m in args.arbiter_models.split(",") if m]
+        # One pass per judge a page may see, so a page the first judge could not settle
+        # reaches the next one in the same run while quota is left.
+        for _ in range(MAX_JUDGES):
+            arbitrate(pool, filepath, records, cache_dir, judges, args.arbiter_limit)
+        # A book is finished only when every unsure page has been shown to the judges it can
+        # still see; pages left for tomorrow's judge quota keep the book paused.
+        for r in records:
+            c = r.get("check") or {}
+            if c.get("state") == "unsure" and len(c.get("judges", [])) < MAX_JUDGES \
+                    and any(m not in pool.missing and m not in c.get("judges", []) for m in judges):
+                r["judge_waiting"] = True
 
     summary = summarize(records, dual)
     md = assemble(records)

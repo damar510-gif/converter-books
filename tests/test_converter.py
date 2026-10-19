@@ -113,7 +113,7 @@ class Pipeline(unittest.TestCase):
         code, st, md, fake = self.run_book({
             "gemini-3.5-flash-lite": lambda p, n: answer("كلام قصير" if "النسخة (أ)" in p else WRONG),
             "gemini-3.1-flash-lite": lambda p, n: answer("كلام قصير" if "النسخة (أ)" in p else TRUE),
-        }, pages="30")
+        }, pages="30", extra=("--arbiter-models", ""))
         self.assertEqual(code, 0)
         rec = self.records()[30]
         self.assertIn(rec["check"]["state"], ("kept", "unsure"))
@@ -199,7 +199,9 @@ class Pipeline(unittest.TestCase):
         code, st, md, fake = self.run_book({
             "gemini-3.5-flash-lite": lambda p, n: answer("قصير" if "النسخة (أ)" in p else WRONG),
             "gemini-3.1-flash-lite": lambda p, n: answer("قصير" if "النسخة (أ)" in p else TRUE),
-            "gemini-3.8-flash": lambda p, n: answer(TRUE),
+            # One request left today on the strongest judge; the next judge cannot settle.
+            "gemini-3.8-flash": lambda p, n: answer(TRUE) if n == 1 else (_ for _ in ()).throw(
+                Exception("429 RESOURCE_EXHAUSTED GenerateRequestsPerDayPerProjectPerModel-FreeTier")),
             "gemini-3.7-flash": lambda p, n: answer("قصير"),
         }, pages="30-31", extra=("--arbiter-limit", "1"))
         recs = self.records()
@@ -208,6 +210,16 @@ class Pipeline(unittest.TestCase):
         # Page 31 was over today's arbiter limit: still unsure, and the book says so.
         self.assertEqual(recs[31]["check"]["state"], "unsure")
         self.assertIn("قراءة الصفحة 31 من الأصل غير مؤكدة", md)
+        # The book waits (paused) until tomorrow's judges see page 31, then finishes.
+        self.assertEqual(code, 3)
+        self.assertIn(31, st["pages_waiting"])
+        code, st, md, fake = self.run_book({
+            "gemini-3.5-flash-lite": lambda p, n: answer(WRONG),
+            "gemini-3.1-flash-lite": lambda p, n: answer(TRUE),
+            "gemini-3.8-flash": lambda p, n: answer(TRUE),
+        }, pages="30-31")
+        self.assertEqual(code, 0, st)
+        self.assertEqual(self.records()[31]["check"]["state"], "reconciled")
         self.assertNotIn("قراءة الصفحة 30 من الأصل غير مؤكدة", md)
 
     def test_single_mode(self):
