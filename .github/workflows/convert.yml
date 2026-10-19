@@ -23,6 +23,10 @@ on:
         description: 'Testing only: compare these models (comma separated) on the given pages instead of converting'
         required: false
         type: string
+      text_check_models:
+        description: 'Testing only: text models (provider:model, comma separated) that look for misread words'
+        required: false
+        type: string
       # Set by the Drive inbox script (apps-script/Code.gs, docs/drive-inbox.md).
       drive_file_id:
         description: 'Drive inbox only: Drive file ID'
@@ -147,9 +151,21 @@ jobs:
           PYTHONUNBUFFERED: '1'
         run: python compare_models.py "$TARGET_FILE" --pages "$BOOK_PAGES" --models "$MODELS" --out compare-out
 
+      - name: Text models trial
+        if: inputs.text_check_models != ''
+        timeout-minutes: 60
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          BOOK_PAGES: ${{ inputs.pages }}
+          MODELS: ${{ inputs.text_check_models }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          PYTHONUNBUFFERED: '1'
+        run: python textcheck_trial.py "$TARGET_FILE" --pages "$BOOK_PAGES" --models "$MODELS" --out compare-out
+
       # Runs even when the comparison was cut short, so partial results are kept.
       - name: Save comparison
-        if: always() && inputs.compare_models != ''
+        if: always() && (inputs.compare_models != '' || inputs.text_check_models != '')
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -165,7 +181,7 @@ jobs:
 
       - name: Run Conversion Script
         id: convert
-        if: inputs.compare_models == ''
+        if: inputs.compare_models == '' && inputs.text_check_models == ''
         # Leaves time for the steps below to save progress and status.json.
         timeout-minutes: 300
         env:
@@ -190,14 +206,14 @@ jobs:
           exit 0
 
       - name: Save progress
-        if: always() && inputs.compare_models == '' && env.BOOK_HASH != ''
+        if: always() && inputs.compare_models == '' && inputs.text_check_models == '' && env.BOOK_HASH != ''
         uses: actions/cache/save@v4
         with:
           path: work
           key: ocr-${{ env.BOOK_HASH }}-${{ github.run_id }}-${{ github.run_attempt }}
 
       - name: Upload EPUB Artifact
-        if: always() && inputs.compare_models == '' && env.EPUB_OUTPUT != ''
+        if: always() && inputs.compare_models == '' && inputs.text_check_models == '' && env.EPUB_OUTPUT != ''
         uses: actions/upload-artifact@v4
         with:
           name: converted-epub
@@ -212,7 +228,7 @@ jobs:
       # the Drive inbox script reads them from there, and they can be downloaded from
       # the repository page. status.json is written even when the run crashed.
       - name: Save to results branch
-        if: always() && inputs.compare_models == '' && env.RESULT_DIR != ''
+        if: always() && inputs.compare_models == '' && inputs.text_check_models == '' && env.RESULT_DIR != ''
         env:
           GH_TOKEN: ${{ github.token }}
           CODE: ${{ steps.convert.outputs.code }}
@@ -253,7 +269,7 @@ jobs:
           exit 1
 
       - name: Fail if the book is not finished
-        if: inputs.compare_models == '' && steps.convert.outputs.code != '0'
+        if: inputs.compare_models == '' && inputs.text_check_models == '' && steps.convert.outputs.code != '0'
         env:
           CODE: ${{ steps.convert.outputs.code }}
         run: |
