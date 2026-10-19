@@ -79,7 +79,7 @@ class Pipeline(unittest.TestCase):
         d = os.path.join(work, os.listdir(work)[0])
         recs = {}
         for name in os.listdir(d):
-            if name.endswith(".json"):
+            if name.endswith(".json") and name[:4].isdigit():
                 with open(os.path.join(d, name), encoding="utf-8") as f:
                     r = json.load(f)
                 recs[r["page"]] = r
@@ -221,6 +221,17 @@ class Pipeline(unittest.TestCase):
         self.assertEqual(code, 0, st)
         self.assertEqual(self.records()[31]["check"]["state"], "reconciled")
         self.assertNotIn("قراءة الصفحة 30 من الأصل غير مؤكدة", md)
+
+    def test_cover_is_picked_from_the_first_pages(self):
+        def lite(p, n):
+            if "غلاف الكتاب" in p:
+                return answer('{"cover": 3}')
+            return answer(TRUE)
+        code, st, md, fake = self.run_book({"gemini-3.5-flash-lite": lite, "gemini-3.1-flash-lite": lite},
+                                           pages="1-6")
+        work = os.path.join(self.tmp, "work")
+        with open(os.path.join(work, os.listdir(work)[0], "cover.json")) as f:
+            self.assertEqual(json.load(f)["index"], 2)
 
     def test_single_mode(self):
         code, st, md, fake = self.run_book({

@@ -293,7 +293,9 @@ class ModelPool:
         self._limiter(model).wait()
         with self.lock:
             self.requests[model] = self.requests.get(model, 0) + 1
-        contents = [prompt] if png is None else [types.Part.from_bytes(data=png, mime_type="image/png"), prompt]
+        # png: one page image, a list of images (several pages in one request), or None.
+        images = [] if png is None else (png if isinstance(png, list) else [png])
+        contents = [types.Part.from_bytes(data=i, mime_type="image/png") for i in images] + [prompt]
         response = self.client.models.generate_content(model=model, contents=contents, config=self._config(model))
         finish, text = "", ""
         if response.candidates:
@@ -1140,10 +1142,52 @@ def compress(pages):
     return "، ".join(out)
 
 
-def extract_cover_from_pdf(doc, cover_path):
+COVER_PROMPT = """هذه أول صفحات كتاب ممسوح ضوئياً، بالترتيب، وكل صورة صفحة واحدة: الصورة 1 هي الصفحة 1، وهكذا.
+أيها **غلاف الكتاب** (الواجهة الخارجية: عليها عنوان الكتاب بخط كبير، وغالباً زخرفة أو لون أو اسم الناشر)؟
+صفحة العنوان الداخلية البيضاء ليست غلافاً إلا إن لم يوجد غلاف. الصفحة الفارغة أو الختم أو العلامة المائية وحدها ليست غلافاً.
+أجب بـ JSON فقط: {"cover": رقم الصفحة، أو 0 إن لم يكن بينها غلاف}"""
+
+COVER_PAGES = 5
+
+
+@pdf_locked
+def page_thumb(doc, index):
+    return doc[index].get_pixmap(dpi=60).tobytes("png")
+
+
+def pick_cover_page(doc, pool, cache_dir):
+    """Index of the cover among the first pages: one request showing them together,
+    remembered in cover.json. The first page when no model can tell."""
+    path = os.path.join(cache_dir, "cover.json")
+    if os.path.exists(path):
+        with open(path, encoding="utf-8") as f:
+            return json.load(f).get("index", 0)
+    count = min(COVER_PAGES, len(doc))
+    if not pool or count < 2:
+        return 0
+    thumbs = [page_thumb(doc, i) for i in range(count)]
+    for model in (m for m in (pool.model, pool.second) if pool.available(m)):
+        try:
+            text, _ = pool.read(thumbs, COVER_PROMPT, model)
+            m = re.search(r"\{.*\}", text, re.S)
+            n = int(json.loads(m.group(0))["cover"]) if m else 0
+        except Exception as e:
+            print(f"  {model} could not pick the cover: {str(e)[:120]}")
+            continue
+        index = n - 1 if 1 <= n <= count else 0
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump({"index": index, "model": model}, f)
+        print(f"Cover: page {index + 1}")
+        return index
+    return 0
+
+
+def extract_cover_from_pdf(doc, cover_path, index=0):
     try:
-        if len(doc) > 0:
-            doc[0].get_pixmap(dpi=150).save(cover_path)
+        if len(doc) > index:
+            png, _ = page_image(doc, doc[index])
+            with open(cover_path, "wb") as f:
+                f.write(png)
             return True
     except Exception as e:
         print(f"Warning: Could not extract cover from PDF: {e}")
@@ -1203,7 +1247,7 @@ def generate_epub_from_pdf(filepath, output_path, args):
         f.write(md)
 
     cover_path = output_path + ".cover.png"
-    has_cover = extract_cover_from_pdf(doc, cover_path)
+    has_cover = extract_cover_from_pdf(doc, cover_path, pick_cover_page(doc, pool, cache_dir))
     try:
         run_pandoc(md_path, output_path, args.title, cover_path if has_cover else None)
         print(f"Page list: {add_page_list(output_path)} pages")
