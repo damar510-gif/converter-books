@@ -1053,8 +1053,9 @@ def summarize(records, dual):
     """Book state for status.json and the report."""
     missing = [r["page"] for r in records if r["status"] in ("failed", "suspicious")]
     retry = [r["page"] for r in records if (r.get("check") or {}).get("state") == "retry"]
-    waiting = [r["page"] for r in records if r["status"] == "pending" or r.get("judge_waiting")
-               or (r["status"] == "ok" and r["page"] not in retry
+    judging = [r["page"] for r in records if r.get("judge_waiting")]
+    waiting = [r["page"] for r in records if r["status"] == "pending"
+               or (r["status"] == "ok" and r["page"] not in retry and r["page"] not in judging
                    and ((r.get("check") or {}).get("v") != CHECK_VERSION or (dual and "b" not in r)))]
     unsure = [r["page"] for r in records if (r.get("check") or {}).get("state") == "unsure"]
     states = {}
@@ -1063,7 +1064,10 @@ def summarize(records, dual):
         states[key] = states.get(key, 0) + 1
     # Waiting pages need tomorrow's quota; retry pages hit temporary API errors and
     # can be tried again right away.
-    state = "paused" if waiting else ("incomplete" if missing or retry else "done")
+    # "judging": every page is read and checked, only the judges' quota is missing. The
+    # Drive inbox parks such a book and starts the next one, so the readers' quota is
+    # not left unused; the parked book returns to the judges the next day.
+    state = ("paused" if waiting else "incomplete" if missing or retry else "judging" if judging else "done")
     samples = {r["page"]: r["check"].get("sample", []) for r in records
                if (r.get("check") or {}).get("state") == "unsure"}
     # Why each unsure page stayed unsure (for tuning the check).
@@ -1076,6 +1080,7 @@ def summarize(records, dual):
                                          if x)
     return {"state": state, "pages_total": len(records),
             "pages_done": len(records) - len(missing) - len(waiting) - len(retry),
+            "pages_judging": judging,
             "pages_unsure": unsure, "pages_missing": missing, "pages_waiting": waiting,
             "pages_retry": retry, "counts": states, "samples": samples, "reasons": reasons}
 
@@ -1091,6 +1096,9 @@ def write_report(path, summary, pool):
     lines += [f"- {label}: {counts[key]}" for key, label in names if counts.get(key)]
     if pool:
         lines += [f"- طلبات {model} في هذا التشغيل: {n}" for model, n in pool.requests.items()]
+    if summary["state"] == "judging":
+        lines += ["", f"**القراءة اكتملت، و{len(summary['pages_judging'])} صفحة تنتظر الحكّام** "
+                  "(انتهى رصيدهم اليومي). تُعرض عليهم بعد تجدده، ثم يُسلَّم الكتاب."]
     if summary["state"] == "paused":
         lines += ["", "**توقف التشغيل لانتهاء الحد اليومي لـ Gemini.** ما أُنجز محفوظ، "
                   "وتشغيل نفس الكتاب بعد منتصف الليل (بتوقيت أمريكا الغربي) يكمل الباقي فقط."]
@@ -1120,9 +1128,13 @@ def write_status(path, summary, title, epub_name, quota_day=""):
     data = {k: v for k, v in summary.items() if k not in ("counts", "samples", "reasons")}
     data.update(book=title, epub=epub_name or "",
                 updated_at=datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"))
-    if summary["state"] == "paused":
+    if summary["state"] in ("paused", "judging"):
         # The Pacific date the quota ran out on; the inbox starts again the day after.
         data["quota_day"] = quota_day or pacific_day()
+    if summary["state"] == "judging":
+        # Written as "paused" so an older inbox script (which knows no "judging") still
+        # waits for the next day; the current one parks the book on waiting_for.
+        data.update(state="paused", waiting_for="judges")
     with open(path, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=1)
 
@@ -1194,7 +1206,7 @@ def extract_cover_from_pdf(doc, cover_path, index=0):
     return False
 
 
-EXIT_CODES = {"done": 0, "incomplete": 2, "paused": 3}
+EXIT_CODES = {"done": 0, "incomplete": 2, "paused": 3, "judging": 4}
 
 
 def generate_epub_from_pdf(filepath, output_path, args):
@@ -1297,7 +1309,7 @@ def generate_epub_from_docx(filepath, output_path, args):
 
 def plain_summary():
     return {"state": "done", "pages_total": 0, "pages_done": 0, "pages_unsure": [], "pages_missing": [],
-            "pages_waiting": [], "pages_retry": [], "counts": {}, "samples": {}, "reasons": {}}
+            "pages_waiting": [], "pages_retry": [], "pages_judging": [], "counts": {}, "samples": {}, "reasons": {}}
 
 
 def process_file(filepath, output_path, args):
