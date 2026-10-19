@@ -665,15 +665,24 @@ def arbitrate(pool, filepath, records, cache_dir, model, limit):
             except QuotaExhausted:
                 break
             except Exception as e:
-                text, finish = "", str(e)[:120]
+                text, finish = "", f"error {str(e)[:100]}"
             text = clean_settled(text)
-            ok = bool(text) and "MAX_TOKENS" not in finish and not is_refusal(finish) \
-                and crosscheck.validate_final(text, a, b)
-            miss_f = missing_lines(tess, text, vocab) if ok and tess else []
-            if ok and not miss_f:
-                rec["text"] = text
-                rec["check"].update(state="reconciled", model=model, missing_final=0)
-            rec["check"]["arbiter"] = "settled" if ok and not miss_f else f"no: {finish[:60]}"
+            if not text or is_refusal(finish) or "MAX_TOKENS" in finish or finish.startswith("error"):
+                verdict = f"no answer: {finish[:80]}"
+            elif not crosscheck.validate_final(text, a, b):
+                verdict = "rejected: drops text the readings agree on"
+            else:
+                miss_f = missing_lines(tess, text, vocab) if tess else []
+                if len(miss_f) > min([len(miss_a)] + ([len(miss_b)] if b else [])):
+                    verdict = f"rejected: {len(miss_f)} lines missing"
+                else:
+                    # The stronger model's text is used even if a line still seems missing;
+                    # the page then stays flagged in the book.
+                    rec["text"] = text
+                    rec["check"].update(model=model, missing_final=len(miss_f),
+                                        state="unsure" if miss_f else "reconciled")
+                    verdict = "settled" if not miss_f else f"used, {len(miss_f)} lines may be missing"
+            rec["check"]["arbiter"] = verdict
             save_record(cache_dir, rec)
             print(f"  arbiter page {rec['page']}: {rec['check']['arbiter']}")
     finally:
