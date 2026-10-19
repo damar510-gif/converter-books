@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<style>
+  :root {
+    --bg: #f5f6f8;
+    --card: #ffffff;
+    --text: #1d2433;
+    --muted: #5d6678;
+    --line: #e2e5eb;
+    --accent: #1a66d6;
+    --accent-text: #ffffff;
+    --ok: #1e7e34;
+    --ok-bg: #e6f4ea;
+    --warn: #8a5300;
+    --warn-bg: #fef3e0;
+    --bad: #b3261e;
+    --bad-bg: #fce8e6;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #121418;
+      --card: #1c1f26;
+      --text: #e8eaed;
+      --muted: #a0a8b6;
+      --line: #2e333d;
+      --accent: #8ab4f8;
+      --accent-text: #0b1a33;
+      --ok: #81c995;
+      --ok-bg: #1d3325;
+      --warn: #fdd663;
+      --warn-bg: #3a3020;
+      --bad: #f28b82;
+      --bad-bg: #3b2322;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: system-ui, -apple-system, "Segoe UI", Tahoma, Arial, sans-serif;
+    font-size: 16px;
+    line-height: 1.7;
+  }
+  main { max-width: 640px; margin: 0 auto; padding: 16px; }
+  h1 { font-size: 1.5rem; margin: 4px 0 2px; }
+  h2 { font-size: 1.05rem; margin: 0 0 8px; color: var(--muted); font-weight: 600; }
+  .muted { color: var(--muted); font-size: .9rem; }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 14px 16px;
+    margin: 12px 0;
+  }
+  .big { font-size: 1.1rem; font-weight: 600; overflow-wrap: anywhere; }
+  .note { border-radius: 10px; padding: 8px 12px; margin-top: 8px; font-size: .95rem; }
+  .note.warn { background: var(--warn-bg); color: var(--warn); }
+  .note.bad { background: var(--bad-bg); color: var(--bad); }
+  button {
+    width: 100%;
+    font: inherit;
+    font-weight: 600;
+    padding: 12px;
+    border: 0;
+    border-radius: 12px;
+    background: var(--accent);
+    color: var(--accent-text);
+    cursor: pointer;
+  }
+  button:disabled { opacity: .6; cursor: default; }
+  #msg { min-height: 1.7em; text-align: center; margin: 6px 0 0; }
+  ul { list-style: none; margin: 0; padding: 0; }
+  li { padding: 10px 0; border-top: 1px solid var(--line); }
+  li:first-child { border-top: 0; padding-top: 0; }
+  .row { display: flex; gap: 8px; align-items: baseline; justify-content: space-between; flex-wrap: wrap; }
+  .title { font-weight: 600; overflow-wrap: anywhere; }
+  .badge { font-size: .8rem; padding: 1px 10px; border-radius: 999px; white-space: nowrap; }
+  .badge.ok { background: var(--ok-bg); color: var(--ok); }
+  .badge.warn { background: var(--warn-bg); color: var(--warn); }
+  .badge.bad { background: var(--bad-bg); color: var(--bad); }
+  a { color: var(--accent); }
+  .links a { display: inline-block; margin-left: 14px; }
+  .bar { height: 8px; background: var(--line); border-radius: 99px; overflow: hidden; margin-top: 8px; }
+  .bar > span { display: block; height: 100%; background: var(--accent); }
+</style>
+</head>
+<body>
+<main>
+  <h1>تحويل الكتب</h1>
+  <div class="muted" id="sub"></div>
+
+  <section class="card" id="now"></section>
+  <section class="card" id="queue"></section>
+
+  <button id="check" type="button">افحص الآن</button>
+  <p id="msg" class="muted" role="status"></p>
+
+  <section class="card">
+    <h2>آخر الكتب</h2>
+    <ul id="recent"></ul>
+  </section>
+
+  <section class="card muted" id="foot"></section>
+</main>
+
+<script>
+  var INITIAL = <?!= initialJson ?>;
+
+  function el(tag, cls, text) {
+    var e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text !== undefined && text !== null) e.textContent = text;
+    return e;
+  }
+
+  function link(href, text) {
+    var a = el('a', '', text);
+    a.href = href;
+    a.target = '_blank';
+    a.rel = 'noopener';
+    return a;
+  }
+
+  // Arabic counted nouns: 1 دقيقة، 2 دقيقتان، 3-10 دقائق، 11+ دقيقة.
+  function count(n, one, two, few, many) {
+    if (n === 1) return one;
+    if (n === 2) return two;
+    if (n >= 3 && n <= 10) return n + ' ' + few;
+    return n + ' ' + many;
+  }
+
+  function duration(minutes) {
+    if (minutes < 1) return 'أقل من دقيقة';
+    if (minutes < 60) return count(minutes, 'دقيقة', 'دقيقتين', 'دقائق', 'دقيقة');
+    var h = Math.floor(minutes / 60), m = minutes % 60;
+    var text = count(h, 'ساعة', 'ساعتين', 'ساعات', 'ساعة');
+    return m ? text + ' و' + count(m, 'دقيقة', 'دقيقتين', 'دقائق', 'دقيقة') : text;
+  }
+
+  function when(iso, timeOnly) {
+    if (!iso) return '';
+    var d = new Date(iso);
+    try {
+      var opts = { calendar: 'gregory', numberingSystem: 'latn', hour: '2-digit', minute: '2-digit' };
+      if (!timeOnly) { opts.day = 'numeric'; opts.month = 'long'; }
+      return d.toLocaleString('ar', opts);
+    } catch (e) {
+      return iso.replace('T', ' ').slice(0, 16);
+    }
+  }
+
+  function minutesSince(iso, nowIso) {
+    return Math.max(0, Math.floor((Date.parse(nowIso) - Date.parse(iso)) / 60000));
+  }
+
+  function render(s) {
+    var now = document.getElementById('now');
+    var queue = document.getElementById('queue');
+    var recent = document.getElementById('recent');
+    var foot = document.getElementById('foot');
+    var sub = document.getElementById('sub');
+    now.textContent = '';
+    queue.textContent = '';
+    recent.textContent = '';
+    foot.textContent = '';
+
+    if (!s || !s.ok) {
+      now.appendChild(el('div', 'note bad', 'تعذّر قراءة الحالة: ' + ((s && s.error) || 'خطأ غير معروف')));
+      return;
+    }
+    sub.textContent = s.lastTick ? 'آخر فحص: قبل ' + duration(minutesSince(s.lastTick, s.now)) : 'لم يجرِ أي فحص بعد';
+
+    if (!s.setUp) {
+      now.appendChild(el('div', 'note warn', 'الإعداد لم يكتمل. شغّل الدالة setup من المحرر (الخطوة 4 في دليل الإعداد).'));
+    }
+    if (!s.hasToken) {
+      now.appendChild(el('div', 'note bad', 'رمز GitHub غير موجود. أضف GITHUB_TOKEN (الخطوة 3 في دليل الإعداد).'));
+    }
+
+    // The book being converted.
+    now.appendChild(el('h2', '', 'الآن'));
+    var a = s.active;
+    if (!a) {
+      now.appendChild(el('div', 'big', 'لا يوجد كتاب قيد التحويل.'));
+    } else {
+      now.appendChild(el('div', 'big', '«' + a.title + '»'));
+      if (a.stage === 'queued') {
+        now.appendChild(el('div', '', 'ينتظر بدء التحويل.'));
+        if (a.lastError) {
+          now.appendChild(el('div', 'note warn', 'تعذّر بدء التحويل على GitHub، وسأحاول مرة أخرى تلقائياً. (' + a.lastError + ')'));
+        }
+      } else if (a.paused) {
+        now.appendChild(el('div', '', 'متوقف حتى الغد: انتهت حصة القراءة المجانية لهذا اليوم.'));
+        now.appendChild(el('div', '', 'يكمل تلقائياً نحو ' + when(a.resumeAt) + '. ما أُنجز محفوظ.'));
+      } else {
+        now.appendChild(el('div', '', 'قيد التحويل منذ ' + duration(a.minutes) +
+          (a.attempts > 1 ? ' (المحاولة رقم ' + a.attempts + ')' : '') + '.'));
+      }
+      if (a.pagesTotal) {
+        now.appendChild(el('div', 'muted', 'أُنجزت ' + a.pagesDone + ' من ' + a.pagesTotal + ' صفحة حتى آخر توقف.'));
+        var bar = el('div', 'bar');
+        var fill = el('span');
+        fill.style.width = Math.min(100, Math.round(100 * a.pagesDone / a.pagesTotal)) + '%';
+        bar.appendChild(fill);
+        now.appendChild(bar);
+      }
+    }
+
+    // Waiting books.
+    queue.appendChild(el('h2', '', 'في الانتظار'));
+    queue.appendChild(el('div', '', s.queued
+      ? count(s.queued, 'كتاب واحد', 'كتابان', 'كتب', 'كتاباً') + ' في «1- جديد».'
+      : 'لا توجد كتب في «1- جديد».'));
+    if (s.uploading) {
+      queue.appendChild(el('div', 'muted', 'منها ' + s.uploading + ' ما زال يُرفع أو أُضيف قبل دقائق.'));
+    }
+    if (s.unsupported && s.unsupported.length) {
+      queue.appendChild(el('div', 'note warn', 'ملفات لن تُحوَّل لأن نوعها غير مدعوم (المدعوم: PDF و DOCX و TXT): ' +
+        s.unsupported.join('، ')));
+    }
+
+    // Finished books.
+    if (!s.recent.length) {
+      recent.appendChild(el('li', 'muted', 'لا شيء بعد.'));
+    }
+    s.recent.forEach(function (j) {
+      var li = el('li');
+      var row = el('div', 'row');
+      row.appendChild(el('span', 'title', j.title));
+      var badge = j.stage === 'problem' ? el('span', 'badge bad', 'مشكلة')
+        : j.incomplete ? el('span', 'badge warn', 'جاهز، فيه صفحات ناقصة')
+        : el('span', 'badge ok', 'جاهز');
+      row.appendChild(badge);
+      li.appendChild(row);
+      var meta = el('div', 'muted');
+      meta.appendChild(document.createTextNode(when(j.finishedAt) + (j.reason ? ' — ' + j.reason : '') + ' '));
+      if (j.url) meta.appendChild(link(j.url, j.stage === 'problem' ? 'الملف' : 'افتح الكتاب'));
+      li.appendChild(meta);
+      recent.appendChild(li);
+    });
+
+    // Folders and token.
+    var links = el('div', 'links');
+    if (s.links.inbox) links.appendChild(link(s.links.inbox, 'مجلد «1- جديد»'));
+    if (s.links.ready) links.appendChild(link(s.links.ready, 'مجلد «3- جاهز»'));
+    if (s.links.problem) links.appendChild(link(s.links.problem, 'مجلد «5- مشكلة»'));
+    if (s.links.root) links.appendChild(link(s.links.root, 'كل المجلدات'));
+    foot.appendChild(links);
+    if (s.tokenExpires) {
+      var days = Math.floor((Date.parse(s.tokenExpires) - Date.parse(s.now)) / 86400000);
+      foot.appendChild(el('div', days <= 14 ? 'note warn' : '',
+        'صلاحية رمز GitHub حتى ' + when(s.tokenExpires) + (days <= 14 ? ' — جدّده قريباً (الخطوة 7 في الدليل).' : '.')));
+    }
+  }
+
+  function setMsg(text) { document.getElementById('msg').textContent = text; }
+
+  function refresh(after) {
+    google.script.run
+      .withSuccessHandler(function (text) {
+        var s = null;
+        try { s = JSON.parse(text); } catch (e) { s = { ok: false, error: 'رد غير مفهوم' }; }
+        render(s);
+        if (after) after();
+      })
+      .withFailureHandler(function (err) { setMsg('تعذّر التحديث: ' + (err && err.message ? err.message : err)); })
+      .getStatus();
+  }
+
+  document.getElementById('check').addEventListener('click', function () {
+    var btn = this;
+    btn.disabled = true;
+    setMsg('جارٍ الفحص…');
+    google.script.run
+      .withSuccessHandler(function (result) {
+        refresh(function () {
+          btn.disabled = false;
+          setMsg(result === 'busy' ? 'يوجد فحص يعمل الآن، حدّثت الصفحة.' : 'تم الفحص.');
+        });
+      })
+      .withFailureHandler(function (err) {
+        btn.disabled = false;
+        setMsg('تعذّر الفحص: ' + (err && err.message ? err.message : err));
+      })
+      .tick();
+  });
+
+  // Keep the page current while it is open, and when the user comes back to it.
+  setInterval(function () { if (!document.hidden) refresh(); }, 120000);
+  document.addEventListener('visibilitychange', function () { if (!document.hidden) refresh(); });
+
+  render(INITIAL);
+</script>
+</body>
+</html>
