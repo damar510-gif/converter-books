@@ -200,10 +200,11 @@ class Pipeline(unittest.TestCase):
             "gemini-3.5-flash-lite": lambda p, n: answer("قصير" if "النسخة (أ)" in p else WRONG),
             "gemini-3.1-flash-lite": lambda p, n: answer("قصير" if "النسخة (أ)" in p else TRUE),
             "gemini-3.8-flash": lambda p, n: answer(TRUE),
+            "gemini-3.7-flash": lambda p, n: answer("قصير"),
         }, pages="30-31", extra=("--arbiter-limit", "1"))
         recs = self.records()
         self.assertEqual(recs[30]["check"]["state"], "reconciled")
-        self.assertEqual(recs[30]["check"]["arbiter"], "settled")
+        self.assertEqual(recs[30]["check"]["arbiter"], "gemini-3.8-flash: settled")
         # Page 31 was over today's arbiter limit: still unsure, and the book says so.
         self.assertEqual(recs[31]["check"]["state"], "unsure")
         self.assertIn("قراءة الصفحة 31 من الأصل غير مؤكدة", md)

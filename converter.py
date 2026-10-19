@@ -61,6 +61,30 @@ SAFETY_OFF = [
 SPREAD_HINT = "- هذه الصورة فيها صفحتان من الكتاب متجاورتان: انسخ الصفحة اليمنى كاملة أولاً ثم اليسرى.\n"
 
 
+# PyMuPDF is not thread safe, even with one document per thread: every PDF call
+# goes through this lock, while the slow API requests still run in parallel.
+PDF_LOCK = threading.RLock()
+
+
+def pdf_locked(fn):
+    def wrapper(*args, **kwargs):
+        with PDF_LOCK:
+            return fn(*args, **kwargs)
+    wrapper.__name__ = fn.__name__
+    wrapper.__doc__ = fn.__doc__
+    return wrapper
+
+
+def open_pdf(path):
+    with PDF_LOCK:
+        return pymupdf.open(path)
+
+
+def close_pdf(doc):
+    with PDF_LOCK:
+        doc.close()
+
+
 class QuotaExhausted(Exception):
     """The model's daily quota is used up; it is skipped for the rest of the run."""
 
@@ -124,6 +148,7 @@ def parse_pages(spec, count):
     return sorted(p - 1 for p in pages if 1 <= p <= count)
 
 
+@pdf_locked
 def page_image(doc, page):
     """PNG bytes of the page at its scan's native resolution (at least 200 dpi otherwise)."""
     images = page.get_images(full=True)
@@ -146,6 +171,7 @@ def page_image(doc, page):
     return pix.tobytes("png"), pix
 
 
+@pdf_locked
 def split_rects(page, pix):
     """Two clips of the page in reading order: right/left column at the gutter when
     there is one, otherwise top/bottom halves at the emptiest row."""
@@ -180,7 +206,8 @@ def read_in_halves(ocr, page, pix, prompt, model):
     dpi = max(150, round(72 * pix.width / page.rect.width))
     parts, finish = [], ""
     for rect in split_rects(page, pix):
-        png = page.get_pixmap(clip=rect, dpi=dpi).tobytes("png")
+        with PDF_LOCK:
+            png = page.get_pixmap(clip=rect, dpi=dpi).tobytes("png")
         text, finish = ocr.read(png, prompt, model)
         text = clean_ocr(text)
         if not text or any(r in finish for r in BLOCKED_REASONS):
@@ -198,6 +225,7 @@ def read_in_halves(ocr, page, pix, prompt, model):
     return joined, finish
 
 
+@pdf_locked
 def ink_ratio(pix):
     """Fraction of dark pixels, sampled. Tells blank pages from pages with text."""
     gray = pymupdf.Pixmap(pymupdf.csGRAY, pix) if pix.n > 1 else pix
@@ -214,7 +242,8 @@ THINKING = {"gemini-3.1-flash-lite": types.ThinkingLevel.MINIMAL}
 
 
 def model_rpm(model, default_rpm):
-    return 4 if "gemma" in model else default_rpm
+    # Lite models allow 15 requests a minute; Gemma and the full Flash models fewer.
+    return default_rpm if "flash-lite" in model else 4
 
 
 class ModelPool:
@@ -432,7 +461,8 @@ def read_page(pool, doc, index, cache_dir, total, dual):
         return rec
     page = doc[index]
     if rec is None:
-        layer = page.get_text("text", sort=True).strip()
+        with PDF_LOCK:
+            layer = page.get_text("text", sort=True).strip()
         if len(layer) >= MIN_TEXT_LAYER_CHARS:
             rec = {"page": page_no, "status": "text-layer", "text": layer}
             save_record(cache_dir, rec)
@@ -543,15 +573,18 @@ def check_page(pool, doc, rec, tess, vocab):
             continue
         answered = True
         text = clean_settled(text)
-        if text and "MAX_TOKENS" not in finish and not is_refusal(finish) \
-                and crosscheck.validate_final(text, a, b):
+        if not text or "MAX_TOKENS" in finish or is_refusal(finish):
+            info["rejected"] = f"{model}: no answer ({finish[:40]})"
+        elif not crosscheck.validate_final(text, a, b):
+            info["rejected"] = f"{model}: drops text the readings agree on"
+        else:
             miss_f = missing_lines(tess, text, vocab) if tess else []
             if len(miss_f) <= min([len(miss_a)] + ([len(miss_b)] if b else [])):
                 rec["text"] = text
                 info.update(model=model, missing_final=len(miss_f))
                 rec["check"] = {**info, "v": CHECK_VERSION, "state": "unsure" if miss_f else "reconciled"}
                 return "done"
-        info["rejected"] = f"{model}: chars={len(text)} finish={finish}"
+            info["rejected"] = f"{model}: {len(miss_f)} lines missing (readings: {len(miss_a)}/{len(miss_b)})"
         break
     if not answered:
         if not errored:
@@ -593,11 +626,11 @@ def tesseract_for(filepath, cache_dir, page_no):
     if os.path.exists(path):
         with open(path, encoding="utf-8") as f:
             return f.read()
-    local = pymupdf.open(filepath)
+    local = open_pdf(filepath)
     try:
         png, _ = page_image(local, local[page_no - 1])
     finally:
-        local.close()
+        close_pdf(local)
     tess = tesseract_text(png)
     with open(path, "w", encoding="utf-8") as f:
         f.write(tess)
@@ -622,11 +655,11 @@ def check_pages(pool, filepath, records, cache_dir, dual, workers):
     print(f"Checking {len(todo)} pages against each other and Tesseract")
 
     def work(rec):
-        local = pymupdf.open(filepath)
+        local = open_pdf(filepath)
         try:
             result = check_page(pool, local, rec, tess[rec["page"]], vocab)
         finally:
-            local.close()
+            close_pdf(local)
         if result != "wait":
             save_record(cache_dir, rec)
             c = rec["check"]
@@ -636,20 +669,32 @@ def check_pages(pool, filepath, records, cache_dir, dual, workers):
         list(tp.map(work, todo))
 
 
-def arbitrate(pool, filepath, records, cache_dir, model, limit):
-    """Sends pages still unsure to a stronger model with a small daily quota.
-    Each page gets one try; quota errors leave it for the next run."""
+# Each unsure page is shown to at most this many judges.
+MAX_JUDGES = 2
+
+
+def arbitrate(pool, filepath, records, cache_dir, models, limit):
+    """Shows pages still unsure to stronger models with small daily quotas, one
+    after another as each quota runs out. A page a judge could not settle may be
+    shown to one more judge. Quota errors leave pages for the next run."""
     todo = [r for r in records if (r.get("check") or {}).get("state") == "unsure"
-            and not r["check"].get("arbiter")][:limit]
-    if not model or not todo or not pool.available(model):
+            and len(r["check"].get("judges", [])) < MAX_JUDGES][:limit]
+    models = [m for m in models if m]
+    if not todo or not any(pool.available(m) for m in models):
         return
-    print(f"Asking {model} about {len(todo)} unsure pages")
+    print(f"Asking {', '.join(models)} about {len(todo)} unsure pages")
     vocab = set()
     for r in records:
         vocab.update(norm_words(r.get("text") or ""))
-    local = pymupdf.open(filepath)
+    local = open_pdf(filepath)
     try:
         for rec in todo:
+            judges = rec["check"].setdefault("judges", [])
+            free = [m for m in models if pool.available(m) and m not in judges]
+            if not free:
+                if not any(pool.available(m) for m in models):
+                    break
+                continue
             a = rec["a"]["text"]
             b_rec = rec.get("b") or {}
             b = b_rec.get("text", "") if b_rec.get("status") == "ok" else ""
@@ -660,12 +705,24 @@ def arbitrate(pool, filepath, records, cache_dir, model, limit):
             png, pix = page_image(local, local[rec["page"] - 1])
             rules = OCR_RULES.format(spread=SPREAD_HINT if pix.width > pix.height * 1.15 else "")
             prompt = crosscheck.reconcile_prompt(rules, a, b, diffs, list(dict.fromkeys(miss_a + miss_b)))
-            try:
-                text, finish = pool.read(png, prompt, model)
-            except QuotaExhausted:
-                break
-            except Exception as e:
-                text, finish = "", f"error {str(e)[:100]}"
+            model = None
+            for m in free:
+                try:
+                    text, finish = pool.read(png, prompt, m)
+                    model = m
+                    break
+                except QuotaExhausted:
+                    continue
+                except Exception as e:
+                    if "404" in str(e) or "not found" in str(e).lower():
+                        # A model name this account does not have: skip it for the run.
+                        pool.exhausted.add(m)
+                        continue
+                    text, finish, model = "", f"error {str(e)[:100]}", m
+                    break
+            if model is None:
+                continue
+            judges.append(model)
             text = clean_settled(text)
             if not text or is_refusal(finish) or "MAX_TOKENS" in finish or finish.startswith("error"):
                 verdict = f"no answer: {finish[:80]}"
@@ -682,11 +739,14 @@ def arbitrate(pool, filepath, records, cache_dir, model, limit):
                     rec["check"].update(model=model, missing_final=len(miss_f),
                                         state="unsure" if miss_f else "reconciled")
                     verdict = "settled" if not miss_f else f"used, {len(miss_f)} lines may be missing"
-            rec["check"]["arbiter"] = verdict
+                    if miss_f:
+                        # Its text is in the book; another judge would not see more.
+                        judges.extend(["-"] * MAX_JUDGES)
+            rec["check"]["arbiter"] = f"{model}: {verdict}"
             save_record(cache_dir, rec)
-            print(f"  arbiter page {rec['page']}: {rec['check']['arbiter']}")
+            print(f"  judge page {rec['page']}: {rec['check']['arbiter']}")
     finally:
-        local.close()
+        close_pdf(local)
 
 
 FOOTNOTE_DEF = re.compile(r"^\[\^([^\]\s]+)\]:\s*(.*)$")
@@ -1001,10 +1061,18 @@ def summarize(records, dual):
     state = "paused" if waiting else ("incomplete" if missing or retry else "done")
     samples = {r["page"]: r["check"].get("sample", []) for r in records
                if (r.get("check") or {}).get("state") == "unsure"}
+    # Why each unsure page stayed unsure (for tuning the check).
+    reasons = {}
+    for r in records:
+        c = r.get("check") or {}
+        if c.get("state") == "unsure":
+            reasons[r["page"]] = "؛ ".join(x for x in (c.get("rejected"), c.get("error"), c.get("arbiter"),
+                                                      "قراءة واحدة" if r.get("a", {}).get("refused") else "")
+                                         if x)
     return {"state": state, "pages_total": len(records),
             "pages_done": len(records) - len(missing) - len(waiting) - len(retry),
             "pages_unsure": unsure, "pages_missing": missing, "pages_waiting": waiting,
-            "pages_retry": retry, "counts": states, "samples": samples}
+            "pages_retry": retry, "counts": states, "samples": samples, "reasons": reasons}
 
 
 def write_report(path, summary, pool):
@@ -1028,10 +1096,10 @@ def write_report(path, summary, pool):
                   + compress(summary["pages_unsure"])]
         # A few of the unsettled differences, so the exact words can be checked in the book.
         for page, sample in list(summary["samples"].items())[:30]:
-            if sample:
-                short = lambda t: (t[:60] + " …") if len(t) > 60 else (t or "—")
-                pairs = "؛ ".join(f"«{short(x)}» / «{short(y)}»" for x, y in sample)
-                lines.append(f"- ص {page}: {pairs}")
+            short = lambda t: (t[:60] + " …") if len(t) > 60 else (t or "—")
+            pairs = "؛ ".join(f"«{short(x)}» / «{short(y)}»" for x, y in sample)
+            why = summary.get("reasons", {}).get(page, "")
+            lines.append(f"- ص {page}: {pairs}" + (f"  [{why}]" if why else ""))
     if summary["state"] == "done":
         lines += ["", "**كل الصفحات اكتملت.**"]
     report = "\n".join(lines) + "\n"
@@ -1044,7 +1112,7 @@ def write_status(path, summary, title, epub_name, quota_day=""):
     """status.json for the Drive inbox (see docs/drive-inbox.md)."""
     if not path:
         return
-    data = {k: v for k, v in summary.items() if k not in ("counts", "samples")}
+    data = {k: v for k, v in summary.items() if k not in ("counts", "samples", "reasons")}
     data.update(book=title, epub=epub_name or "",
                 updated_at=datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"))
     if summary["state"] == "paused":
@@ -1097,18 +1165,18 @@ def generate_epub_from_pdf(filepath, output_path, args):
 
     def work(i):
         # Each worker opens its own document: PyMuPDF objects are not thread safe.
-        local = pymupdf.open(filepath)
+        local = open_pdf(filepath)
         try:
             return read_page(pool, local, i, cache_dir, len(doc), dual)
         finally:
-            local.close()
+            close_pdf(local)
 
     # Stage 1: two readings of every page. Stage 2: compare them and settle differences.
     with ThreadPoolExecutor(max_workers=args.workers) as tp:
         records = [rec or {"page": i + 1, "status": "pending"} for i, rec in zip(selected, tp.map(work, selected))]
     if pool:
         check_pages(pool, filepath, records, cache_dir, dual, args.workers)
-        arbitrate(pool, filepath, records, cache_dir, args.arbiter_model, args.arbiter_limit)
+        arbitrate(pool, filepath, records, cache_dir, args.arbiter_models.split(","), args.arbiter_limit)
 
     summary = summarize(records, dual)
     md = assemble(records)
@@ -1171,7 +1239,7 @@ def generate_epub_from_docx(filepath, output_path, args):
 
 def plain_summary():
     return {"state": "done", "pages_total": 0, "pages_done": 0, "pages_unsure": [], "pages_missing": [],
-            "pages_waiting": [], "pages_retry": [], "counts": {}, "samples": {}}
+            "pages_waiting": [], "pages_retry": [], "counts": {}, "samples": {}, "reasons": {}}
 
 
 def process_file(filepath, output_path, args):
@@ -1199,9 +1267,10 @@ def main():
                         help="Second, independent reader (its own daily quota)")
     parser.add_argument("--rescue-model", default=os.environ.get("GEMINI_RESCUE_MODEL") or "gemma-4-26b-a4b-it",
                         help="For pages both Gemini models refuse")
-    parser.add_argument("--arbiter-model", default=os.environ.get("GEMINI_ARBITER_MODEL") or "gemini-3.8-flash",
-                        help="Stronger model (small daily quota) asked about pages still unsure")
-    parser.add_argument("--arbiter-limit", type=int, default=15, help="Unsure pages sent to it per run")
+    parser.add_argument("--arbiter-models", default=os.environ.get("GEMINI_ARBITER_MODELS")
+                        or "gemini-3.8-flash,gemini-3.7-flash,gemini-3.6-flash,gemini-3-flash,gemini-2.5-flash",
+                        help="Stronger models (20 requests a day each) asked in turn about pages still unsure")
+    parser.add_argument("--arbiter-limit", type=int, default=100, help="Unsure pages sent to judges per run")
     parser.add_argument("--single", dest="dual", action="store_false",
                         help="Read each page once (no second reading and no comparison)")
     parser.add_argument("--rpm", type=float, default=10, help="Requests per minute per Gemini model")

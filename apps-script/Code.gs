@@ -43,6 +43,7 @@ var CONFIG = {
   MAX_LOST_ATTEMPTS: 3,
   // A book that is still "paused" after this many daily restarts is reported as a problem.
   MAX_PAUSES: 30,
+  MAX_REFINES: 15,
   MAX_FINISHED_JOBS: 50,
   // Script Properties allow about 9 KB per value. Long Arabic names take 2 bytes per
   // letter, so old finished jobs are dropped until JOBS fits in this many bytes.
@@ -294,7 +295,10 @@ function runTick_() {
   }
   // A finished job frees the slot, so the next book can start in the same check.
   if (!activeJob_(ctx.jobs) && ctx.dispatched === 0) {
-    notes.push(startNext_(ctx));
+    var started = startNext_(ctx);
+    notes.push(started);
+    // Nothing new to convert: use the day's judge quota on a finished book's unsure pages.
+    if (started === 'idle') notes.push(refineNext_(ctx));
   }
   rememberExpiry_();
   return notes.join('; ');
@@ -428,6 +432,48 @@ function startNext_(ctx) {
     return 'started ' + job.fileId + ': ' + dispatch_(ctx, job, true);
   }
   return 'idle (files could not be moved)';
+}
+
+/**
+ * Runs a delivered book again (once per Pacific day) so the stronger "judge" models
+ * look at its unsure pages; nothing is read again. Stops for a book when a round
+ * no longer lowers its count of unsure pages.
+ */
+function refineNext_(ctx) {
+  var today = pacificDay_(now_());
+  var pick = null;
+  finishedJobs_(ctx.jobs).forEach(function (j) {
+    if (j.stage !== 'delivered' || j.refineDone || !(j.unsure > 0) || j.refineDay === today) return;
+    if ((j.refines || 0) >= CONFIG.MAX_REFINES) return;
+    if (!pick || String(j.finishedAt) < String(pick.finishedAt)) pick = j;
+  });
+  if (!pick) return 'idle';
+  // Finished jobs are stored without these fields (see pruneJobs_); rebuild them.
+  pick.resultDir = 'drive-' + pick.fileId;
+  try {
+    var again = newJob_(DriveApp.getFileById(pick.fileId));
+    pick.name = again.name;
+    if (again.driveName) pick.driveName = again.driveName;
+  } catch (err) {
+    // The original was deleted from "4- الأصل": nothing left to improve.
+    pick.refineDone = true;
+    saveJobs_(ctx.jobs);
+    return 'idle (original gone: ' + pick.fileId + ')';
+  }
+  pick.refineDay = today;
+  pick.refines = (pick.refines || 0) + 1;
+  pick.refining = true;
+  pick.unsureBefore = pick.unsure;
+  // The new EPUB and report replace the old ones once the round is delivered.
+  pick.oldEpubId = pick.epubId || '';
+  pick.oldReportId = pick.reportId || '';
+  pick.epubId = '';
+  pick.reportId = '';
+  // Queued (not delivered) before saving, so pruneJobs_ keeps the fields set above.
+  pick.stage = 'queued';
+  pick.pendingCount = false;
+  saveJobs_(ctx.jobs);
+  return 'refining ' + pick.fileId + ': ' + dispatch_(ctx, pick, false);
 }
 
 function newJob_(file) {
@@ -583,15 +629,41 @@ function deliver_(ctx, job, s, incomplete) {
   }
 
   moveFile_(job.fileId, ctx.folders.originals);
-  job.stage = 'delivered';
-  job.lastState = s.state;
-  job.finishedAt = now_().toISOString();
-  job.lastError = '';
-  saveJobs_(ctx.jobs);
-
   var unsure = pageList_(s.pages_unsure);
   var missing = pageList_(s.pages_missing);
   var url = 'https://drive.google.com/file/d/' + job.epubId + '/view';
+  job.stage = 'delivered';
+  job.lastState = s.state;
+  job.lastError = '';
+  job.unsure = unsure.length;
+
+  if (job.refining) {
+    // A refinement round: the new files replace the old ones.
+    [job.oldEpubId, job.oldReportId].forEach(function (id) {
+      if (!id) return;
+      try { DriveApp.getFileById(id).setTrashed(true); } catch (err) { Logger.log('trash ' + id + ': ' + err); }
+    });
+    var before = job.unsureBefore || 0;
+    job.refining = false;
+    job.oldEpubId = '';
+    job.oldReportId = '';
+    if (unsure.length >= before) job.refineDone = true;
+    saveJobs_(ctx.jobs);
+    if (unsure.length < before) {
+      sendMail_('تحسّن: ' + job.title, [
+        'راجعت النماذج الأقوى صفحات مشكوكاً فيها في «' + job.title + '».',
+        'الصفحات المشكوك فيها نزلت من ' + before + ' إلى ' + unsure.length + '.',
+        'النسخة الجديدة حلّت محل القديمة: ' + url,
+        unsure.length ? 'ستستمر المراجعة في الأيام القادمة إن بقي ما يمكن تحسينه.' : 'لم تبقَ صفحات مشكوك فيها.'
+      ]);
+    }
+    return 'refined (' + before + ' -> ' + unsure.length + ')';
+  }
+
+  job.finishedAt = now_().toISOString();
+  // The judges already saw this book today; improvement rounds start tomorrow.
+  job.refineDay = pacificDay_(now_());
+  saveJobs_(ctx.jobs);
   var lines = [
     incomplete
       ? 'كتابك «' + job.title + '» جاهز، لكن فيه صفحات لم تُقرأ بعد ' + job.attempts + ' محاولات.'
@@ -979,7 +1051,7 @@ function pruneJobs_(jobs) {
   var finished = finishedJobs_(jobs);
   finished.forEach(function (j) {
     ['name', 'driveName', 'resultDir', 'dispatchedAt', 'createdAt', 'pausedDay', 'pausedAt',
-      'pendingCount', 'reportId', 'noteId', 'pauseMailed', 'pagesDone', 'pagesTotal', 'pauses']
+      'pendingCount', 'noteId', 'pauseMailed', 'pagesDone', 'pagesTotal', 'pauses']
       .forEach(function (k) { delete j[k]; });
     if (j.lastError) j.lastError = shorten_(j.lastError, 120);
   });
