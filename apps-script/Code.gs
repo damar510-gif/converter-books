@@ -25,7 +25,9 @@ var CONFIG = {
     working: '2- قيد التحويل',
     ready: '3- جاهز',
     originals: '4- الأصل',
-    problem: '5- مشكلة'
+    problem: '5- مشكلة',
+    // Books whose improvement rounds are over: they will not change any more.
+    final: '6- مكتمل'
   },
   DEFAULT_REPO: 'damar510-gif/converter-books',
   WORKFLOW: 'convert.yml',
@@ -444,7 +446,10 @@ function refineNext_(ctx) {
   var pick = null;
   finishedJobs_(ctx.jobs).forEach(function (j) {
     if (j.stage !== 'delivered' || j.refineDone || !(j.unsure > 0) || j.refineDay === today) return;
-    if ((j.refines || 0) >= CONFIG.MAX_REFINES) return;
+    if ((j.refines || 0) >= CONFIG.MAX_REFINES) {
+      finalize_(ctx, j, true);
+      return;
+    }
     if (!pick || String(j.finishedAt) < String(pick.finishedAt)) pick = j;
   });
   if (!pick) return 'idle';
@@ -474,6 +479,32 @@ function refineNext_(ctx) {
   pick.pendingCount = false;
   saveJobs_(ctx.jobs);
   return 'refining ' + pick.fileId + ': ' + dispatch_(ctx, pick, false);
+}
+
+/**
+ * The book will not change any more: its EPUB and report move to "6- مكتمل".
+ * With mail, the user is told which pages (if any) are still unsure.
+ */
+function finalize_(ctx, job, mail) {
+  job.refineDone = true;
+  [job.epubId, job.reportId].forEach(function (id) {
+    if (!id) return;
+    try { DriveApp.getFileById(id).moveTo(ctx.folders.final); } catch (err) { Logger.log('final move ' + id + ': ' + err); }
+  });
+  saveJobs_(ctx.jobs);
+  if (!mail) return;
+  var lines = [
+    'انتهى تحسين «' + job.title + '»، ولن يتغير بعد الآن.',
+    'نقلته إلى مجلد «' + CONFIG.ROOT_NAME + ' / ' + CONFIG.FOLDERS.final + '»: https://drive.google.com/file/d/' + job.epubId + '/view'
+  ];
+  if (job.unsure > 0) {
+    lines.push('بقيت ' + job.unsure + ' صفحة لم تقدر النماذج على حسمها، وعليها تنبيه أصفر داخل الكتاب لتطابقها بالأصل' +
+      (job.unsureList ? ': ' + job.unsureList : '') + '.');
+  } else {
+    lines.push('لم تبقَ فيه صفحات مشكوك فيها.');
+  }
+  lines.push('يمكنك الآن حذف ملفه الأصلي من «' + CONFIG.FOLDERS.originals + '» إن احتجت المساحة.');
+  sendMail_('مكتمل: ' + job.title, lines);
 }
 
 function newJob_(file) {
@@ -647,7 +678,11 @@ function deliver_(ctx, job, s, incomplete) {
     job.refining = false;
     job.oldEpubId = '';
     job.oldReportId = '';
-    if (unsure.length >= before) job.refineDone = true;
+    if (unsure.length >= before || !unsure.length) {
+      job.unsureList = shorten_(compressPages_(unsure), 300);
+      finalize_(ctx, job, true);
+      return 'refined and final (' + before + ' -> ' + unsure.length + ')';
+    }
     saveJobs_(ctx.jobs);
     if (unsure.length < before) {
       sendMail_('تحسّن: ' + job.title, [
@@ -663,13 +698,18 @@ function deliver_(ctx, job, s, incomplete) {
   job.finishedAt = now_().toISOString();
   // The judges already saw this book today; improvement rounds start tomorrow.
   job.refineDay = pacificDay_(now_());
+  var folderName = CONFIG.FOLDERS.ready;
+  if (!unsure.length && !incomplete) {
+    finalize_(ctx, job, false);
+    folderName = CONFIG.FOLDERS.final;
+  }
   saveJobs_(ctx.jobs);
   var lines = [
     incomplete
       ? 'كتابك «' + job.title + '» جاهز، لكن فيه صفحات لم تُقرأ بعد ' + job.attempts + ' محاولات.'
       : 'كتابك «' + job.title + '» صار جاهزاً.',
     'افتحه من هنا: ' + url,
-    'تجده أيضاً في مجلد «' + CONFIG.ROOT_NAME + ' / ' + CONFIG.FOLDERS.ready + '»، ومعه ملف التقرير.'
+    'تجده أيضاً في مجلد «' + CONFIG.ROOT_NAME + ' / ' + folderName + '»، ومعه ملف التقرير.'
   ];
   if (s.pages_total) lines.push('عدد الصفحات: ' + s.pages_total + '.');
   if (incomplete && missing.length) {
