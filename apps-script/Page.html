@@ -71,6 +71,7 @@
     cursor: pointer;
   }
   button:disabled { opacity: .6; cursor: default; }
+  #judge { margin-top: 8px; }
   #msg { min-height: 1.7em; text-align: center; margin: 6px 0 0; }
   ul { list-style: none; margin: 0; padding: 0; }
   li { padding: 10px 0; border-top: 1px solid var(--line); }
@@ -96,6 +97,7 @@
   <section class="card" id="queue"></section>
 
   <button id="check" type="button">افحص الآن</button>
+  <button id="judge" type="button">اعرض على الحكّام الآن</button>
   <p id="msg" class="muted" role="status"></p>
 
   <section class="card">
@@ -286,6 +288,28 @@
         setMsg('تعذّر الفحص: ' + (err && err.message ? err.message : err));
       })
       .tick();
+  });
+
+  // Unsure pages go to the judges today, using what is left of their daily quota.
+  document.getElementById('judge').addEventListener('click', function () {
+    var btn = this;
+    btn.disabled = true;
+    setMsg('جارٍ الطلب…');
+    google.script.run
+      .withSuccessHandler(function (result) {
+        refresh(function () {
+          btn.disabled = false;
+          setMsg(result === 'busy' ? 'يوجد فحص يعمل الآن، أعد المحاولة بعد دقيقة.'
+            : result === 'nothing to judge' ? 'لا يوجد كتاب فيه صفحات مشكوك فيها تنتظر الحكّام.'
+            : /(judging|refining) [\w-]+: dispatched/.test(result) ? 'بدأت مراجعة الحكّام. تصلك رسالة حين تنتهي الجولة.'
+            : 'تبدأ المراجعة بعد الكتاب الجاري تحويله أو الكتاب الجديد، تلقائياً.');
+        });
+      })
+      .withFailureHandler(function (err) {
+        btn.disabled = false;
+        setMsg('تعذّر الطلب: ' + (err && err.message ? err.message : err));
+      })
+      .judgeNow();
   });
 
   // Keep the page current while it is open, and when the user comes back to it.
