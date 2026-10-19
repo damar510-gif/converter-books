@@ -1,0 +1,28 @@
+{
+  "state": "done",
+  "pages_total": 246,
+  "pages_done": 246,
+  "pages_unsure": [
+    16,
+    29,
+    48,
+    61,
+    64,
+    69,
+    74,
+    187,
+    193,
+    212,
+    220,
+    227,
+    232,
+    236
+  ],
+  "pages_missing": [],
+  "pages_waiting": [],
+  "book": "تراث الإنسانية",
+  "epub": "تراث الانسانية 3-1-246.epub",
+  "updated_at": "2026-10-19T05:45:06Z",
+  "run_id": 39201778017,
+  "run_number": 9
+}
