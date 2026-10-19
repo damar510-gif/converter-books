@@ -139,15 +139,17 @@ class Pipeline(unittest.TestCase):
                     raise Exception("429 RESOURCE_EXHAUSTED quotaId GenerateRequestsPerDayPerProjectPerModel-FreeTier")
                 return answer(text if "النسخة (أ)" not in p else TRUE)
             return f
+        # Gemma is always available: it must not take over pages when Gemini runs out.
         code, st, md, fake = self.run_book({
             "gemini-3.5-flash-lite": quota_after(1, WRONG),
             "gemini-3.1-flash-lite": quota_after(2, TRUE),
-            "gemma-4-26b-a4b-it": quota_after(0, TRUE),
+            "gemma-4-26b-a4b-it": lambda p, n: answer("خطأ جيما " * 60),
         }, pages="30-32")
         self.assertEqual(code, 3)
         self.assertEqual(st["state"], "paused")
         self.assertTrue(st["quota_day"])
         self.assertTrue(st["pages_waiting"])
+        self.assertNotIn("gemma-4-26b-a4b-it", {m for m, _ in fake.calls})
         # Next day: quotas are back and only the missing work is done.
         code, st, md, fake = self.run_book({
             "gemini-3.5-flash-lite": lambda p, n: answer(TRUE if "النسخة (أ)" in p else WRONG),
@@ -157,6 +159,40 @@ class Pipeline(unittest.TestCase):
         self.assertEqual(code, 0, st)
         self.assertEqual(st["state"], "done")
         self.assertNotIn("كاقية", md)
+        self.assertNotIn("جيما", md)
+
+    def test_settling_error_is_retried_on_the_next_run(self):
+        def overloaded(p, n):
+            if "النسخة (أ)" in p:
+                raise Exception("503 UNAVAILABLE")
+            return answer(WRONG)
+        code, st, md, fake = self.run_book({
+            "gemini-3.5-flash-lite": overloaded,
+            "gemini-3.1-flash-lite": lambda p, n: (_ for _ in ()).throw(Exception("503 UNAVAILABLE"))
+            if "النسخة (أ)" in p else answer(TRUE),
+        }, pages="30")
+        self.assertEqual(code, 2)
+        self.assertEqual(st["state"], "incomplete")
+        self.assertEqual(st["pages_retry"], [30])
+        # Next run: the API works again and the page gets settled.
+        code, st, md, fake = self.run_book({
+            "gemini-3.5-flash-lite": lambda p, n: answer(TRUE if "النسخة (أ)" in p else WRONG),
+            "gemini-3.1-flash-lite": lambda p, n: answer(TRUE),
+        }, pages="30")
+        self.assertEqual(code, 0)
+        self.assertEqual(self.records()[30]["check"]["state"], "reconciled")
+        self.assertNotIn("كاقية", md)
+
+    def test_quota_only_for_second_model_does_not_bring_in_gemma(self):
+        def gone(p, n):
+            raise Exception("429 RESOURCE_EXHAUSTED GenerateRequestsPerDayPerProjectPerModel-FreeTier")
+        code, st, md, fake = self.run_book({
+            "gemini-3.5-flash-lite": lambda p, n: answer(TRUE),
+            "gemini-3.1-flash-lite": gone,
+            "gemma-4-26b-a4b-it": lambda p, n: answer(TRUE),
+        }, pages="30")
+        self.assertEqual(code, 3)
+        self.assertNotIn("gemma-4-26b-a4b-it", {m for m, _ in fake.calls})
 
     def test_single_mode(self):
         code, st, md, fake = self.run_book({
@@ -186,6 +222,18 @@ class CrossCheck(unittest.TestCase):
         self.assertTrue(crosscheck.validate_final(TRUE, WRONG, TRUE))
         self.assertFalse(crosscheck.validate_final("قصير", WRONG, TRUE))
         self.assertFalse(crosscheck.validate_final("", WRONG, TRUE))
+
+    def test_validate_final_rejects_dropping_agreed_words(self):
+        words = TRUE.split()
+        dropped = " ".join(words[:10] + words[16:])  # six agreed words gone (about 10%)
+        self.assertFalse(crosscheck.validate_final(dropped, WRONG, TRUE))
+
+    def test_validate_final_needs_the_line_one_reading_dropped(self):
+        line = "وهذا سطر كامل سقط من القراءة الثانية وحدها"
+        full = TRUE + " " + line + " " + TRUE
+        short = TRUE + " " + TRUE
+        self.assertFalse(crosscheck.validate_final(short, full, short))
+        self.assertTrue(crosscheck.validate_final(full, full, short))
 
 
 if __name__ == "__main__":

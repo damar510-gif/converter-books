@@ -53,6 +53,8 @@ Read the files with `GET /repos/{repo}/contents/<path>?ref=results` and the head
   "pages_done": 246,
   "pages_unsure": [12, 40],
   "pages_missing": [],
+  "pages_waiting": [],
+  "pages_retry": [],
   "quota_day": "2026-10-19",
   "run_id": 123,
   "run_number": 9,
@@ -62,9 +64,9 @@ Read the files with `GET /repos/{repo}/contents/<path>?ref=results` and the head
 
 | State | Meaning |
 |---|---|
-| `done` | Every page was read. Some may be listed in `pages_unsure`, meaning both readings disagreed and could not be settled. Those are still in the book. |
-| `paused` | The day's Gemini quota ran out. Progress is saved. Start the same book again after midnight Pacific time (`quota_day` is the Pacific date the quota ran out). |
-| `incomplete` | Some pages could not be read even after retries. The EPUB exists and marks those pages. |
+| `done` | Every page was read. Some may be listed in `pages_unsure`: the two readings disagreed and the difference could not be settled, or a line seems to be missing. Those pages are still in the book, and the report shows the words in question. |
+| `paused` | The day's Gemini quota ran out (`pages_waiting`). Progress is saved. Start the same book again after midnight Pacific time; `quota_day` is the Pacific date the quota ran out. |
+| `incomplete` | Some pages could not be read (`pages_missing`), or their check hit temporary API errors (`pages_retry`). The EPUB exists. Starting the same book again retries only those pages. |
 | `failed` | The run crashed; the EPUB may be missing. |
 
 A `status.json` whose `updated_at` is older than the dispatch belongs to an earlier

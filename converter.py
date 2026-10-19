@@ -22,7 +22,7 @@ import crosscheck
 CACHE_VERSION = "v1"
 # Bump when the comparison of the two readings changes: pages are re-checked
 # (and their differences settled again) without being read again.
-CHECK_VERSION = 1
+CHECK_VERSION = 2
 
 # A page whose text layer is shorter than this is treated as a scanned image.
 MIN_TEXT_LAYER_CHARS = 50
@@ -236,6 +236,7 @@ class ModelPool:
         self.requests = {}
         self.exhausted = set()
         self.no_tuning = set()
+        self.quota_day = ""
 
     def available(self, model):
         return bool(model) and model not in self.exhausted
@@ -288,6 +289,7 @@ class ModelPool:
                     if "perday" in low.replace(" ", "") or "per day" in low or "daily" in low:
                         with self.lock:
                             self.exhausted.add(model)
+                            self.quota_day = self.quota_day or pacific_day()
                         print(f"  {model}: daily quota used up")
                         raise QuotaExhausted(model) from e
                     m = re.search(r"retry(?:Delay)?['\"]?\s*[:=]?\s*['\"]?(\d+)", msg, re.I)
@@ -323,10 +325,17 @@ def clean_ocr(text):
     return "\n".join(lines).strip()
 
 
+def is_refusal(finish):
+    return any(r in finish for r in BLOCKED_REASONS)
+
+
 def judge_reading(text, finish, ink):
     """('ok' | 'empty' | 'suspicious', cleaned text) for one model answer."""
     text = clean_ocr(text)
     empty = text == "[[EMPTY]]" or not text
+    if is_refusal(finish):
+        # A refusal is never an empty page, and text cut off by a refusal is incomplete.
+        return "suspicious", "" if empty else text
     if empty and ink < INK_SUSPICIOUS_RATIO:
         return "empty", ""
     if not empty and "MAX_TOKENS" not in finish and (len(text) >= MIN_OCR_CHARS or ink < INK_SUSPICIOUS_RATIO * 2):
@@ -334,38 +343,50 @@ def judge_reading(text, finish, ink):
     return "suspicious", "" if empty else text
 
 
-def read_with(pool, chain, page, png, pix, prompt, ink):
-    """Tries the models in order until one reads the page; a refused page is tried
-    again in two halves with the same model.
+def read_with(pool, chain, page, png, pix, prompt, ink, rescue=""):
+    """Tries the Gemini models in order until one reads the page; a refused page is
+    tried again in two halves with the same model. The rescue model (Gemma) is used
+    only when Gemini refused the page, never because a quota ran out.
 
-    Returns (status, reading, error). status is 'pending' when every model was
-    skipped because its daily quota is used up, so the page waits for tomorrow."""
-    error, tried, best = "", False, None
-    for model in chain:
+    Returns (status, reading, error). status is 'pending' when a model was skipped
+    for its daily quota and none could read the page, so it waits for tomorrow."""
+    error, best = "", None
+    quota_skipped = refused = False
+    attempted = False
+    for model in chain + ([rescue] if rescue else []):
+        if model == rescue and not refused:
+            break
         if not pool.available(model):
+            quota_skipped = quota_skipped or model != rescue
             continue
         try:
             text, finish = pool.read(png, prompt, model)
             via = "full"
-            if not clean_ocr(text) and any(r in finish for r in BLOCKED_REASONS):
+            if not clean_ocr(text) and is_refusal(finish):
+                refused = True
                 via = "halves"
                 text, finish = read_in_halves(pool, page, pix, prompt, model)
         except QuotaExhausted:
+            quota_skipped = quota_skipped or model != rescue
             continue
         except Exception as e:
-            tried = True
+            attempted = True
             error = f"{model}: {str(e)[:250]}"
             continue
-        tried = True
+        attempted = True
         status, text = judge_reading(text, finish, ink)
+        if is_refusal(finish):
+            refused = True
         reading = {"model": model, "text": text, "finish": finish, "via": via, "status": status}
+        if refused:
+            reading["refused"] = True
         if status in ("ok", "empty"):
             return status, reading, ""
         error = f"{model}: chars={len(text)} finish={finish}"
         if best is None or len(text) > len(best["text"]):
             best = reading
-    if not tried:
-        return "pending", None, ""
+    if quota_skipped or not attempted:
+        return "pending", None, error
     return ("suspicious" if best else "failed"), best, error
 
 
@@ -373,30 +394,40 @@ def record_path(cache_dir, page_no):
     return os.path.join(cache_dir, f"{page_no:04d}.json")
 
 
-def load_record(cache_dir, page_no):
+def load_record(cache_dir, page_no, rescue):
     path = record_path(cache_dir, page_no)
     if not os.path.exists(path):
         return None
-    with open(path, encoding="utf-8") as f:
-        rec = json.load(f)
+    try:
+        with open(path, encoding="utf-8") as f:
+            rec = json.load(f)
+    except ValueError:
+        # A file cut off mid-write (the job was killed): read the page again.
+        return None
     if rec.get("status") == "ok" and "a" not in rec:
         # Saved before pages got a second reading: its text is the main model's reading.
         models = rec.get("models") or ["?"]
         rec["a"] = {"model": models[0], "text": rec.get("text", ""), "finish": "", "status": "ok",
                     "via": "halves" if any("(halves)" in m for m in models) else "full"}
+    a = rec.get("a") or {}
+    if a.get("via") == "halves" or (a.get("model") == rescue and "refused" not in a):
+        a["refused"] = True
     return rec
 
 
 def save_record(cache_dir, rec):
-    with open(record_path(cache_dir, rec["page"]), "w", encoding="utf-8") as f:
+    # Written to a temporary file first, so a killed job never leaves half a record.
+    path = record_path(cache_dir, rec["page"])
+    with open(path + ".tmp", "w", encoding="utf-8") as f:
         json.dump(rec, f, ensure_ascii=False)
+    os.replace(path + ".tmp", path)
 
 
 def read_page(pool, doc, index, cache_dir, total, dual):
     """First and second reading of one page, saved to cache_dir/NNNN.json.
     Returns the record, or None when the page has to wait for tomorrow's quota."""
     page_no = index + 1
-    rec = load_record(cache_dir, page_no)
+    rec = load_record(cache_dir, page_no, pool.rescue if pool else "")
     if rec and rec.get("status") in ("empty", "text-layer"):
         return rec
     page = doc[index]
@@ -409,7 +440,7 @@ def read_page(pool, doc, index, cache_dir, total, dual):
 
     need_a = rec is None or rec.get("status") != "ok"
     b = (rec or {}).get("b")
-    need_b = dual and (need_a or b is None or b.get("status") == "failed")
+    need_b = dual and (need_a or b is None or b.get("status") in ("failed", "suspicious"))
     if not need_a and not need_b:
         return rec
 
@@ -418,7 +449,8 @@ def read_page(pool, doc, index, cache_dir, total, dual):
     spread = pix.width > pix.height * 1.15
     prompt = OCR_PROMPT.format(spread=SPREAD_HINT if spread else "")
     if need_a:
-        status, reading, error = read_with(pool, [pool.model, pool.second, pool.rescue], page, png, pix, prompt, ink)
+        status, reading, error = read_with(pool, [pool.model, pool.second], page, png, pix, prompt, ink,
+                                           rescue=pool.rescue)
         if status == "pending":
             return None
         rec = {"page": page_no, "ink": round(ink, 4), "spread": spread, "status": status,
@@ -427,23 +459,51 @@ def read_page(pool, doc, index, cache_dir, total, dual):
             rec["error"] = error
     if dual and rec["status"] == "ok":
         # The second reading comes from a different model, so its mistakes fall elsewhere.
-        others = [m for m in (pool.second, pool.model, pool.rescue) if m and m != rec["a"]["model"]]
-        status, reading, error = read_with(pool, others, page, png, pix, prompt, ink)
-        if status != "pending":
+        # Gemma may give it only when Gemini refused this page.
+        others = [m for m in (pool.second, pool.model) if m and m != rec["a"]["model"]]
+        rescue = pool.rescue if rec["a"].get("refused") and rec["a"]["model"] != pool.rescue else ""
+        status, reading, error = read_with(pool, others, page, png, pix, prompt, ink, rescue=rescue)
+        if status == "pending":
+            rec.pop("b", None)
+        else:
             rec["b"] = reading or {"model": "", "text": "", "status": "failed"}
             rec["b"]["status"] = status
             if error:
                 rec["b"]["error"] = error
     rec.pop("check", None)
     save_record(cache_dir, rec)
-    second = rec.get("b", {}).get("model", "-") if dual else "off"
+    second = (rec.get("b") or {}).get("model", "-") if dual else "off"
     print(f"  page {page_no}/{total}: {rec['status']} ({(rec.get('a') or {}).get('model', '-')} + {second})")
     return rec
 
 
+SCAFFOLD = re.compile(r"^\s*(<<<|>>>|النسخة (النهائية|\(أ\)|\(ب\))\s*:?)\s*$")
+
+
+def clean_settled(text):
+    """Drops prompt scaffolding a model may echo back around its answer."""
+    lines = [l for l in clean_ocr(text).split("\n") if not SCAFFOLD.match(l)]
+    return "\n".join(lines).strip()
+
+
+# Giving up on a page after this many runs whose settling request kept failing.
+MAX_CHECK_ERRORS = 3
+
+
+def settle_state(rec, info, a, b, diffs, miss_a, miss_b):
+    """Settling failed: keep the reading that lost fewer lines (the main one on a
+    tie). Any disagreement nobody settled marks the page unsure."""
+    use_b = bool(b) and len(miss_b) < len(miss_a)
+    rec["text"] = b if use_b else a
+    left = len(miss_b) if use_b else len(miss_a)
+    info["kept"] = "b" if use_b else "a"
+    info["sample"] = [list(d) for d in diffs[:3]]
+    rec["check"] = {**info, "v": CHECK_VERSION, "state": "unsure" if (left or diffs) else "single"}
+
+
 def check_page(pool, doc, rec, tess, vocab):
     """Compares the two readings and settles their differences against the image.
-    Returns False when it has to wait for tomorrow's quota."""
+    Returns 'done', 'wait' (tomorrow's quota) or 'retry' (temporary API errors)."""
     a = rec["a"]["text"]
     b_rec = rec.get("b") or {}
     b = b_rec.get("text", "") if b_rec.get("status") == "ok" else ""
@@ -456,52 +516,71 @@ def check_page(pool, doc, rec, tess, vocab):
     if not miss_a and (not b or not diffs):
         rec["text"] = a
         rec["check"] = {**info, "v": CHECK_VERSION, "state": "agreed" if b else "single"}
-        return True
+        return "done"
 
     # A page Gemini refused was read in halves or by the rescue model; asking
     # Gemini about the whole page again would only be refused again.
-    refused = rec["a"].get("via") == "halves" or rec["a"]["model"] == pool.rescue
-    final = None
-    if not refused:
-        missing = list(dict.fromkeys(miss_a + miss_b))
-        page = doc[rec["page"] - 1]
-        png, pix = page_image(doc, page)
-        rules = OCR_RULES.format(spread=SPREAD_HINT if pix.width > pix.height * 1.15 else "")
-        prompt = crosscheck.reconcile_prompt(rules, a, b, diffs, missing)
-        # Use the reconciler with fewer requests so far, to spread the two daily quotas.
-        for model in sorted((m for m in (pool.model, pool.second) if pool.available(m)),
-                            key=lambda m: pool.requests.get(m, 0)):
-            try:
-                text, finish = pool.read(png, prompt, model)
-            except QuotaExhausted:
-                continue
-            except Exception as e:
-                info["error"] = str(e)[:200]
-                break
-            text = clean_ocr(text)
-            if text and "MAX_TOKENS" not in finish and crosscheck.validate_final(text, a, b):
-                miss_f = missing_lines(tess, text, vocab) if tess else []
-                if len(miss_f) <= min([len(miss_a)] + ([len(miss_b)] if b else [])):
-                    final = text
-                    info.update(model=model, missing_final=len(miss_f))
-            else:
-                info["rejected"] = f"{model}: chars={len(text)} finish={finish}"
-            break
-        else:
-            # Both reconcilers are out of quota for today.
-            return False
-    if final:
-        rec["text"] = final
-        rec["check"] = {**info, "v": CHECK_VERSION, "state": "reconciled"}
-        return True
-    # Could not settle: keep the reading that lost fewer lines (the main one on a tie).
-    use_b = bool(b) and len(miss_b) < len(miss_a)
-    rec["text"] = b if use_b else a
-    left = len(miss_b) if use_b else len(miss_a)
-    unsure = left > 0 or (bool(b) and ratio < 0.97)
-    rec["check"] = {**info, "v": CHECK_VERSION, "state": "unsure" if unsure else "kept",
-                    "kept": "b" if use_b else "a"}
-    return True
+    if rec["a"].get("refused"):
+        settle_state(rec, info, a, b, diffs, miss_a, miss_b)
+        return "done"
+
+    page = doc[rec["page"] - 1]
+    png, pix = page_image(doc, page)
+    rules = OCR_RULES.format(spread=SPREAD_HINT if pix.width > pix.height * 1.15 else "")
+    prompt = crosscheck.reconcile_prompt(rules, a, b, diffs, list(dict.fromkeys(miss_a + miss_b)))
+    answered = errored = False
+    # Use the reconciler with fewer requests so far, to spread the two daily quotas.
+    for model in sorted((m for m in (pool.model, pool.second) if pool.available(m)),
+                        key=lambda m: pool.requests.get(m, 0)):
+        try:
+            text, finish = pool.read(png, prompt, model)
+        except QuotaExhausted:
+            continue
+        except Exception as e:
+            # Often an overload of one model only: try the other one.
+            errored = True
+            info["error"] = str(e)[:200]
+            continue
+        answered = True
+        text = clean_settled(text)
+        if text and "MAX_TOKENS" not in finish and not is_refusal(finish) \
+                and crosscheck.validate_final(text, a, b):
+            miss_f = missing_lines(tess, text, vocab) if tess else []
+            if len(miss_f) <= min([len(miss_a)] + ([len(miss_b)] if b else [])):
+                rec["text"] = text
+                info.update(model=model, missing_final=len(miss_f))
+                rec["check"] = {**info, "v": CHECK_VERSION, "state": "unsure" if miss_f else "reconciled"}
+                return "done"
+        info["rejected"] = f"{model}: chars={len(text)} finish={finish}"
+        break
+    if not answered:
+        if not errored:
+            return "wait"
+        rec["check_errors"] = rec.get("check_errors", 0) + 1
+        if rec["check_errors"] < MAX_CHECK_ERRORS:
+            rec["text"] = a
+            rec["check"] = {**info, "state": "retry"}
+            return "retry"
+    settle_state(rec, info, a, b, diffs, miss_a, miss_b)
+    return "done"
+
+
+def upgrade_check(rec):
+    """Checks saved by CHECK_VERSION 1 that are still valid under the current rules
+    are kept without spending a request; the others are checked again."""
+    c = rec.get("check") or {}
+    if c.get("v") != 1:
+        return
+    a = (rec.get("a") or {}).get("text", "")
+    b_rec = rec.get("b") or {}
+    b = b_rec.get("text", "") if b_rec.get("status") == "ok" else ""
+    if c.get("state") in ("agreed", "single"):
+        c["v"] = CHECK_VERSION
+    elif c.get("state") == "reconciled" and crosscheck.validate_final(rec.get("text", ""), a, b):
+        c["v"] = CHECK_VERSION
+    else:
+        rec.pop("check", None)
+        rec["text"] = a
 
 
 def tesseract_for(filepath, cache_dir, page_no):
@@ -526,12 +605,13 @@ def tesseract_for(filepath, cache_dir, page_no):
 
 
 def check_pages(pool, filepath, records, cache_dir, dual, workers):
-    """Runs check_page on every read page that has not been checked yet.
-    Returns False when some pages have to wait for tomorrow's quota."""
+    """Runs check_page on every read page whose check is missing or out of date."""
+    for r in records:
+        upgrade_check(r)
     todo = [r for r in records if r.get("status") == "ok" and r.get("a")
             and (r.get("check") or {}).get("v") != CHECK_VERSION and (not dual or "b" in r)]
     if not todo:
-        return True
+        return
     vocab = set()
     for r in records:
         vocab.update(norm_words(r.get("text") or ""))
@@ -540,23 +620,20 @@ def check_pages(pool, filepath, records, cache_dir, dual, workers):
         tess = dict(zip((r["page"] for r in todo),
                         tp.map(lambda r: tesseract_for(filepath, cache_dir, r["page"]), todo)))
     print(f"Checking {len(todo)} pages against each other and Tesseract")
-    waiting = []
 
     def work(rec):
         local = pymupdf.open(filepath)
         try:
-            if check_page(pool, local, rec, tess[rec["page"]], vocab):
-                save_record(cache_dir, rec)
-                c = rec["check"]
-                print(f"  check page {rec['page']}: {c['state']} (diffs {c['diffs']}, missing {c['missing_a']})")
-            else:
-                waiting.append(rec["page"])
+            result = check_page(pool, local, rec, tess[rec["page"]], vocab)
         finally:
             local.close()
+        if result != "wait":
+            save_record(cache_dir, rec)
+            c = rec["check"]
+            print(f"  check page {rec['page']}: {c['state']} (diffs {c['diffs']}, missing {c['missing_a']})")
 
     with ThreadPoolExecutor(max_workers=workers) as tp:
         list(tp.map(work, todo))
-    return not waiting
 
 
 FOOTNOTE_DEF = re.compile(r"^\[\^([^\]\s]+)\]:\s*(.*)$")
@@ -753,11 +830,16 @@ def keep_main_headings(md, ocr, cache_dir):
         if not ocr:
             return md
         try:
-            models = [m for m in (ocr.model, ocr.second) if ocr.available(m)]
-            if not models:
+            main = None
+            for model in (m for m in (ocr.model, ocr.second) if ocr.available(m)):
+                try:
+                    text, _ = ocr.read(None, ARTICLES_PROMPT.format(items="\n".join(items)), model)
+                    main = set(int(n) for n in json.loads(re.search(r"\{.*\}", text, re.S).group(0))["main"])
+                    break
+                except Exception as e:
+                    print(f"  {model} could not pick the main articles: {str(e)[:160]}")
+            if main is None:
                 return md
-            text, _ = ocr.read(None, ARTICLES_PROMPT.format(items="\n".join(items)), models[0])
-            main = set(int(n) for n in json.loads(re.search(r"\{.*\}", text, re.S).group(0))["main"])
         except Exception as e:
             print(f"Could not pick the main articles, keeping all headings: {e}")
             return md
@@ -843,23 +925,29 @@ def pacific_day():
 def summarize(records, dual):
     """Book state for status.json and the report."""
     missing = [r["page"] for r in records if r["status"] in ("failed", "suspicious")]
+    retry = [r["page"] for r in records if (r.get("check") or {}).get("state") == "retry"]
     waiting = [r["page"] for r in records if r["status"] == "pending"
-               or (r["status"] == "ok" and ((r.get("check") or {}).get("v") != CHECK_VERSION
-                                            or (dual and "b" not in r)))]
+               or (r["status"] == "ok" and r["page"] not in retry
+                   and ((r.get("check") or {}).get("v") != CHECK_VERSION or (dual and "b" not in r)))]
     unsure = [r["page"] for r in records if (r.get("check") or {}).get("state") == "unsure"]
     states = {}
     for r in records:
         key = (r.get("check") or {}).get("state") or r["status"]
         states[key] = states.get(key, 0) + 1
-    state = "paused" if waiting else ("incomplete" if missing else "done")
+    # Waiting pages need tomorrow's quota; retry pages hit temporary API errors and
+    # can be tried again right away.
+    state = "paused" if waiting else ("incomplete" if missing or retry else "done")
+    samples = {r["page"]: r["check"].get("sample", []) for r in records
+               if (r.get("check") or {}).get("state") == "unsure"}
     return {"state": state, "pages_total": len(records),
-            "pages_done": len(records) - len(missing) - len(waiting),
-            "pages_unsure": unsure, "pages_missing": missing, "pages_waiting": waiting, "counts": states}
+            "pages_done": len(records) - len(missing) - len(waiting) - len(retry),
+            "pages_unsure": unsure, "pages_missing": missing, "pages_waiting": waiting,
+            "pages_retry": retry, "counts": states, "samples": samples}
 
 
 def write_report(path, summary, pool):
     names = [("agreed", "القراءتان متطابقتان"), ("reconciled", "صُححت بمقارنة القراءتين على الصورة"),
-             ("kept", "فرق يسير بين القراءتين، أُخذت القراءة الأولى"), ("single", "قراءة واحدة فقط"),
+             ("single", "قراءة واحدة فقط"), ("retry", "تعذّر حسمها بسبب خطأ مؤقت (تُعاد في التشغيل القادم)"),
              ("unsure", "لم تُحسم (مشكوك فيها)"), ("text-layer", "نص جاهز في الملف"), ("empty", "فارغة/صور"),
              ("ok", "قُرئت ولم تُراجع بعد"), ("suspicious", "قراءة ناقصة"), ("failed", "فشلت"),
              ("pending", "لم تُقرأ بعد")]
@@ -874,7 +962,13 @@ def write_report(path, summary, pool):
     if summary["pages_missing"]:
         lines += ["", "صفحات لم تُقرأ: " + compress(summary["pages_missing"])]
     if summary["pages_unsure"]:
-        lines += ["", "صفحات مشكوك فيها (اختلفت القراءتان ولم يُحسم الخلاف): " + compress(summary["pages_unsure"])]
+        lines += ["", "صفحات مشكوك فيها (اختلفت القراءتان ولم يُحسم الخلاف، أو يبدو أن فيها سطراً ساقطاً): "
+                  + compress(summary["pages_unsure"])]
+        # A few of the unsettled differences, so the exact words can be checked in the book.
+        for page, sample in list(summary["samples"].items())[:30]:
+            if sample:
+                pairs = "؛ ".join(f"«{x or '—'}» / «{y or '—'}»" for x, y in sample)
+                lines.append(f"- ص {page}: {pairs}")
     if summary["state"] == "done":
         lines += ["", "**كل الصفحات اكتملت.**"]
     report = "\n".join(lines) + "\n"
@@ -883,15 +977,16 @@ def write_report(path, summary, pool):
     print(report)
 
 
-def write_status(path, summary, title, epub_name):
+def write_status(path, summary, title, epub_name, quota_day=""):
     """status.json for the Drive inbox (see docs/drive-inbox.md)."""
     if not path:
         return
-    data = {k: v for k, v in summary.items() if k != "counts"}
+    data = {k: v for k, v in summary.items() if k not in ("counts", "samples")}
     data.update(book=title, epub=epub_name or "",
                 updated_at=datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"))
     if summary["state"] == "paused":
-        data["quota_day"] = pacific_day()
+        # The Pacific date the quota ran out on; the inbox starts again the day after.
+        data["quota_day"] = quota_day or pacific_day()
     with open(path, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=1)
 
@@ -971,7 +1066,7 @@ def generate_epub_from_pdf(filepath, output_path, args):
             os.remove(cover_path)
         if not args.keep_markdown and os.path.exists(md_path):
             os.remove(md_path)
-    write_status(args.status, summary, args.title, os.path.basename(output_path))
+    write_status(args.status, summary, args.title, os.path.basename(output_path), pool.quota_day if pool else "")
     return EXIT_CODES[summary["state"]]
 
 
@@ -1011,8 +1106,8 @@ def generate_epub_from_docx(filepath, output_path, args):
 
 
 def plain_summary():
-    return {"state": "done", "pages_total": 0, "pages_done": 0, "pages_unsure": [],
-            "pages_missing": [], "pages_waiting": [], "counts": {}}
+    return {"state": "done", "pages_total": 0, "pages_done": 0, "pages_unsure": [], "pages_missing": [],
+            "pages_waiting": [], "pages_retry": [], "counts": {}, "samples": {}}
 
 
 def process_file(filepath, output_path, args):

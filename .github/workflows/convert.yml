@@ -84,7 +84,9 @@ jobs:
             # never written into the log, and it is masked before anything else runs.
             DRIVE_TOKEN=$(jq -r '.inputs.drive_token // ""' "$GITHUB_EVENT_PATH")
             [ -n "$DRIVE_TOKEN" ] && echo "::add-mask::$DRIVE_TOKEN"
-            NAME=$(basename "${DRIVE_FILE_NAME:-book.pdf}")
+            # Only the file name, without characters that break paths or GITHUB_ENV lines.
+            NAME=$(basename "${DRIVE_FILE_NAME:-book.pdf}" | tr -d '\r\n*?[]\\')
+            [ -n "$NAME" ] || NAME=book.pdf
             mkdir -p incoming
             TARGET_FILE="incoming/$NAME"
             echo "RESULT_DIR=${RESULT_DIR_INPUT:-drive-$DRIVE_FILE_ID}" | tr -d '/' >> "$GITHUB_ENV"
@@ -127,7 +129,7 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: work
-          key: ocr-${{ env.BOOK_HASH }}-${{ github.run_id }}
+          key: ocr-${{ env.BOOK_HASH }}-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: ocr-${{ env.BOOK_HASH }}-
 
       - name: Compare models
@@ -159,6 +161,8 @@ jobs:
       - name: Run Conversion Script
         id: convert
         if: inputs.compare_models == ''
+        # Leaves time for the steps below to save progress and status.json.
+        timeout-minutes: 300
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           # Optional repository variables (Settings → Secrets and variables → Variables).
@@ -184,7 +188,7 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: work
-          key: ocr-${{ env.BOOK_HASH }}-${{ github.run_id }}
+          key: ocr-${{ env.BOOK_HASH }}-${{ github.run_id }}-${{ github.run_attempt }}
 
       - name: Upload EPUB Artifact
         if: always() && inputs.compare_models == '' && env.EPUB_OUTPUT != ''
@@ -223,6 +227,8 @@ jobs:
             git init -q -b results "$TMP"
             git -C "$TMP" remote add origin "$URL"
           fi
+          git -C "$TMP" config user.name "github-actions[bot]"
+          git -C "$TMP" config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           DIR="$TMP/$RESULT_DIR"
           mkdir -p "$DIR"
           rm -f "$DIR"/*.epub
@@ -232,8 +238,7 @@ jobs:
           cp status.json "$DIR/status.json"
           cd "$TMP"
           git add -A
-          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
-            commit -q -m "Result: $RESULT_DIR (run ${GITHUB_RUN_NUMBER})" || exit 0
+          git commit -q -m "Result: $RESULT_DIR (run ${GITHUB_RUN_NUMBER})" || exit 0
           # Another run may have pushed meanwhile (for example a model comparison).
           for i in 1 2 3; do
             git push -q origin results && exit 0

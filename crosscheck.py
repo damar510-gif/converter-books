@@ -89,13 +89,48 @@ def reconcile_prompt(rules, a, b, diffs, missing):
             .replace("<<B>>", b or "(لا توجد نسخة ثانية؛ راجع النسخة (أ) على الصورة)"))
 
 
+def _pairs(ws):
+    return set(zip(ws, ws[1:]))
+
+
 def validate_final(final, a, b):
-    """True when the settled text is a plausible version of the page: close to at
-    least one reading and not missing a large part of it."""
+    """True when the settled text is a plausible version of the page:
+    - it keeps (in order) at least 97% of the words both readings agree on;
+    - text that only one reading has (5+ words, e.g. a line the other dropped) is
+      mostly kept, unless that reading merely repeated itself;
+    - it is not much shorter than the readings and is close to at least one."""
     if not final:
         return False
-    nf = len(words(final))
-    sizes = [len(words(t)) for t in (a, b) if t]
-    if not sizes or nf < 0.9 * min(sizes):
+    wf = [w for w, _ in words(final)]
+    wa = [w for w, _ in words(a)]
+    wb = [w for w, _ in words(b)] if b else []
+    sizes = [len(x) for x in (wa, wb) if x]
+    if not sizes or len(wf) < 0.9 * min(sizes):
         return False
-    return any(compare(final, t)[0] >= 0.85 for t in (a, b) if t)
+    if not any(compare(final, t)[0] >= 0.85 for t in (a, b) if t):
+        return False
+
+    if wb:
+        m = SequenceMatcher(None, wa, wb, autojunk=False)
+        agreed = [w for i, j, n in m.get_matching_blocks() for w in wa[i:i + n]]
+    else:
+        m, agreed = None, wa
+    if agreed:
+        kept = sum(n for _, _, n in SequenceMatcher(None, agreed, wf, autojunk=False).get_matching_blocks())
+        if kept < 0.97 * len(agreed):
+            return False
+
+    if m is not None:
+        final_pairs = _pairs(wf)
+        for op, i1, i2, j1, j2 in m.get_opcodes():
+            for run, other, rest_words in ((wa[i1:i2], wb[j1:j2], wa[:i1] + wa[i2:]),
+                                           (wb[j1:j2], wa[i1:i2], wb[:j1] + wb[j2:])):
+                if len(run) < 5 or len(other) > 1:
+                    continue
+                run_pairs = _pairs(run)
+                rest = _pairs(rest_words)
+                if run_pairs and len(run_pairs & rest) >= 0.8 * len(run_pairs):
+                    continue  # the reading repeated earlier text: a loop, not a dropped line
+                if len(run_pairs & final_pairs) < 0.6 * len(run_pairs):
+                    return False
+    return True
