@@ -44,7 +44,21 @@ To process scanned PDFs where pages contain images instead of text, you must pro
 export GEMINI_API_KEY="your_api_key_here"
 python converter.py scanned_book.pdf
 ```
-The script will automatically detect pages with minimal text and pass the page image to Gemini for text extraction.
+The script detects pages without a text layer and reads each one on its own, at the scan's native resolution:
+
+- **Two independent readings**: every page is read by `--model` (default `gemini-3.5-flash-lite`) and by `--second-model` (default `gemini-3.1-flash-lite`). Each model has its own free daily quota.
+- **Automatic check**: the two readings are compared word by word (spelling variants such as ى/ي are ignored). Pages where they differ, or where Tesseract sees lines missing, get one more request: the image plus both readings, asking for the final text. The answer is accepted only if it is close to the readings and loses no lines; otherwise the better reading is kept and the page is listed as unsure in the report.
+- **Refused pages** (Gemini's safety or copyright filters) are read again in two halves, and then by `--rescue-model` (default `gemma-4-26b-a4b-it`).
+- **Progress is saved per page** in `--work-dir`. When a model's daily quota runs out the run stops (exit code 3, "paused") and the next run continues where it stopped.
+- `report.md` and `status.json` describe the result. Exit codes: 0 done, 2 some pages unreadable, 3 paused for the daily quota.
+- Headings, footnotes and poetry are kept; the table of contents lists the main articles only, and the EPUB carries the original page numbers.
+- `--pages 1-20` converts part of a book; `--single` reads each page once.
+
+Models can also be set with the repository variables `GEMINI_MODEL`, `GEMINI_SECOND_MODEL` and `GEMINI_RESCUE_MODEL`.
+
+## Drive inbox (no GitHub needed day to day)
+
+Books dropped into a Google Drive folder are converted automatically; see `apps-script/SETUP-ar.md` (Arabic setup guide) and `docs/drive-inbox.md` (how it works).
 
 ## GitHub Actions Usage
 

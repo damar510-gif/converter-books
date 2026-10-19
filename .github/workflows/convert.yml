@@ -11,15 +11,48 @@ on:
         description: 'Direct download URL for the book file (optional)'
         required: false
         type: string
-      model:
-        description: 'Gemini model to use'
+      title:
+        description: 'Book title (optional, defaults to the file name)'
         required: false
         type: string
-        default: 'gemini-3.5-flash-lite'
+      pages:
+        description: 'Pages to convert, e.g. 1-20 (empty = whole book)'
+        required: false
+        type: string
+      compare_models:
+        description: 'Testing only: compare these models (comma separated) on the given pages instead of converting'
+        required: false
+        type: string
+      # Set by the Drive inbox script (apps-script/Code.gs, docs/drive-inbox.md).
+      drive_file_id:
+        description: 'Drive inbox only: Drive file ID'
+        required: false
+        type: string
+      drive_token:
+        description: 'Drive inbox only: short-lived Drive token (never printed)'
+        required: false
+        type: string
+      drive_file_name:
+        description: 'Drive inbox only: original file name'
+        required: false
+        type: string
+      result_dir:
+        description: 'Folder in the results branch (default: the book name)'
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+# One book at a time: books share the same daily Gemini quotas.
+concurrency:
+  group: convert
+  cancel-in-progress: false
 
 jobs:
   convert:
     runs-on: ubuntu-latest
+    timeout-minutes: 330
 
     steps:
       - name: Checkout Repository
@@ -30,56 +63,197 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install Pandoc
-        run: sudo apt-get update && sudo apt-get install -y pandoc
+      - name: Install Pandoc and Tesseract
+        run: sudo apt-get update && sudo apt-get install -y pandoc tesseract-ocr tesseract-ocr-ara
 
       - name: Install Python Dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Download File if URL provided
-        id: download_file
-        if: ${{ inputs.file_url != '' }}
-        run: |
-          # Try to get the filename from the URL, otherwise default
-          URL="${{ inputs.file_url }}"
-          FILENAME=$(basename "${URL%%\?*}")
-          if [[ ! "$FILENAME" =~ \.(pdf|docx|txt)$ ]]; then
-            FILENAME="downloaded_book.pdf"
-          fi
-
-          wget -q -O "$FILENAME" "$URL"
-          echo "DOWNLOADED_FILE=$FILENAME" >> $GITHUB_ENV
-
-      - name: Run Conversion Script
+      - name: Pick the book file
         env:
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          GEMINI_MODEL: ${{ inputs.model }}
+          FILE_URL: ${{ inputs.file_url }}
+          INPUT_FILE: ${{ inputs.input_file }}
+          DRIVE_FILE_ID: ${{ inputs.drive_file_id }}
+          DRIVE_FILE_NAME: ${{ inputs.drive_file_name }}
+          RESULT_DIR_INPUT: ${{ inputs.result_dir }}
         run: |
-          if [ -n "${{ env.DOWNLOADED_FILE }}" ]; then
-            TARGET_FILE="${{ env.DOWNLOADED_FILE }}"
+          if [ -n "$DRIVE_FILE_ID" ]; then
+            # The token is read from the event file rather than an expression, so it is
+            # never written into the log, and it is masked before anything else runs.
+            DRIVE_TOKEN=$(jq -r '.inputs.drive_token // ""' "$GITHUB_EVENT_PATH")
+            [ -n "$DRIVE_TOKEN" ] && echo "::add-mask::$DRIVE_TOKEN"
+            # Only the file name, without characters that break paths or GITHUB_ENV lines.
+            NAME=$(basename "${DRIVE_FILE_NAME:-book.pdf}" | tr -d '\r\n*?[]\\')
+            [ -n "$NAME" ] || NAME=book.pdf
+            mkdir -p incoming
+            TARGET_FILE="incoming/$NAME"
+            echo "RESULT_DIR=${RESULT_DIR_INPUT:-drive-$DRIVE_FILE_ID}" | tr -d '/' >> "$GITHUB_ENV"
+            if ! curl -fsSL --retry 3 -H "Authorization: Bearer $DRIVE_TOKEN" \
+                 "https://www.googleapis.com/drive/v3/files/${DRIVE_FILE_ID}?alt=media&supportsAllDrives=true" \
+                 -o "$TARGET_FILE"; then
+              echo "FAIL_REASON=download" >> "$GITHUB_ENV"
+              echo "Error: could not download the book from Google Drive."
+              exit 1
+            fi
+          elif [ -n "$FILE_URL" ]; then
+            FILENAME=$(basename "${FILE_URL%%\?*}")
+            if [[ ! "$FILENAME" =~ \.(pdf|docx|txt)$ ]]; then
+              FILENAME="downloaded_book.pdf"
+            fi
+            wget -q -O "$FILENAME" "$FILE_URL"
+            TARGET_FILE="$FILENAME"
           else
-            TARGET_FILE="${{ inputs.input_file }}"
+            TARGET_FILE="$INPUT_FILE"
           fi
-
-          if [ -z "$TARGET_FILE" ]; then
-            echo "Error: You must provide either input_file or file_url."
+          if [ -z "$TARGET_FILE" ] || [ ! -f "$TARGET_FILE" ]; then
+            echo "FAIL_REASON=no-file" >> "$GITHUB_ENV"
+            echo "Error: provide input_file (a file in the repository) or file_url."
             exit 1
           fi
+          BASENAME=$(basename "$TARGET_FILE")
+          {
+            echo "TARGET_FILE=$TARGET_FILE"
+            echo "EPUB_OUTPUT=${BASENAME%.*}.epub"
+            echo "BOOK_HASH=$(sha256sum "$TARGET_FILE" | cut -c1-16)"
+          } >> "$GITHUB_ENV"
+          if [ -z "$DRIVE_FILE_ID" ]; then
+            echo "RESULT_DIR=${RESULT_DIR_INPUT:-${BASENAME%.*}}" | tr -d '/' >> "$GITHUB_ENV"
+          fi
 
-          # Generate base output filename
-          FILENAME=$(basename "$TARGET_FILE")
-          BASENAME="${FILENAME%.*}"
-          OUTPUT_PATH="${BASENAME}.epub"
+      # Pages already read in earlier runs are kept here, so a run stopped by the
+      # daily limit continues tomorrow from where it stopped.
+      - name: Restore saved progress
+        if: env.BOOK_HASH != ''
+        uses: actions/cache/restore@v4
+        with:
+          path: work
+          key: ocr-${{ env.BOOK_HASH }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: ocr-${{ env.BOOK_HASH }}-
 
-          python converter.py "$TARGET_FILE" -o "$OUTPUT_PATH"
+      - name: Compare models
+        if: inputs.compare_models != ''
+        timeout-minutes: 50
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          BOOK_PAGES: ${{ inputs.pages }}
+          MODELS: ${{ inputs.compare_models }}
+          PYTHONUNBUFFERED: '1'
+        run: python compare_models.py "$TARGET_FILE" --pages "$BOOK_PAGES" --models "$MODELS" --out compare-out
 
-          # Set the output path as an environment variable for the next step
-          echo "EPUB_OUTPUT=$OUTPUT_PATH" >> $GITHUB_ENV
+      # Runs even when the comparison was cut short, so partial results are kept.
+      - name: Save comparison
+        if: always() && inputs.compare_models != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          [ -f compare-out/summary.md ] || exit 0
+          cat compare-out/summary.md >> "$GITHUB_STEP_SUMMARY"
+          URL="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          TMP=$(mktemp -d)
+          git clone -q --depth 1 --branch results "$URL" "$TMP"
+          rm -rf "$TMP/compare" && mkdir -p "$TMP/compare" && cp compare-out/* "$TMP/compare/"
+          cd "$TMP" && git add -A
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit -q -m "Model comparison (run ${GITHUB_RUN_NUMBER})" && git push -q origin results
+
+      - name: Run Conversion Script
+        id: convert
+        if: inputs.compare_models == ''
+        # Leaves time for the steps below to save progress and status.json.
+        timeout-minutes: 300
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          # Optional repository variables (Settings → Secrets and variables → Variables).
+          GEMINI_MODEL: ${{ vars.GEMINI_MODEL }}
+          GEMINI_SECOND_MODEL: ${{ vars.GEMINI_SECOND_MODEL }}
+          GEMINI_RESCUE_MODEL: ${{ vars.GEMINI_RESCUE_MODEL }}
+          BOOK_TITLE: ${{ inputs.title }}
+          BOOK_PAGES: ${{ inputs.pages }}
+          PYTHONUNBUFFERED: '1'
+        run: |
+          set +e
+          ARGS=(-o "$EPUB_OUTPUT" --work-dir work --report report.md --status status.json --keep-markdown)
+          [ -n "$BOOK_TITLE" ] && ARGS+=(--title "$BOOK_TITLE")
+          [ -n "$BOOK_PAGES" ] && ARGS+=(--pages "$BOOK_PAGES")
+          python converter.py "$TARGET_FILE" "${ARGS[@]}"
+          CODE=$?
+          echo "code=$CODE" >> "$GITHUB_OUTPUT"
+          [ -f report.md ] && cat report.md >> "$GITHUB_STEP_SUMMARY"
+          exit 0
+
+      - name: Save progress
+        if: always() && inputs.compare_models == '' && env.BOOK_HASH != ''
+        uses: actions/cache/save@v4
+        with:
+          path: work
+          key: ocr-${{ env.BOOK_HASH }}-${{ github.run_id }}-${{ github.run_attempt }}
 
       - name: Upload EPUB Artifact
+        if: always() && inputs.compare_models == '' && env.EPUB_OUTPUT != ''
         uses: actions/upload-artifact@v4
         with:
           name: converted-epub
-          path: ${{ env.EPUB_OUTPUT }}
+          path: |
+            ${{ env.EPUB_OUTPUT }}
+            ${{ env.EPUB_OUTPUT }}.md
+            report.md
+            status.json
+          if-no-files-found: warn
+
+      # The book, its text, the report and status.json go to the "results" branch:
+      # the Drive inbox script reads them from there, and they can be downloaded from
+      # the repository page. status.json is written even when the run crashed.
+      - name: Save to results branch
+        if: always() && inputs.compare_models == '' && env.RESULT_DIR != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CODE: ${{ steps.convert.outputs.code }}
+        run: |
+          if [ ! -f status.json ]; then
+            jq -n --arg reason "${FAIL_REASON:-crash (exit ${CODE:-none})}" \
+              '{state: "failed", reason: $reason, epub: "", pages_total: 0, pages_done: 0,
+                pages_unsure: [], pages_missing: [], pages_waiting: []}' > status.json
+          fi
+          jq --argjson id "$GITHUB_RUN_ID" --argjson n "$GITHUB_RUN_NUMBER" \
+             --arg at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+             '. + {run_id: $id, run_number: $n, updated_at: $at}' status.json > status.tmp && mv status.tmp status.json
+          URL="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          TMP=$(mktemp -d)
+          if git ls-remote --exit-code --heads origin results >/dev/null 2>&1; then
+            git clone -q --depth 1 --branch results "$URL" "$TMP"
+          else
+            git init -q -b results "$TMP"
+            git -C "$TMP" remote add origin "$URL"
+          fi
+          git -C "$TMP" config user.name "github-actions[bot]"
+          git -C "$TMP" config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          DIR="$TMP/$RESULT_DIR"
+          mkdir -p "$DIR"
+          rm -f "$DIR"/*.epub
+          [ -n "$EPUB_OUTPUT" ] && [ -f "$EPUB_OUTPUT" ] && cp "$EPUB_OUTPUT" "$DIR/"
+          [ -n "$EPUB_OUTPUT" ] && [ -f "$EPUB_OUTPUT.md" ] && cp "$EPUB_OUTPUT.md" "$DIR/text.md"
+          [ -f report.md ] && cp report.md "$DIR/report.md"
+          cp status.json "$DIR/status.json"
+          cd "$TMP"
+          git add -A
+          git commit -q -m "Result: $RESULT_DIR (run ${GITHUB_RUN_NUMBER})" || exit 0
+          # Another run may have pushed meanwhile (for example a model comparison).
+          for i in 1 2 3; do
+            git push -q origin results && exit 0
+            git pull -q --rebase origin results
+          done
+          exit 1
+
+      - name: Fail if the book is not finished
+        if: inputs.compare_models == '' && steps.convert.outputs.code != '0'
+        env:
+          CODE: ${{ steps.convert.outputs.code }}
+        run: |
+          case "$CODE" in
+            3) echo "Paused: today's Gemini quota is used up. Progress is saved; run the same book again tomorrow." ;;
+            2) echo "Some pages could not be read (see report.md). Run the same book again to retry them." ;;
+            *) echo "The conversion failed (see the log above)." ;;
+          esac
+          exit 1
