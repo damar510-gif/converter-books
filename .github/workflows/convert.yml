@@ -19,28 +19,40 @@ on:
         description: 'Pages to convert, e.g. 1-20 (empty = whole book)'
         required: false
         type: string
-      model:
-        description: 'Main Gemini model'
-        required: false
-        type: string
-        default: 'gemini-3.5-flash-lite'
-      fallback_model:
-        description: 'Stronger model for pages the main one fails (small daily limit)'
-        required: false
-        type: string
-        default: 'gemini-3.8-flash'
       compare_models:
         description: 'Testing only: compare these models (comma separated) on the given pages instead of converting'
+        required: false
+        type: string
+      # Set by the Drive inbox script (apps-script/Code.gs, docs/drive-inbox.md).
+      drive_file_id:
+        description: 'Drive inbox only: Drive file ID'
+        required: false
+        type: string
+      drive_token:
+        description: 'Drive inbox only: short-lived Drive token (never printed)'
+        required: false
+        type: string
+      drive_file_name:
+        description: 'Drive inbox only: original file name'
+        required: false
+        type: string
+      result_dir:
+        description: 'Folder in the results branch (default: the book name)'
         required: false
         type: string
 
 permissions:
   contents: write
 
+# One book at a time: books share the same daily Gemini quotas.
+concurrency:
+  group: convert
+  cancel-in-progress: false
+
 jobs:
   convert:
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 330
 
     steps:
       - name: Checkout Repository
@@ -63,8 +75,27 @@ jobs:
         env:
           FILE_URL: ${{ inputs.file_url }}
           INPUT_FILE: ${{ inputs.input_file }}
+          DRIVE_FILE_ID: ${{ inputs.drive_file_id }}
+          DRIVE_FILE_NAME: ${{ inputs.drive_file_name }}
+          RESULT_DIR_INPUT: ${{ inputs.result_dir }}
         run: |
-          if [ -n "$FILE_URL" ]; then
+          if [ -n "$DRIVE_FILE_ID" ]; then
+            # The token is read from the event file rather than an expression, so it is
+            # never written into the log, and it is masked before anything else runs.
+            DRIVE_TOKEN=$(jq -r '.inputs.drive_token // ""' "$GITHUB_EVENT_PATH")
+            [ -n "$DRIVE_TOKEN" ] && echo "::add-mask::$DRIVE_TOKEN"
+            NAME=$(basename "${DRIVE_FILE_NAME:-book.pdf}")
+            mkdir -p incoming
+            TARGET_FILE="incoming/$NAME"
+            echo "RESULT_DIR=${RESULT_DIR_INPUT:-drive-$DRIVE_FILE_ID}" | tr -d '/' >> "$GITHUB_ENV"
+            if ! curl -fsSL --retry 3 -H "Authorization: Bearer $DRIVE_TOKEN" \
+                 "https://www.googleapis.com/drive/v3/files/${DRIVE_FILE_ID}?alt=media&supportsAllDrives=true" \
+                 -o "$TARGET_FILE"; then
+              echo "FAIL_REASON=download" >> "$GITHUB_ENV"
+              echo "Error: could not download the book from Google Drive."
+              exit 1
+            fi
+          elif [ -n "$FILE_URL" ]; then
             FILENAME=$(basename "${FILE_URL%%\?*}")
             if [[ ! "$FILENAME" =~ \.(pdf|docx|txt)$ ]]; then
               FILENAME="downloaded_book.pdf"
@@ -75,6 +106,7 @@ jobs:
             TARGET_FILE="$INPUT_FILE"
           fi
           if [ -z "$TARGET_FILE" ] || [ ! -f "$TARGET_FILE" ]; then
+            echo "FAIL_REASON=no-file" >> "$GITHUB_ENV"
             echo "Error: provide input_file (a file in the repository) or file_url."
             exit 1
           fi
@@ -84,10 +116,14 @@ jobs:
             echo "EPUB_OUTPUT=${BASENAME%.*}.epub"
             echo "BOOK_HASH=$(sha256sum "$TARGET_FILE" | cut -c1-16)"
           } >> "$GITHUB_ENV"
+          if [ -z "$DRIVE_FILE_ID" ]; then
+            echo "RESULT_DIR=${RESULT_DIR_INPUT:-${BASENAME%.*}}" | tr -d '/' >> "$GITHUB_ENV"
+          fi
 
       # Pages already read in earlier runs are kept here, so a run stopped by the
       # daily limit continues tomorrow from where it stopped.
       - name: Restore saved progress
+        if: env.BOOK_HASH != ''
         uses: actions/cache/restore@v4
         with:
           path: work
@@ -125,14 +161,16 @@ jobs:
         if: inputs.compare_models == ''
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          GEMINI_MODEL: ${{ inputs.model }}
-          GEMINI_FALLBACK_MODEL: ${{ inputs.fallback_model }}
+          # Optional repository variables (Settings → Secrets and variables → Variables).
+          GEMINI_MODEL: ${{ vars.GEMINI_MODEL }}
+          GEMINI_SECOND_MODEL: ${{ vars.GEMINI_SECOND_MODEL }}
+          GEMINI_RESCUE_MODEL: ${{ vars.GEMINI_RESCUE_MODEL }}
           BOOK_TITLE: ${{ inputs.title }}
           BOOK_PAGES: ${{ inputs.pages }}
           PYTHONUNBUFFERED: '1'
         run: |
           set +e
-          ARGS=(-o "$EPUB_OUTPUT" --work-dir work --report report.md --keep-markdown)
+          ARGS=(-o "$EPUB_OUTPUT" --work-dir work --report report.md --status status.json --keep-markdown)
           [ -n "$BOOK_TITLE" ] && ARGS+=(--title "$BOOK_TITLE")
           [ -n "$BOOK_PAGES" ] && ARGS+=(--pages "$BOOK_PAGES")
           python converter.py "$TARGET_FILE" "${ARGS[@]}"
@@ -142,14 +180,14 @@ jobs:
           exit 0
 
       - name: Save progress
-        if: always() && inputs.compare_models == ''
+        if: always() && inputs.compare_models == '' && env.BOOK_HASH != ''
         uses: actions/cache/save@v4
         with:
           path: work
           key: ocr-${{ env.BOOK_HASH }}-${{ github.run_id }}
 
       - name: Upload EPUB Artifact
-        if: always() && inputs.compare_models == ''
+        if: always() && inputs.compare_models == '' && env.EPUB_OUTPUT != ''
         uses: actions/upload-artifact@v4
         with:
           name: converted-epub
@@ -157,17 +195,26 @@ jobs:
             ${{ env.EPUB_OUTPUT }}
             ${{ env.EPUB_OUTPUT }}.md
             report.md
+            status.json
           if-no-files-found: warn
 
-      # The book and its text are also kept in the "results" branch, so they can be
-      # downloaded straight from the repository page.
+      # The book, its text, the report and status.json go to the "results" branch:
+      # the Drive inbox script reads them from there, and they can be downloaded from
+      # the repository page. status.json is written even when the run crashed.
       - name: Save to results branch
-        if: always() && steps.convert.outputs.code != ''
+        if: always() && inputs.compare_models == '' && env.RESULT_DIR != ''
         env:
           GH_TOKEN: ${{ github.token }}
+          CODE: ${{ steps.convert.outputs.code }}
         run: |
-          [ -f "$EPUB_OUTPUT" ] || exit 0
-          NAME="${EPUB_OUTPUT%.epub}"
+          if [ ! -f status.json ]; then
+            jq -n --arg reason "${FAIL_REASON:-crash (exit ${CODE:-none})}" \
+              '{state: "failed", reason: $reason, epub: "", pages_total: 0, pages_done: 0,
+                pages_unsure: [], pages_missing: [], pages_waiting: []}' > status.json
+          fi
+          jq --argjson id "$GITHUB_RUN_ID" --argjson n "$GITHUB_RUN_NUMBER" \
+             --arg at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+             '. + {run_id: $id, run_number: $n, updated_at: $at}' status.json > status.tmp && mv status.tmp status.json
           URL="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
           TMP=$(mktemp -d)
           if git ls-remote --exit-code --heads origin results >/dev/null 2>&1; then
@@ -176,18 +223,32 @@ jobs:
             git init -q -b results "$TMP"
             git -C "$TMP" remote add origin "$URL"
           fi
-          mkdir -p "$TMP/$NAME"
-          cp "$EPUB_OUTPUT" "$TMP/$NAME/"
-          [ -f "$EPUB_OUTPUT.md" ] && cp "$EPUB_OUTPUT.md" "$TMP/$NAME/text.md"
-          cp report.md "$TMP/$NAME/report.md"
+          DIR="$TMP/$RESULT_DIR"
+          mkdir -p "$DIR"
+          rm -f "$DIR"/*.epub
+          [ -n "$EPUB_OUTPUT" ] && [ -f "$EPUB_OUTPUT" ] && cp "$EPUB_OUTPUT" "$DIR/"
+          [ -n "$EPUB_OUTPUT" ] && [ -f "$EPUB_OUTPUT.md" ] && cp "$EPUB_OUTPUT.md" "$DIR/text.md"
+          [ -f report.md ] && cp report.md "$DIR/report.md"
+          cp status.json "$DIR/status.json"
           cd "$TMP"
           git add -A
           git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
-            commit -q -m "Result: $NAME (run ${GITHUB_RUN_NUMBER})" || exit 0
-          git push -q origin results
+            commit -q -m "Result: $RESULT_DIR (run ${GITHUB_RUN_NUMBER})" || exit 0
+          # Another run may have pushed meanwhile (for example a model comparison).
+          for i in 1 2 3; do
+            git push -q origin results && exit 0
+            git pull -q --rebase origin results
+          done
+          exit 1
 
-      - name: Fail if pages are missing
+      - name: Fail if the book is not finished
         if: inputs.compare_models == '' && steps.convert.outputs.code != '0'
+        env:
+          CODE: ${{ steps.convert.outputs.code }}
         run: |
-          echo "The book is incomplete or the conversion failed (see report.md in the artifact). Run again to continue."
+          case "$CODE" in
+            3) echo "Paused: today's Gemini quota is used up. Progress is saved; run the same book again tomorrow." ;;
+            2) echo "Some pages could not be read (see report.md). Run the same book again to retry them." ;;
+            *) echo "The conversion failed (see the log above)." ;;
+          esac
           exit 1

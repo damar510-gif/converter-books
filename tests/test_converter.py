@@ -1,0 +1,192 @@
+"""Offline tests for the reading pipeline: a fake Gemini client stands in for the API.
+
+Run from the repository root:  python -m unittest discover -s tests
+"""
+import json
+import os
+import shutil
+import sys
+import tempfile
+import types as pytypes
+import unittest
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, ROOT)
+
+import converter as c  # noqa: E402
+import crosscheck  # noqa: E402
+
+PDF = os.path.join(ROOT, "تراث الانسانية 3-1-246.pdf")
+
+TRUE = "وجود قوانين خاصة بالتطور ما دام يرى أنه قد برهن برهنة كافية على وجود قوانين خاصة بالاستقرار الاجتماعى " * 3
+WRONG = TRUE.replace("برهنة كافية", "برهنة كاقية", 1)
+
+
+def answer(text, finish="STOP"):
+    part = pytypes.SimpleNamespace(text=text, thought=None)
+    thought = pytypes.SimpleNamespace(text="(thinking)", thought=True)
+    cand = pytypes.SimpleNamespace(finish_reason=finish, content=pytypes.SimpleNamespace(parts=[thought, part]))
+    return pytypes.SimpleNamespace(candidates=[cand], text=text)
+
+
+class FakeModels:
+    """Scripted models. behaviour[model] is a function (prompt, call_no) -> response or exception."""
+
+    def __init__(self, behaviour):
+        self.behaviour = behaviour
+        self.calls = []
+
+    def generate_content(self, model, contents, config):
+        prompt = contents[-1]
+        self.calls.append((model, "reconcile" if "النسخة (أ)" in prompt else "read"))
+        n = sum(1 for m, _ in self.calls if m == model)
+        return self.behaviour[model](prompt, n)
+
+
+class Pipeline(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp)
+        os.environ["GEMINI_API_KEY"] = "test"
+        self._which = c.shutil.which
+        c.shutil.which = lambda name: None  # no Tesseract: keeps the tests fast and deterministic
+        self._sleep = c.time.sleep
+        c.time.sleep = lambda s: None
+        self.addCleanup(self.restore)
+
+    def restore(self):
+        c.shutil.which = self._which
+        c.time.sleep = self._sleep
+
+    def run_book(self, behaviour, pages="30-31", extra=()):
+        fake = FakeModels(behaviour)
+        c.genai.Client = lambda **kw: pytypes.SimpleNamespace(models=fake)
+        out = os.path.join(self.tmp, "book.epub")
+        status = os.path.join(self.tmp, "status.json")
+        sys.argv = ["converter.py", PDF, "-o", out, "--pages", pages, "--work-dir", os.path.join(self.tmp, "work"),
+                    "--report", os.path.join(self.tmp, "report.md"), "--status", status, "--rpm", "6000",
+                    "--keep-markdown", *extra]
+        with self.assertRaises(SystemExit) as exit_:
+            c.main()
+        with open(status, encoding="utf-8") as f:
+            st = json.load(f)
+        with open(out + ".md", encoding="utf-8") as f:
+            md = f.read()
+        return exit_.exception.code, st, md, fake
+
+    def records(self):
+        work = os.path.join(self.tmp, "work")
+        d = os.path.join(work, os.listdir(work)[0])
+        recs = {}
+        for name in os.listdir(d):
+            if name.endswith(".json"):
+                with open(os.path.join(d, name), encoding="utf-8") as f:
+                    r = json.load(f)
+                recs[r["page"]] = r
+        return recs
+
+    def test_agreement_needs_no_third_request(self):
+        code, st, md, fake = self.run_book({
+            "gemini-3.5-flash-lite": lambda p, n: answer(TRUE),
+            "gemini-3.1-flash-lite": lambda p, n: answer(TRUE.replace("الاجتماعى", "الاجتماعي")),
+        })
+        self.assertEqual(code, 0)
+        self.assertEqual(st["state"], "done")
+        self.assertEqual({r["check"]["state"] for r in self.records().values()}, {"agreed"})
+        self.assertNotIn("reconcile", [k for _, k in fake.calls])
+        self.assertNotIn("(thinking)", md)
+
+    def test_disagreement_is_settled_against_the_image(self):
+        code, st, md, fake = self.run_book({
+            "gemini-3.5-flash-lite": lambda p, n: answer(TRUE if "النسخة (أ)" in p else WRONG),
+            "gemini-3.1-flash-lite": lambda p, n: answer(TRUE if "النسخة (أ)" in p else TRUE),
+        })
+        self.assertEqual(code, 0)
+        recs = self.records()
+        self.assertEqual({r["check"]["state"] for r in recs.values()}, {"reconciled"})
+        self.assertNotIn("كاقية", md)
+        # Settling requests are spread over both models' quotas.
+        used = {m for m, k in fake.calls if k == "reconcile"}
+        self.assertEqual(used, {"gemini-3.5-flash-lite", "gemini-3.1-flash-lite"})
+
+    def test_bad_settlement_keeps_a_reading(self):
+        code, st, md, fake = self.run_book({
+            "gemini-3.5-flash-lite": lambda p, n: answer("كلام قصير" if "النسخة (أ)" in p else WRONG),
+            "gemini-3.1-flash-lite": lambda p, n: answer("كلام قصير" if "النسخة (أ)" in p else TRUE),
+        }, pages="30")
+        self.assertEqual(code, 0)
+        rec = self.records()[30]
+        self.assertIn(rec["check"]["state"], ("kept", "unsure"))
+        self.assertGreater(len(rec["text"]), 200)
+
+    def test_refused_page_goes_to_rescue_model(self):
+        refuse = lambda p, n: answer("", "FinishReason.PROHIBITED_CONTENT")
+        code, st, md, fake = self.run_book({
+            "gemini-3.5-flash-lite": refuse,
+            "gemini-3.1-flash-lite": refuse,
+            "gemma-4-26b-a4b-it": lambda p, n: answer(TRUE),
+        }, pages="30")
+        rec = self.records()[30]
+        self.assertEqual(rec["a"]["model"], "gemma-4-26b-a4b-it")
+        self.assertEqual(rec["b"]["status"], "suspicious")
+        self.assertEqual(code, 0)
+        self.assertIn("وجود قوانين", md)
+
+    def test_quota_runs_out_then_resumes_next_day(self):
+        def quota_after(limit, text):
+            def f(p, n):
+                if n > limit:
+                    raise Exception("429 RESOURCE_EXHAUSTED quotaId GenerateRequestsPerDayPerProjectPerModel-FreeTier")
+                return answer(text if "النسخة (أ)" not in p else TRUE)
+            return f
+        code, st, md, fake = self.run_book({
+            "gemini-3.5-flash-lite": quota_after(1, WRONG),
+            "gemini-3.1-flash-lite": quota_after(2, TRUE),
+            "gemma-4-26b-a4b-it": quota_after(0, TRUE),
+        }, pages="30-32")
+        self.assertEqual(code, 3)
+        self.assertEqual(st["state"], "paused")
+        self.assertTrue(st["quota_day"])
+        self.assertTrue(st["pages_waiting"])
+        # Next day: quotas are back and only the missing work is done.
+        code, st, md, fake = self.run_book({
+            "gemini-3.5-flash-lite": lambda p, n: answer(TRUE if "النسخة (أ)" in p else WRONG),
+            "gemini-3.1-flash-lite": lambda p, n: answer(TRUE),
+            "gemma-4-26b-a4b-it": lambda p, n: answer(TRUE),
+        }, pages="30-32")
+        self.assertEqual(code, 0, st)
+        self.assertEqual(st["state"], "done")
+        self.assertNotIn("كاقية", md)
+
+    def test_single_mode(self):
+        code, st, md, fake = self.run_book({
+            "gemini-3.5-flash-lite": lambda p, n: answer(TRUE),
+        }, pages="30", extra=("--single",))
+        self.assertEqual(code, 0)
+        self.assertEqual(self.records()[30]["check"]["state"], "single")
+        self.assertEqual({m for m, _ in fake.calls}, {"gemini-3.5-flash-lite"})
+
+
+class CrossCheck(unittest.TestCase):
+    def test_spelling_variants_are_not_differences(self):
+        ratio, diffs = crosscheck.compare("فى الكتاب الذى قرأه إبراهيم", "في الكتاب الذي قرأه ابراهيم")
+        self.assertEqual(diffs, [])
+        self.assertEqual(ratio, 1.0)
+
+    def test_differences_are_listed(self):
+        ratio, diffs = crosscheck.compare("قد برهن برهنة كافية", "قد برهن كافية")
+        self.assertEqual(diffs, [("برهنة", "")])
+
+    def test_prompt_survives_braces(self):
+        prompt = crosscheck.reconcile_prompt("rules", "نص {أ}", "نص {ب}", [("{أ}", "{ب}")], ["سطر"])
+        self.assertIn("نص {أ}", prompt)
+        self.assertIn("سطر", prompt)
+
+    def test_validate_final(self):
+        self.assertTrue(crosscheck.validate_final(TRUE, WRONG, TRUE))
+        self.assertFalse(crosscheck.validate_final("قصير", WRONG, TRUE))
+        self.assertFalse(crosscheck.validate_final("", WRONG, TRUE))
+
+
+if __name__ == "__main__":
+    unittest.main()

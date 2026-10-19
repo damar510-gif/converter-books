@@ -44,16 +44,21 @@ To process scanned PDFs where pages contain images instead of text, you must pro
 export GEMINI_API_KEY="your_api_key_here"
 python converter.py scanned_book.pdf
 ```
-The script detects pages without a text layer and sends each one to Gemini on its own, at the scan's native resolution:
+The script detects pages without a text layer and reads each one on its own, at the scan's native resolution:
 
-- **One page per request**, paced to stay under the per-minute limit (`--rpm`, default 12).
-- **Retries** on busy/temporary errors; pages that come back empty or too short are retried once with the stronger `--fallback-model` (limited by `--fallback-limit`).
-- **Progress is saved per page** in `--work-dir` (`work/`). Running again only processes missing pages, so a run stopped by the daily limit continues the next day.
-- A **report** (`report.md`) lists any missing pages, and the script exits with code 2 when the book is incomplete.
-- Headings, footnotes and poetry are kept: each article becomes a chapter in the table of contents.
-- `--pages 1-20` converts part of a book (useful for a quick test).
-- **Missing-lines review**: when Tesseract is installed, each page is compared with a Tesseract reading; pages whose text lost lines are re-read once (`--review-limit`, default 60 pages).
-- The table of contents lists the main articles only (one short text request picks them), and the EPUB carries the original page numbers (a page list), so readers can show the book's own 246 pages.
+- **Two independent readings**: every page is read by `--model` (default `gemini-3.5-flash-lite`) and by `--second-model` (default `gemini-3.1-flash-lite`). Each model has its own free daily quota.
+- **Automatic check**: the two readings are compared word by word (spelling variants such as ى/ي are ignored). Pages where they differ, or where Tesseract sees lines missing, get one more request: the image plus both readings, asking for the final text. The answer is accepted only if it is close to the readings and loses no lines; otherwise the better reading is kept and the page is listed as unsure in the report.
+- **Refused pages** (Gemini's safety or copyright filters) are read again in two halves, and then by `--rescue-model` (default `gemma-4-26b-a4b-it`).
+- **Progress is saved per page** in `--work-dir`. When a model's daily quota runs out the run stops (exit code 3, "paused") and the next run continues where it stopped.
+- `report.md` and `status.json` describe the result. Exit codes: 0 done, 2 some pages unreadable, 3 paused for the daily quota.
+- Headings, footnotes and poetry are kept; the table of contents lists the main articles only, and the EPUB carries the original page numbers.
+- `--pages 1-20` converts part of a book; `--single` reads each page once.
+
+Models can also be set with the repository variables `GEMINI_MODEL`, `GEMINI_SECOND_MODEL` and `GEMINI_RESCUE_MODEL`.
+
+## Drive inbox (no GitHub needed day to day)
+
+Books dropped into a Google Drive folder are converted automatically; see `apps-script/SETUP-ar.md` (Arabic setup guide) and `docs/drive-inbox.md` (how it works).
 
 ## GitHub Actions Usage
 
