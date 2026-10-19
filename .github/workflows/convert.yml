@@ -169,6 +169,7 @@ jobs:
           GEMINI_MODEL: ${{ vars.GEMINI_MODEL }}
           GEMINI_SECOND_MODEL: ${{ vars.GEMINI_SECOND_MODEL }}
           GEMINI_RESCUE_MODEL: ${{ vars.GEMINI_RESCUE_MODEL }}
+          GEMINI_ARBITER_MODEL: ${{ vars.GEMINI_ARBITER_MODEL }}
           BOOK_TITLE: ${{ inputs.title }}
           BOOK_PAGES: ${{ inputs.pages }}
           PYTHONUNBUFFERED: '1'

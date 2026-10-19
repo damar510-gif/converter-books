@@ -636,6 +636,59 @@ def check_pages(pool, filepath, records, cache_dir, dual, workers):
         list(tp.map(work, todo))
 
 
+def arbitrate(pool, filepath, records, cache_dir, model, limit):
+    """Sends pages still unsure to a stronger model with a small daily quota.
+    Each page gets one try; quota errors leave it for the next run."""
+    todo = [r for r in records if (r.get("check") or {}).get("state") == "unsure"
+            and not r["check"].get("arbiter")][:limit]
+    if not model or not todo or not pool.available(model):
+        return
+    print(f"Asking {model} about {len(todo)} unsure pages")
+    vocab = set()
+    for r in records:
+        vocab.update(norm_words(r.get("text") or ""))
+    local = pymupdf.open(filepath)
+    try:
+        for rec in todo:
+            a = rec["a"]["text"]
+            b_rec = rec.get("b") or {}
+            b = b_rec.get("text", "") if b_rec.get("status") == "ok" else ""
+            tess = tesseract_for(filepath, cache_dir, rec["page"])
+            miss_a = missing_lines(tess, a, vocab) if tess else []
+            miss_b = missing_lines(tess, b, vocab) if tess and b else []
+            _, diffs = crosscheck.compare(a, b) if b else (0, [])
+            png, pix = page_image(local, local[rec["page"] - 1])
+            rules = OCR_RULES.format(spread=SPREAD_HINT if pix.width > pix.height * 1.15 else "")
+            prompt = crosscheck.reconcile_prompt(rules, a, b, diffs, list(dict.fromkeys(miss_a + miss_b)))
+            try:
+                text, finish = pool.read(png, prompt, model)
+            except QuotaExhausted:
+                break
+            except Exception as e:
+                text, finish = "", f"error {str(e)[:100]}"
+            text = clean_settled(text)
+            if not text or is_refusal(finish) or "MAX_TOKENS" in finish or finish.startswith("error"):
+                verdict = f"no answer: {finish[:80]}"
+            elif not crosscheck.validate_final(text, a, b):
+                verdict = "rejected: drops text the readings agree on"
+            else:
+                miss_f = missing_lines(tess, text, vocab) if tess else []
+                if len(miss_f) > min([len(miss_a)] + ([len(miss_b)] if b else [])):
+                    verdict = f"rejected: {len(miss_f)} lines missing"
+                else:
+                    # The stronger model's text is used even if a line still seems missing;
+                    # the page then stays flagged in the book.
+                    rec["text"] = text
+                    rec["check"].update(model=model, missing_final=len(miss_f),
+                                        state="unsure" if miss_f else "reconciled")
+                    verdict = "settled" if not miss_f else f"used, {len(miss_f)} lines may be missing"
+            rec["check"]["arbiter"] = verdict
+            save_record(cache_dir, rec)
+            print(f"  arbiter page {rec['page']}: {rec['check']['arbiter']}")
+    finally:
+        local.close()
+
+
 FOOTNOTE_DEF = re.compile(r"^\[\^([^\]\s]+)\]:\s*(.*)$")
 # Footnotes the model left in the book's own style: "(1) text" at the end of the page.
 PLAIN_NOTE = re.compile(r"^\(([0-9٠-٩۰-۹]{1,3})\)\s*(.+)$")
@@ -754,6 +807,15 @@ def assemble(records):
             blocks.append([block, "body"])
         for note in orphans:
             blocks.append([f"::: note\n{note}\n:::", "note"])
+        check = rec.get("check") or {}
+        if check.get("state") == "unsure":
+            # Tell the reader right in the book which page to compare with the original.
+            short = lambda t: (t[:40] + "…") if len(t) > 40 else (t or "—")
+            words = "، ".join(f"«{short(x)}» أو «{short(y)}»" for x, y in check.get("sample", [])[:3])
+            text = f"⚠ تنبيه: قراءة الصفحة {rec['page']} من الأصل غير مؤكدة؛ يُنصح بمطابقتها بالأصل."
+            if words:
+                text += f" مواضع الشك: {words}."
+            blocks.append([f"::: unsure\n{text}\n:::", "note"])
     if marker:
         blocks.append([marker, "body"])
     out = "\n\n".join(b for b, _ in blocks)
@@ -1046,6 +1108,7 @@ def generate_epub_from_pdf(filepath, output_path, args):
         records = [rec or {"page": i + 1, "status": "pending"} for i, rec in zip(selected, tp.map(work, selected))]
     if pool:
         check_pages(pool, filepath, records, cache_dir, dual, args.workers)
+        arbitrate(pool, filepath, records, cache_dir, args.arbiter_model, args.arbiter_limit)
 
     summary = summarize(records, dual)
     md = assemble(records)
@@ -1136,6 +1199,9 @@ def main():
                         help="Second, independent reader (its own daily quota)")
     parser.add_argument("--rescue-model", default=os.environ.get("GEMINI_RESCUE_MODEL") or "gemma-4-26b-a4b-it",
                         help="For pages both Gemini models refuse")
+    parser.add_argument("--arbiter-model", default=os.environ.get("GEMINI_ARBITER_MODEL") or "gemini-3.8-flash",
+                        help="Stronger model (small daily quota) asked about pages still unsure")
+    parser.add_argument("--arbiter-limit", type=int, default=15, help="Unsure pages sent to it per run")
     parser.add_argument("--single", dest="dual", action="store_false",
                         help="Read each page once (no second reading and no comparison)")
     parser.add_argument("--rpm", type=float, default=10, help="Requests per minute per Gemini model")

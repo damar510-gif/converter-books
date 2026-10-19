@@ -3,3 +3,4 @@ h1, h2 { text-align: center; }
 .line-block { margin: 1em 2em; text-align: center; }
 section.footnotes, aside.footnote { font-size: 0.85em; }
 .note { font-size: 0.85em; color: #555; margin: 0.5em 0; }
+.unsure { font-size: 0.85em; border: 1px solid #c9a227; background: #fff8e1; color: #6d5200; padding: 0.4em 0.6em; margin: 0.6em 0; border-radius: 4px; }
