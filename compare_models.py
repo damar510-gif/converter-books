@@ -37,7 +37,8 @@ def read_openai(model, jpeg, prompt):
     body = {
         "model": name,
         "temperature": 0,
-        "max_tokens": 4096,
+        # Room for "thinking" models, which spend part of the answer on reasoning.
+        "max_tokens": 16000,
         "messages": [{"role": "user", "content": [
             {"type": "image_url", "image_url": {"url": "data:image/jpeg;base64," + base64.b64encode(jpeg).decode()}},
             {"type": "text", "text": prompt},
@@ -45,7 +46,11 @@ def read_openai(model, jpeg, prompt):
     }
     headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
     if provider == "github":
-        headers.update({"Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28"})
+        body["max_tokens"] = 4096
+        headers.update({"Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2026-03-10"})
+    # Ask reasoning models to think little: page copying needs no reasoning.
+    extras = {"openrouter": {"reasoning": {"effort": "low"}}, "groq": {"reasoning_effort": "none"}}.get(provider, {})
+    body.update(extras)
     for attempt in range(3):
         t = time.time()
         try:
@@ -55,6 +60,11 @@ def read_openai(model, jpeg, prompt):
         if r.status_code in (429, 500, 502, 503):
             print(f"  {model}: HTTP {r.status_code} {r.text[:120]} -> wait 60s")
             time.sleep(60)
+            continue
+        if r.status_code == 400 and extras and any(k in body for k in extras):
+            # The model does not take the reasoning option: try once without it.
+            for k in extras:
+                body.pop(k, None)
             continue
         if r.status_code != 200:
             return "", "", round(time.time() - t, 1), {}, f"HTTP {r.status_code} {r.text[:200]}"
