@@ -202,9 +202,11 @@ function judgeNow() {
   var count = 0;
   try {
     var jobs = loadJobs_();
+    var ctx = { cfg: config_(), folders: getFolders_(), jobs: jobs, dispatched: 0 };
     Object.keys(jobs).forEach(function (id) {
       var j = jobs[id];
       if (!j) return;
+      if (j.stage === 'delivered' && !j.refineDone && j.unsure === undefined) backfill_(ctx, j);
       if (j.stage === 'judging') {
         j.judgeDay = '';
         count++;
@@ -222,9 +224,9 @@ function judgeNow() {
     return 'nothing to judge';
   }
   var result = tick();
-  Logger.log(/(judging|refining) [\w-]+: /.test(result)
-    ? 'بدأت مراجعة الحكّام الآن. تصلك رسالة بالنتيجة.'
-    : 'سيبدأ الحكّام بعد انتهاء الكتاب الجاري تحويله (يكمل تلقائياً).');
+  Logger.log(/(judging|refining) [\w-]+: dispatched/.test(result)
+    ? 'بدأت مراجعة الحكّام الآن. تصلك رسالة حين تنتهي الجولة.'
+    : 'لم تبدأ الآن: يوجد كتاب قيد التحويل أو كتاب جديد، فتبدأ بعده تلقائياً. (' + result + ')');
   return result;
 }
 
@@ -514,6 +516,7 @@ function refineNext_(ctx) {
   var today = pacificDay_(now_());
   var pick = null;
   finishedJobs_(ctx.jobs).forEach(function (j) {
+    if (j.stage === 'delivered' && !j.refineDone && j.unsure === undefined) backfill_(ctx, j);
     if (j.stage !== 'delivered' || j.refineDone || !(j.unsure > 0) || j.refineDay === today) return;
     if ((j.refines || 0) >= CONFIG.MAX_REFINES) {
       finalize_(ctx, j, true);
@@ -548,6 +551,26 @@ function refineNext_(ctx) {
   pick.pendingCount = false;
   saveJobs_(ctx.jobs);
   return 'refining ' + pick.fileId + ': ' + dispatch_(ctx, pick, false);
+}
+
+/**
+ * Books delivered by an older script have no count of unsure pages (and may have lost
+ * their report's id): read them back from the results branch and the ready folder.
+ */
+function backfill_(ctx, job) {
+  var r = gh_(ctx.cfg, 'get', contentsPath_(ctx.cfg, 'drive-' + job.fileId + '/status.json'), null, GH_RAW);
+  if (r.code !== 200) return;
+  var s = parseJson_(ghText_(r));
+  if (!s || typeof s !== 'object') return;
+  job.unsure = pageList_(s.pages_unsure).length;
+  if (!job.reportId && job.title) {
+    var it = ctx.folders.ready.getFilesByName(job.title + ' - تقرير.txt');
+    while (it.hasNext()) {
+      var f = it.next();
+      if (!f.isTrashed()) { job.reportId = f.getId(); break; }
+    }
+  }
+  saveJobs_(ctx.jobs);
 }
 
 /**
@@ -770,7 +793,17 @@ function deliver_(ctx, job, s, incomplete) {
       finalize_(ctx, job, true);
       return 'refined and final (' + before + ' -> ' + unsure.length + ')';
     }
+    if (cutShort && unsure.length >= before) {
+      // Nothing was judged (no quota left): this round does not count toward MAX_REFINES.
+      job.refines = Math.max(0, (job.refines || 0) - 1);
+    }
     saveJobs_(ctx.jobs);
+    if (cutShort && unsure.length >= before) {
+      sendMail_('ينتظر الحكّام: ' + job.title, [
+        'لم يبقَ اليوم رصيد للحكّام لمراجعة «' + job.title + '»، ولم يتغير شيء.',
+        'تكمل المراجعة تلقائياً في يوم قادم.'
+      ]);
+    }
     if (unsure.length < before) {
       sendMail_('تحسّن: ' + job.title, [
         'راجعت النماذج الأقوى صفحات مشكوكاً فيها في «' + job.title + '».',

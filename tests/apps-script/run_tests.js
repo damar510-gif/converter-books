@@ -186,6 +186,7 @@ function makeEnv(options) {
     getFoldersByName(n) { return iterator(children(this.id).filter((x) => x instanceof MockFolder && x.name === n)); }
     getFolders() { return iterator(children(this.id).filter((x) => x instanceof MockFolder)); }
     getFiles() { return iterator(children(this.id).filter((x) => x instanceof MockFile)); }
+    getFilesByName(name) { return iterator(children(this.id).filter((x) => x instanceof MockFile && x.name === name)); }
     createFolder(n) { return new MockFolder(n, this.id); }
     createFile(a, content, mime) {
       if (typeof a === 'string') {
@@ -852,6 +853,32 @@ test('judgeNow: the judges see a delivered book today; a round cut short by thei
   env.clock += 24 * 3600000;
   tick(env);
   assert.strictEqual(env.gh.dispatches.length, 4, 'and the rounds go on');
+});
+
+test('judgeNow: a book delivered by an older script (no unsure count, no report id) is judged too', () => {
+  const env = readyEnv();
+  const f = addBook(env, 'د.pdf');
+  tick(env);
+  minutes(env, 30);
+  writeStatus(env, f.id, 'done', { epub: 'د.epub', pages_unsure: [1, 2, 3] });
+  writeEpub(env, f.id, 'د.epub', Buffer.from('PK old'));
+  env.gh.files['drive-' + f.id + '/report.md'] = 'تقرير قديم';
+  tick(env);
+  assert.strictEqual(names(env, 'ready').filter((n) => /تقرير/.test(n)).length, 1);
+  const all = jobs(env);
+  ['unsure', 'reportId', 'refineDay'].forEach((k) => { delete all[f.id][k]; });
+  env.props.set('JOBS', JSON.stringify(all));
+  minutes(env, 10);
+  env.ctx.judgeNow();
+  assert.strictEqual(env.gh.dispatches.length, 2, 'round started');
+  assert.strictEqual(jobs(env)[f.id].unsureBefore, 3);
+  minutes(env, 20);
+  writeStatus(env, f.id, 'paused', { waiting_for: 'judges', epub: 'د.epub', pages_unsure: [3], pages_judging: [3] });
+  writeEpub(env, f.id, 'د.epub', Buffer.from('PK new'));
+  tick(env);
+  const ready = names(env, 'ready');
+  assert.strictEqual(ready.filter((n) => /تقرير/.test(n)).length, 1, 'old report replaced, not duplicated');
+  assert.strictEqual(ready.filter((n) => /\.epub$/.test(n)).length, 1);
 });
 
 test('judgeNow with nothing unsure does nothing', () => {
