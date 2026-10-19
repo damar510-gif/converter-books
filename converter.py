@@ -967,7 +967,8 @@ def write_report(path, summary, pool):
         # A few of the unsettled differences, so the exact words can be checked in the book.
         for page, sample in list(summary["samples"].items())[:30]:
             if sample:
-                pairs = "؛ ".join(f"«{x or '—'}» / «{y or '—'}»" for x, y in sample)
+                short = lambda t: (t[:60] + " …") if len(t) > 60 else (t or "—")
+                pairs = "؛ ".join(f"«{short(x)}» / «{short(y)}»" for x, y in sample)
                 lines.append(f"- ص {page}: {pairs}")
     if summary["state"] == "done":
         lines += ["", "**كل الصفحات اكتملت.**"]
