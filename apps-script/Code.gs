@@ -328,6 +328,8 @@ function getStatus() {
     if (folders) {
       var scan = scanInbox_(folders.inbox);
       out.queued = scan.ready.length + scan.uploading;
+      // The next books, in the order they start.
+      out.queueNames = scan.ready.slice(0, 8).map(function (f) { return newJob_(f).title; });
       out.uploading = scan.uploading;
       out.unsupported = scan.unsupported.slice(0, 10);
       out.links = {
@@ -354,6 +356,9 @@ function getStatus() {
       return {
         title: j.title,
         stage: j.stage,
+        fileId: j.fileId,
+        unsure: Number(j.unsure) || 0,
+        final: !!j.final,
         finishedAt: j.finishedAt || '',
         incomplete: j.lastState === 'incomplete',
         url: jobUrl_(j),
