@@ -125,19 +125,36 @@
   details { margin-top: 10px; }
   .tag { display: inline-block; font-size: .8rem; padding: 0 8px; border-radius: 999px; background: var(--ok-bg);
     color: var(--ok); margin-inline-start: 6px; }
-  /* The boxes: models on the user's computer, put to work by moving them to the left box */
-  .sec { border-top: 1px solid var(--line); padding-top: 10px; margin-top: 10px; }
-  .pair { display: flex; gap: 8px; margin-top: 8px; align-items: stretch; }
-  .box { flex: 1 1 0; min-width: 0; min-height: 110px; border: 2px dashed var(--line); border-radius: 12px;
-    padding: 6px; background: var(--bg); }
-  .box.on { border-color: var(--accent); }
+  /* The boxes: models on the user's computer, put to work by moving them to the left box.
+     On a computer screen the card is wider than the others. */
+  @media (min-width: 760px) {
+    #boxes { width: min(1100px, calc(100vw - 64px));
+      margin-left: calc((100% - min(1100px, calc(100vw - 64px))) / 2);
+      margin-right: calc((100% - min(1100px, calc(100vw - 64px))) / 2); }
+  }
+  #boxes h2 { font-size: 1.15rem; }
+  .sec { border-top: 1px solid var(--line); padding-top: 14px; margin-top: 14px; }
+  .sec > .title { font-size: 1.1rem; }
+  .pair { display: flex; gap: 14px; margin-top: 10px; align-items: stretch; }
+  .box { flex: 3 1 0; min-width: 0; min-height: 200px; border: 2px dashed var(--line); border-radius: 14px;
+    padding: 10px 12px; background: var(--bg); }
+  .box.on { flex-grow: 2; border-color: var(--accent); }
   .box.over { background: var(--ok-bg); }
-  .boxhead { font-size: .8rem; color: var(--muted); margin-bottom: 4px; }
-  button.chip { display: block; width: 100%; text-align: start; font-size: .9rem; font-weight: 500; padding: 6px 8px;
-    margin: 4px 0; border-radius: 10px; border: 1px solid var(--line); background: var(--card); color: var(--text);
-    cursor: grab; touch-action: manipulation; overflow-wrap: anywhere; }
+  /* A phone: the two boxes one above the other, the working one first. */
+  @media (max-width: 599px) {
+    .pair { flex-direction: column-reverse; }
+    .box { flex: none; min-height: 90px; }
+  }
+  .boxhead { font-size: .9rem; font-weight: 600; color: var(--muted); margin-bottom: 8px; }
+  .group { margin-bottom: 10px; }
+  .gname { font-size: .8rem; color: var(--muted); margin-bottom: 4px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  button.chip { display: inline-block; width: auto; max-width: 100%; text-align: start; font-size: .95rem; font-weight: 500;
+    padding: 8px 12px; margin: 0; border-radius: 12px; border: 1px solid var(--line); background: var(--card);
+    color: var(--text); cursor: grab; touch-action: manipulation; overflow-wrap: anywhere; }
+  .box.on button.chip { display: block; width: 100%; margin-bottom: 8px; }
   button.chip.warn { border-color: var(--warn); }
-  .chip small { display: block; font-size: .75rem; color: var(--muted); line-height: 1.5; }
+  .chip small { display: block; font-size: .78rem; color: var(--muted); line-height: 1.5; }
   .chip small.warntext { color: var(--warn); }
   .chip small.working { color: var(--ok); }
   .chip small.exhausted, .chip small.failing { color: var(--bad); }
@@ -1037,10 +1054,24 @@
     var on = BOXES[sec.key];
     var pair = el('div', 'pair');
     // Right to left: the first box is on the right.
-    var offBox = dropBox(sec.key, false, 'المتاحة: اسحب نموذجاً إلى اليسار أو المسه');
+    var offBox = dropBox(sec.key, false, 'المتاحة: المس النموذج أو اسحبه إلى «تعمل الآن»');
     var onBox = dropBox(sec.key, true, 'تعمل الآن');
+    // The models waiting in the right box, in rows under the name of their program.
+    var groups = [];
     models.forEach(function (m) {
-      if (on.indexOf(m.id) < 0) offBox.appendChild(chip(sec.key, m, false, h));
+      if (on.indexOf(m.id) >= 0) return;
+      var g = null;
+      for (var i = 0; i < groups.length; i++) if (groups[i].tool === m.tool) g = groups[i];
+      if (!g) groups.push(g = { tool: m.tool, list: [] });
+      g.list.push(m);
+    });
+    groups.forEach(function (g) {
+      var group = el('div', 'group');
+      if (g.tool) group.appendChild(el('div', 'gname', g.tool));
+      var row = el('div', 'chips');
+      g.list.forEach(function (m) { row.appendChild(chip(sec.key, m, false, h)); });
+      group.appendChild(row);
+      offBox.appendChild(group);
     });
     on.forEach(function (id) {
       var m = modelOf(models, id);
@@ -1057,8 +1088,10 @@
     var b = el('button', 'chip' + (m.warn ? ' warn' : ''));
     b.type = 'button';
     b.draggable = true;
-    b.appendChild(el('span', '', m.label));
-    if (m.tool) b.appendChild(el('small', '', m.tool));
+    // Latin names keep their own direction inside the Arabic page.
+    b.appendChild(el('span', '', m.label)).dir = 'auto';
+    // In the right box the program's name is above its row.
+    if (m.tool && isOn) b.appendChild(el('small', '', m.tool));
     if (m.warn) b.appendChild(el('small', 'warntext', '⚠ ' + m.warn));
     if (isOn) {
       var c = (h.chips || {})[m.id];
