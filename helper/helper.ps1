@@ -9,15 +9,17 @@ $ResultsName = 'نتائج'
 $TestPagesName = 'صفحات الاختبار'
 $PageTimeoutSec = 20 * 60
 
-# Models per tool, as the tool's own command line names them. Gemini 4 Argon is left out
-# on purpose: it never transcribes (it would use up the subscription's limits), and
-# Grok 4.7 Fast costs twice as much.
+# Models per tool, as the tool's own command line names them. All are offered and the
+# user chooses; the labels carry the user's warnings (Gemini 4 Argon is not for
+# transcribing: it uses up the limits; Grok 4.7 Fast costs twice as much).
 $Tools = [ordered]@{
   grok  = @{ label = 'Grok Build'; models = @(
       @{ id = 'grok-4.7'; label = 'Grok 4.7' },
+      @{ id = 'grok-4.7-fast'; label = 'Grok 4.7 Fast (بضعف السعر)' },
       @{ id = 'grok-4.6'; label = 'Grok 4.6' },
       @{ id = 'grok-4.5'; label = 'Grok 4.5' }) }
   agy   = @{ label = 'Antigravity'; models = @(
+      @{ id = 'gemini-4-argon'; label = 'Gemini 4 Argon (لا للتفريغ: يستنفد الحدود)' },
       @{ id = 'gemini-3.8-flash'; label = 'Gemini 3.8 Flash' },
       @{ id = 'claude-sonnet-5.5'; label = 'Claude Sonnet 5.5' },
       @{ id = 'claude-opus-5.5'; label = 'Claude Opus 5.5' },

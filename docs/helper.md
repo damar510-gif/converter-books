@@ -46,8 +46,9 @@ a request from `requests.json` once its id is in `handled`.
 
 Read-only: each tool sees one page folder (`page.png` and `task.md`, the converter's
 reading prompt in Arabic; the command line itself is ASCII because `.cmd` shims garble
-Arabic). No shell, edits, web or permission-skipping flags. Gemini 4 Argon is never
-offered for transcription, and Grok 4.7 Fast (twice the price) is left out.
+Arabic). No shell, edits, web or permission-skipping flags. Every model is offered and
+the user chooses; the labels warn that Gemini 4 Argon is not for transcribing (it uses up
+the limits) and that Grok 4.7 Fast costs twice as much.
 
 ## Actions
 
