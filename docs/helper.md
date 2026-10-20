@@ -30,8 +30,10 @@ downloads `install.ps1` from Drive and runs it:
    user signs in.
 2. Copies `launcher.ps1` to `%LOCALAPPDATA%\ConverterHelper` (with a BOM: Windows
    PowerShell 5.1 reads a file without one as ANSI) and runs it with `-Install`, which
-   installs Codex if missing (`chatgpt.com/codex/install.ps1`), opens its ChatGPT sign-in,
-   and adds a hidden start at every sign-in (`Startup\ConverterHelper.vbs`).
+   adds a hidden start at every sign-in (`Startup\ConverterHelper.vbs`).
+
+The tools are installed and signed in by the user beforehand, separately (the user's
+choice); the helper uses whichever it finds, and finds tools added later too.
 
 ## Each minute
 

@@ -4,7 +4,7 @@
 # results under «نتائج», and reports in helper-status.json, which the status page shows.
 # Windows PowerShell 5.1: no ?? or ?: operators.
 
-$HelperVersion = '2026-10-20.2'
+$HelperVersion = '2026-10-20.3'
 $ResultsName = 'نتائج'
 $TestPagesName = 'صفحات الاختبار'
 $PageTimeoutSec = 20 * 60
@@ -373,25 +373,8 @@ function Invoke-HelperInstall {
   try { [Console]::OutputEncoding = [Text.Encoding]::UTF8 } catch { }
   Update-Path
   $found = Get-Tools
-  if (-not $found['codex']) {
-    Write-Host ''
-    Write-Host 'أثبّت Codex (برنامج ChatGPT)…'
-    try {
-      & powershell.exe -NoProfile -ExecutionPolicy Bypass -Command 'irm https://chatgpt.com/codex/install.ps1 | iex' | Out-Host
-    } catch { Write-Host "تعذّر تثبيت Codex: $_" }
-    Update-Path
-    $found = Get-Tools
-  }
-  if ($found['codex']) {
-    try {
-      $r = Invoke-Tool $found['codex'] @('login', 'status') $Local 60
-      if ($r.code -ne 0) {
-        Write-Host ''
-        Write-Host 'تُفتح الآن صفحة ChatGPT في المتصفح: سجّل الدخول بحسابك، ثم ارجع إلى هنا.'
-        & $found['codex'] login
-      }
-    } catch { Write-Host "تعذّر تسجيل الدخول إلى Codex الآن: $_" }
-  }
+  # The tools themselves (Grok Build, Antigravity, Codex) are installed and signed in by
+  # the user beforehand; the helper uses whichever it finds, now and later.
 
   # Start at every sign-in, hidden (a Unicode .vbs: the user's folder name may be Arabic).
   $startup = [Environment]::GetFolderPath('Startup')
