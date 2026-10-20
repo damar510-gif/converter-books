@@ -19,6 +19,15 @@ or key there, and the helper never calls a Google or GitHub API.
 | `helper-status.json` | helper | `{v, at, version, computer, busy, handled: [ids], lines: [{text, kind, path, linkText}], actions: [...]}` |
 | `probe.txt` | helper | Each tool's `--help`/`--version` and a one-word headless answer, rewritten when the helper's version or the set of tools changes: read it to fix the command lines in `helper.ps1`. |
 | `نتائج/<date> <kind> <model>/` | helper | `pNNN.md` per page, `log.txt`, `meta.json`. |
+| `كتب/<fileId>/` | Apps Script makes it; the run and the helper fill it | Transcription by the models in the boxes: see "Boxes" below. |
+| `مراجعة/<fileId>/` | Apps Script (copy of `drive-<fileId>/review/` in the results branch) | `items.json` and the place images; the helper adds `j-<model>-pNNNN.json` (each model's verdicts). |
+| `أحكام/<fileId>.json` | helper | The models' verdicts as answers (the user's answer form), kept and added to; `done` when no model in the box has anything left to judge. |
+
+`requests.json` also carries `boxes: {transcribe: [ids], review: [ids]}` (ids are
+`<tool>|<model>`), and `helper-status.json` also carries `models` (every model of the tools
+found: `{id, label, tool, warn}`), `chips` (`{id: {state: working|idle|exhausted|failing, text}}`
+for the models in the boxes) and `books` (`{fileId: {need, finished, book_at}}`, the helper's
+work on each book's pages).
 
 ## Install (once)
 
@@ -61,4 +70,31 @@ the limits) and that Grok 4.7 Fast costs twice as much.
 |---|---|---|
 | `test` | `model` = `tool\|model id`, `effort` = `low\|medium\|high` | Reads the six test pages; Claude compares the results with the checked texts (`crosscheck.compare`). |
 
-Planned: reading a whole book and judging its unsure places with a chosen model.
+## Boxes (docs/helper-boxes-plan.md)
+
+The user moves models into the left box of «التفريغ» or «مراجعة المشكوك فيه» on the status
+page (`setHelperBoxes`). Each cycle starts one hidden worker per tool with models in a box
+(`Invoke-BoxWorker`, `jobs/box-<tool>.json`); it takes jobs one by one, the tool's models
+in turn, and hands over to a fresh copy of the program after half an hour. A job is claimed
+with a file in `%LOCALAPPDATA%\ConverterHelper\claims`, so two workers never take the same.
+
+**Transcription** (`كتب/<fileId>/`). The conversion run writes `book.json` (`need`: the
+pages left to the helper, `need_a`: those without a first reading it could settle on,
+`lite_out`), `pNNNN.jpg` and `pNNNN.a.json` (the free model's reading, with `missing`: lines
+Tesseract saw that it may have dropped). The helper writes `pNNNN.hb.json` (the second
+reading), `pNNNN.final.json` (the settled text with `a_sha`/`b_sha`, sha1 of the two
+readings, first 12 hex), `pNNNN.ha.json` (a first reading: only when the free model ran out
+and another model in the box can give the second) and `pNNNN.skip.json` (every model in the
+box refused the page: the free model takes it). Jobs in order: settle, second reading,
+first reading; the two readings of a page always come from two models. Readings run at low
+effort, settling and judging at medium. Agreeing readings get `final.json` with no request.
+
+**Review** (`مراجعة/<fileId>/`). A model judges a page's places from the image (with the
+numbered frames) and `task.md`, answering a JSON array (`keep`, `fix` with `text`, or
+`unsure`). Each cycle turns the verdicts into answers: all models agree, and a risky
+correction (inserting a line, or changing more than six words) needs two of them. Places
+the models disagree on stay for the user; whole-page places are not offered to models.
+
+A tool's error naming its limit (429, quota, usage limit…) rests the model two hours,
+doubling each time (at most 12); a page a model refused, or failed twice, goes to another.
+Each model's state is in `chips-<tool>.json` and refused pages in `refused/<fileId>/`.

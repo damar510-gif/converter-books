@@ -125,6 +125,22 @@
   details { margin-top: 10px; }
   .tag { display: inline-block; font-size: .8rem; padding: 0 8px; border-radius: 999px; background: var(--ok-bg);
     color: var(--ok); margin-inline-start: 6px; }
+  /* The boxes: models on the user's computer, put to work by moving them to the left box */
+  .sec { border-top: 1px solid var(--line); padding-top: 10px; margin-top: 10px; }
+  .pair { display: flex; gap: 8px; margin-top: 8px; align-items: stretch; }
+  .box { flex: 1 1 0; min-width: 0; min-height: 110px; border: 2px dashed var(--line); border-radius: 12px;
+    padding: 6px; background: var(--bg); }
+  .box.on { border-color: var(--accent); }
+  .box.over { background: var(--ok-bg); }
+  .boxhead { font-size: .8rem; color: var(--muted); margin-bottom: 4px; }
+  button.chip { display: block; width: 100%; text-align: start; font-size: .9rem; font-weight: 500; padding: 6px 8px;
+    margin: 4px 0; border-radius: 10px; border: 1px solid var(--line); background: var(--card); color: var(--text);
+    cursor: grab; touch-action: manipulation; overflow-wrap: anywhere; }
+  button.chip.warn { border-color: var(--warn); }
+  .chip small { display: block; font-size: .75rem; color: var(--muted); line-height: 1.5; }
+  .chip small.warntext { color: var(--warn); }
+  .chip small.working { color: var(--ok); }
+  .chip small.exhausted, .chip small.failing { color: var(--bad); }
 </style>
 </head>
 <body>
@@ -136,6 +152,8 @@
   <section class="card" id="queue"></section>
 
   <section class="card" id="reviews" hidden></section>
+
+  <section class="card" id="boxes" hidden></section>
 
   <section class="card" id="helper" hidden></section>
 
@@ -283,6 +301,12 @@
       queue.appendChild(el('div', 'note warn', 'ملفات لن تُحوَّل لأن نوعها غير مدعوم (المدعوم: PDF و DOCX و TXT): ' +
         s.unsupported.join('، ')));
     }
+    // Books waiting in «2- قيد التحويل» without stopping the others.
+    (s.parked || []).forEach(function (p) {
+      queue.appendChild(el('div', 'muted', p.stage === 'helper'
+        ? '«' + p.title + '» ينتظر نماذجك على الجهاز' + (p.need ? ' (أنهت ' + p.finished + ' من ' + p.need + ' صفحة)' : '') + '.'
+        : '«' + p.title + '» ينتظر الحكّام حتى يتجدد رصيدهم.'));
+    });
 
     // Finished books.
     if (!s.recent.length) {
@@ -305,6 +329,8 @@
     });
 
     renderReviews(s);
+    LAST = s;
+    renderBoxes(s);
     renderHelper(s);
 
     // Folders and token.
@@ -957,6 +983,139 @@
     });
     box.appendChild(btn);
     return box;
+  }
+
+  // ------------------------------------------------------------------------
+  // The boxes: the models on the user's computer go to work when moved from the
+  // right box of a section to its left box (dragged on a computer, or tapped).
+  // ------------------------------------------------------------------------
+  var LAST = null;
+  var BOXES = null;
+  var BOXES_SAVING = 0;
+  var SECTIONS = [
+    { key: 'transcribe', title: 'التفريغ',
+      note: 'يقرأ النموذج المجاني الصفحة مرة، ونماذجك تقرؤها ثانيةً وتحسم الخلاف. إن نفد المجاني قامت نماذجك بالعمل كله.',
+      empty: 'فارغ: النموذج المجاني يعمل وحده.' },
+    { key: 'review', title: 'مراجعة المشكوك فيه',
+      note: 'نماذجك تحكم على مواضع الشك. التصحيح الكبير لا يُطبَّق إلا إذا اتفق عليه نموذجان، وإجابتك تغلب دائماً.',
+      empty: 'فارغ: المواضع تبقى لك.' }
+  ];
+
+  function modelOf(models, id) {
+    for (var i = 0; i < models.length; i++) if (models[i].id === id) return models[i];
+    return null;
+  }
+
+  function renderBoxes(s) {
+    var box = document.getElementById('boxes');
+    box.textContent = '';
+    var h = s && s.helper;
+    box.hidden = !h || !h.seen;
+    if (box.hidden) return;
+    // While a change is being saved, the page keeps showing it.
+    if (!BOXES_SAVING || !BOXES) {
+      var b = h.boxes || {};
+      BOXES = { transcribe: (b.transcribe || []).slice(), review: (b.review || []).slice() };
+    }
+    box.appendChild(el('h2', '', 'نماذجك على الجهاز'));
+    if (!h.connected) {
+      box.appendChild(el('div', 'note warn', 'جهازك غير متصل الآن، فلا يعمل أي نموذج حتى تفتحه.' +
+        (BOXES.transcribe.length ? ' إن طال الغياب أكمل النموذج المجاني الكتب وحده.' : '')));
+    }
+    var models = h.models || [];
+    if (!models.length) {
+      box.appendChild(el('div', 'muted', 'لم يجد المساعد بعد أي برنامج نماذج على جهازك.'));
+      return;
+    }
+    SECTIONS.forEach(function (sec) { box.appendChild(boxSection(sec, models, h, s)); });
+  }
+
+  function boxSection(sec, models, h, s) {
+    var wrap = el('div', 'sec');
+    wrap.appendChild(el('div', 'title', sec.title));
+    wrap.appendChild(el('div', 'muted', sec.note));
+    var on = BOXES[sec.key];
+    var pair = el('div', 'pair');
+    // Right to left: the first box is on the right.
+    var offBox = dropBox(sec.key, false, 'المتاحة: اسحب نموذجاً إلى اليسار أو المسه');
+    var onBox = dropBox(sec.key, true, 'تعمل الآن');
+    models.forEach(function (m) {
+      if (on.indexOf(m.id) < 0) offBox.appendChild(chip(sec.key, m, false, h));
+    });
+    on.forEach(function (id) {
+      var m = modelOf(models, id);
+      onBox.appendChild(chip(sec.key, m || { id: id, label: id, tool: '', gone: true }, true, h));
+    });
+    if (!on.length) onBox.appendChild(el('div', 'muted', sec.empty));
+    pair.appendChild(offBox);
+    pair.appendChild(onBox);
+    wrap.appendChild(pair);
+    return wrap;
+  }
+
+  function chip(sec, m, isOn, h) {
+    var b = el('button', 'chip' + (m.warn ? ' warn' : ''));
+    b.type = 'button';
+    b.draggable = true;
+    b.appendChild(el('span', '', m.label));
+    if (m.tool) b.appendChild(el('small', '', m.tool));
+    if (m.warn) b.appendChild(el('small', 'warntext', '⚠ ' + m.warn));
+    if (isOn) {
+      var c = (h.chips || {})[m.id];
+      var text = m.gone ? 'لم يعد على جهازك'
+        : c && c.text ? c.text
+        : h.connected ? 'يبدأ خلال دقيقة أو دقيقتين' : 'ينتظر أن يتصل جهازك';
+      b.appendChild(el('small', c ? c.state : '', text));
+    }
+    b.addEventListener('click', function () { moveChip(sec, m.id, !isOn); });
+    b.addEventListener('dragstart', function (e) {
+      e.dataTransfer.setData('text/plain', JSON.stringify({ id: m.id }));
+      e.dataTransfer.effectAllowed = 'move';
+    });
+    return b;
+  }
+
+  function dropBox(sec, isOn, head) {
+    var base = 'box' + (isOn ? ' on' : '');
+    var d = el('div', base);
+    d.appendChild(el('div', 'boxhead', head));
+    d.addEventListener('dragover', function (e) { e.preventDefault(); d.className = base + ' over'; });
+    d.addEventListener('dragleave', function () { d.className = base; });
+    d.addEventListener('drop', function (e) {
+      e.preventDefault();
+      d.className = base;
+      var x = null;
+      try { x = JSON.parse(e.dataTransfer.getData('text/plain')); } catch (err) { /* not a model */ }
+      if (x && x.id) moveChip(sec, String(x.id), isOn);
+    });
+    return d;
+  }
+
+  function moveChip(sec, id, toOn) {
+    var prev = BOXES;
+    var next = { transcribe: prev.transcribe.slice(), review: prev.review.slice() };
+    next[sec] = next[sec].filter(function (x) { return x !== id; });
+    if (toOn) next[sec].push(id);
+    if (JSON.stringify(next) === JSON.stringify(prev)) return;
+    BOXES = next;
+    BOXES_SAVING++;
+    renderBoxes(LAST);
+    setMsg('جارٍ الحفظ…');
+    var undo = function (why) {
+      BOXES_SAVING--;
+      BOXES = prev;
+      setMsg('تعذّر الحفظ: ' + why);
+      renderBoxes(LAST);
+    };
+    google.script.run
+      .withSuccessHandler(function (text) {
+        var r = parse(text);
+        if (!r.ok) return undo(r.error || '');
+        BOXES_SAVING--;
+        setMsg(toOn ? 'يبدأ خلال دقيقة أو دقيقتين إن كان جهازك مفتوحاً.' : 'يكمل ما بين يديه ثم يتوقف.');
+      })
+      .withFailureHandler(function (err) { undo(errText(err)); })
+      .setHelperBoxes(JSON.stringify(next));
   }
 
   render(INITIAL);

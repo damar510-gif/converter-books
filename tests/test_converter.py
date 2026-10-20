@@ -101,7 +101,9 @@ class ResolveModels(unittest.TestCase):
         self.assertEqual(c.resolve_models(pool, ["a", "b"]), ["a", "b"])
 
 
-class Pipeline(unittest.TestCase):
+class PipelineBase(unittest.TestCase):
+    """Runs the converter on pages of the test book with scripted models (no tests here)."""
+
     def setUp(self):
         self.tmp = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, self.tmp)
@@ -143,6 +145,8 @@ class Pipeline(unittest.TestCase):
                 recs[r["page"]] = r
         return recs
 
+
+class Pipeline(PipelineBase):
     def test_agreement_needs_no_third_request(self):
         code, st, md, fake = self.run_book({
             "gemini-3.5-flash-lite": lambda p, n: answer(TRUE),
