@@ -1,7 +1,7 @@
 # The helper on the user's computer
 
 A small PowerShell program on the user's Windows computer that runs the subscription
-tools there (Grok Build `grok`, Antigravity `agy`, Codex `codex`) when the user asks for
+tools there (Grok Build `grok`, Antigravity `agy`, Codex `codex`, Claude Code `claude`) when the user asks for
 it on the status page. It is optional: the converter itself never waits for it.
 
 ## No token leaves Google

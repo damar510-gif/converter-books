@@ -1,10 +1,10 @@
 # The helper's work (docs/helper.md), loaded by launcher.ps1 every minute from the synced
 # Drive folder. It reads requests.json (written by the status page's script), runs the
-# subscription tools on this computer (Grok Build, Antigravity, Codex), writes the
+# subscription tools on this computer (Grok Build, Antigravity, Codex, Claude Code), writes the
 # results under «نتائج», and reports in helper-status.json, which the status page shows.
 # Windows PowerShell 5.1: no ?? or ?: operators.
 
-$HelperVersion = '2026-10-20.5'
+$HelperVersion = '2026-10-20.6'
 $ResultsName = 'نتائج'
 $TestPagesName = 'صفحات الاختبار'
 $PageTimeoutSec = 20 * 60
@@ -33,6 +33,12 @@ $Tools = [ordered]@{
       @{ id = 'gpt-5.6-sol'; label = 'GPT-5.6 Sol' },
       @{ id = 'gpt-5.6-terra'; label = 'GPT-5.6 Terra' },
       @{ id = 'gpt-5.6-luna'; label = 'GPT-5.6 Luna' }) }
+  # Claude Code on the user's Claude subscription (the same models through Antigravity use
+  # the Google AI Pro quota instead). Its model aliases always name the newest of each.
+  claude = @{ label = 'Claude Code'; models = @(
+      @{ id = 'sonnet'; label = 'Claude Sonnet (اشتراك Claude)' },
+      @{ id = 'opus'; label = 'Claude Opus (اشتراك Claude، يستهلك الحدود بسرعة)' },
+      @{ id = 'haiku'; label = 'Claude Haiku (اشتراك Claude)' }) }
 }
 $Efforts = [ordered]@{ low = 'جهد منخفض'; medium = 'جهد متوسط'; high = 'جهد عالٍ' }
 
@@ -170,6 +176,7 @@ function Invoke-Probe($found) {
   $checks = @{
     grok  = @(@('--version'), @('models'), @('-p', 'Reply with the single word OK.', '--output-format', 'plain', '--tools', 'read_file', '--no-auto-update'))
     agy   = @(@('--version'), @('models'), @('-p', 'Reply with the single word OK.', '--model', 'gemini-3.8-flash'))
+    claude = @(@('--version'), @('--help'), @('-p', 'Reply with the single word OK.', '--model', 'haiku'))
     codex = @(@('--version'), @('login', 'status'), @('exec', '--help'), @('exec', '--skip-git-repo-check', '--sandbox', 'read-only', 'Reply with the single word OK.'))
   }
   foreach ($name in $Tools.Keys) {
@@ -212,6 +219,11 @@ function Invoke-Page([string]$tool, [string]$exe, [string]$model, [string]$effor
       if ($model) { $a += @('-m', $model) }
       if ($effort) { $a += @('-c', "model_reasoning_effort=$effort") }
       $a += @('-i', 'page.png')
+    }
+    'claude' {
+      $a = @('-p', $ToolPrompt, '--output-format', 'text', '--allowedTools', 'Read',
+        '--disallowedTools', 'Bash,Edit,Write,NotebookEdit,WebFetch,WebSearch,Task')
+      if ($model) { $a += @('--model', $model) }
     }
   }
   $r = Invoke-Tool $exe $a $dir $PageTimeoutSec
