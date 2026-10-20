@@ -39,7 +39,10 @@ choice); the helper uses whichever it finds, and finds tools added later too.
 
 `launcher.ps1` loads `البرنامج/helper.ps1` (so a change in `helper/` reaches the
 computer within about ten minutes, with no step from the user) and runs one cycle: finds the
-tools, probes them when needed, runs the first request it has not done, and writes
+tools, probes them when needed, starts each new request in its own hidden PowerShell
+(`worker.ps1`, files in `%LOCALAPPDATA%\ConverterHelper\jobs`), so different tools work
+at the same time while one tool takes one request at a time (its requests share its
+limits), files the finished ones, and writes
 `helper-status.json`. The status page shows its `lines` and its `actions` (buttons with
 choices), so new buttons need no change to `Code.gs` or `Page.html`. The Apps Script drops
 a request from `requests.json` once its id is in `handled`.
