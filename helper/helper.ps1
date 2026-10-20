@@ -4,7 +4,7 @@
 # results under «نتائج», and reports in helper-status.json, which the status page shows.
 # Windows PowerShell 5.1: no ?? or ?: operators.
 
-$HelperVersion = '2026-10-20.4'
+$HelperVersion = '2026-10-20.5'
 $ResultsName = 'نتائج'
 $TestPagesName = 'صفحات الاختبار'
 $PageTimeoutSec = 20 * 60
@@ -168,8 +168,8 @@ function Invoke-Probe($found) {
   $sb = New-Object Text.StringBuilder
   [void]$sb.AppendLine("helper $HelperVersion on $env:COMPUTERNAME, PowerShell $($PSVersionTable.PSVersion), $(Now-Iso)")
   $checks = @{
-    grok  = @(@('--version'), @('--help'), @('-p', 'Reply with the single word OK.', '--output-format', 'plain', '--tools', 'read_file', '--no-auto-update'))
-    agy   = @(@('--version'), @('--help'), @('-p', 'Reply with the single word OK.', '--model', 'gemini-3.8-flash'))
+    grok  = @(@('--version'), @('models'), @('-p', 'Reply with the single word OK.', '--output-format', 'plain', '--tools', 'read_file', '--no-auto-update'))
+    agy   = @(@('--version'), @('models'), @('-p', 'Reply with the single word OK.', '--model', 'gemini-3.8-flash'))
     codex = @(@('--version'), @('login', 'status'), @('exec', '--help'), @('exec', '--skip-git-repo-check', '--sandbox', 'read-only', 'Reply with the single word OK.'))
   }
   foreach ($name in $Tools.Keys) {
@@ -205,6 +205,7 @@ function Invoke-Page([string]$tool, [string]$exe, [string]$model, [string]$effor
     'agy' {
       $a = @('-p', $ToolPrompt)
       if ($model) { $a += @('--model', $model) }
+      if ($effort) { $a += @('--effort', $effort) }
     }
     'codex' {
       $a = @('exec', $ToolPrompt, '--skip-git-repo-check', '--sandbox', 'read-only', '-C', $dir, '-o', $outFile)
