@@ -4,7 +4,7 @@
 # results under «نتائج», and reports in helper-status.json, which the status page shows.
 # Windows PowerShell 5.1: no ?? or ?: operators.
 
-$HelperVersion = '2026-10-20.7'
+$HelperVersion = '2026-10-20.8'
 $ResultsName = 'نتائج'
 $TestPagesName = 'صفحات الاختبار'
 $PageTimeoutSec = 20 * 60
@@ -243,7 +243,14 @@ function Invoke-Page([string]$tool, [string]$exe, [string]$model, [string]$effor
 # Requests
 # ---------------------------------------------------------------------------
 
-$script:Progress = ''
+# Each request runs in its own hidden PowerShell (a worker), so different tools work at
+# the same time; one tool runs one request at a time, since its requests share its limits.
+$Jobs = Join-Path $Local 'jobs'
+$script:JobId = ''
+
+function Set-Progress([string]$text) {
+  if ($script:JobId) { Write-Utf8 (Join-Path $Jobs "$($script:JobId).progress") $text }
+}
 
 function Model-Label([string]$tool, [string]$model) {
   foreach ($m in $Tools[$tool].models) { if ($m.id -eq $model) { return $m.label } }
@@ -252,7 +259,7 @@ function Model-Label([string]$tool, [string]$model) {
 
 # The six hard pages of «تراث الإنسانية» (results branch, compare/pages), read by one
 # model; Claude compares the texts with the checked ones.
-function Invoke-Test($req, $found, $state) {
+function Invoke-Test($req, $found) {
   $parts = ([string]$req.choices.model) -split '\|', 2
   $tool = $parts[0]
   $model = if ($parts.Count -gt 1) { $parts[1] } else { '' }
@@ -277,8 +284,7 @@ function Invoke-Test($req, $found, $state) {
   $i = 0
   foreach ($png in $pages) {
     $i++
-    $script:Progress = "${label}: الصفحة $i من $($pages.Count)"
-    Write-Status $found $state $req.id
+    Set-Progress "${label}: الصفحة $i من $($pages.Count)"
     $stem = [IO.Path]::GetFileNameWithoutExtension($png.Name)
     $dir = Join-Path $work $stem
     New-Item -ItemType Directory -Force -Path $dir | Out-Null
@@ -305,9 +311,9 @@ function Invoke-Test($req, $found, $state) {
     path = "$ResultsName/$name"; linkText = 'النتائج' }
 }
 
-function Invoke-Request($req, $found, $state) {
+function Invoke-Request($req, $found) {
   switch ([string]$req.action) {
-    'test' { return Invoke-Test $req $found $state }
+    'test' { return Invoke-Test $req $found }
     default { return @{ text = "طلب لا يعرفه المساعد بعد: $($req.action)"; kind = 'warn' } }
   }
 }
@@ -316,7 +322,8 @@ function Invoke-Request($req, $found, $state) {
 # Status for the page
 # ---------------------------------------------------------------------------
 
-function Write-Status($found, $state, [string]$busy) {
+function Write-Status($found, $state, $running) {
+  $running = @($running)
   $names = @()
   $missing = @()
   foreach ($name in $Tools.Keys) {
@@ -326,7 +333,11 @@ function Write-Status($found, $state, [string]$busy) {
   $toolsText = 'البرامج على الجهاز: ' + $(if ($names.Count) { $names -join '، ' } else { 'لا شيء' })
   if ($missing.Count) { $toolsText += ' (غير موجود: ' + ($missing -join '، ') + ')' }
   $lines += @{ text = $toolsText }
-  if ($busy -and $script:Progress) { $lines += @{ text = 'التقدم: ' + $script:Progress } }
+  foreach ($j in $running) {
+    $p = Join-Path $Jobs "$($j.id).progress"
+    $now = if (Test-Path -LiteralPath $p) { Read-Utf8 $p } else { $j.label }
+    $lines += @{ text = 'يعمل الآن: ' + $now }
+  }
   foreach ($r in @($state.results)) { if ($r) { $lines += $r } }
 
   $choices = @()
@@ -347,7 +358,8 @@ function Write-Status($found, $state, [string]$busy) {
     }
   }
   $status = [ordered]@{
-    v = 1; at = (Now-Iso); version = $HelperVersion; computer = $env:COMPUTERNAME; busy = $busy
+    v = 1; at = (Now-Iso); version = $HelperVersion; computer = $env:COMPUTERNAME
+    busy = $(if ($running.Count) { [string]$running[0].id } else { '' })
     handled = @($state.done); lines = $lines; actions = $actions
   }
   Write-Utf8 (Join-Path $Folder 'helper-status.json') ($status | ConvertTo-Json -Depth 8)
@@ -357,41 +369,106 @@ function Write-Status($found, $state, [string]$busy) {
 # Entry points (called by launcher.ps1)
 # ---------------------------------------------------------------------------
 
+function Request-Tool($req) {
+  if ([string]$req.action -eq 'test') { return ((([string]$req.choices.model) -split '\|', 2)[0]) }
+  return ''
+}
+
+# The requests whose workers are still running; finished or vanished ones are filed.
+function Update-Jobs($state) {
+  $running = @()
+  if (-not (Test-Path -LiteralPath $Jobs)) { return $running }
+  foreach ($f in @(Get-ChildItem -LiteralPath $Jobs -Filter '*.running.json')) {
+    $j = Read-Json $f.FullName
+    $id = $f.Name -replace '\.running\.json$', ''
+    $resultFile = Join-Path $Jobs "$id.result.json"
+    $result = $null
+    if (Test-Path -LiteralPath $resultFile) {
+      $result = Read-Json $resultFile
+      if (-not $result) { $result = @{ text = "انتهى الطلب «$($j.label)» بلا نتيجة مقروءة."; kind = 'bad' } }
+    } elseif (-not ($j -and (Get-Process -Id ([int]$j.pid) -ErrorAction SilentlyContinue))) {
+      $result = @{ text = "توقف الطلب «$($j.label)» قبل أن ينتهي (أُغلق الجهاز؟). اطلبه مرة أخرى."; kind = 'bad' }
+    }
+    if ($result) {
+      Write-Log "request $id finished"
+      $state.done = @($state.done) + $id
+      $state.results = @($state.results) + $result
+      foreach ($x in 'running.json', 'result.json', 'req.json', 'progress') {
+        Remove-Item -LiteralPath (Join-Path $Jobs "$id.$x") -Force -ErrorAction SilentlyContinue
+      }
+    } else {
+      $running += @{ id = $id; tool = [string]$j.tool; label = [string]$j.label }
+    }
+  }
+  return $running
+}
+
+function Start-Worker($req) {
+  New-Item -ItemType Directory -Force -Path $Jobs | Out-Null
+  $id = [string]$req.id
+  Write-Utf8 (Join-Path $Jobs "$id.req.json") ($req | ConvertTo-Json -Depth 6)
+  # The worker loads the same copy of this file that the launcher saved (core.ps1).
+  $q = { param($t) "'" + ($t -replace "'", "''") + "'" }
+  $worker = Join-Path $Local 'worker.ps1'
+  $text = "param([string]`$Id)`r`n`$ErrorActionPreference = 'Stop'`r`n" +
+    "`$Local = $(& $q $Local)`r`n`$Folder = $(& $q $Folder)`r`n" +
+    "function Write-Log([string]`$t) { try { Add-Content -Path (Join-Path `$Local 'helper.log') -Value ((Get-Date).ToString('yyyy-MM-dd HH:mm:ss') + ' [' + `$Id + '] ' + `$t) -Encoding UTF8 } catch { } }`r`n" +
+    "function Read-Utf8([string]`$path) { return [Text.Encoding]::UTF8.GetString([IO.File]::ReadAllBytes(`$path)).TrimStart([char]0xFEFF) }`r`n" +
+    ". ([scriptblock]::Create((Read-Utf8 (Join-Path `$Local 'core.ps1'))))`r`n" +
+    "Invoke-HelperWorker `$Id`r`n"
+  [IO.File]::WriteAllText($worker, $text, (New-Object Text.UTF8Encoding $true))
+  $p = Start-Process -FilePath 'powershell.exe' -WindowStyle Hidden -PassThru -ArgumentList @(
+    '-NoProfile', '-ExecutionPolicy', 'Bypass', '-WindowStyle', 'Hidden', '-File', ('"' + $worker + '"'), '-Id', $id)
+  $label = if ($req.label) { [string]$req.label } else { [string]$req.action }
+  Write-Utf8 (Join-Path $Jobs "$id.running.json") (@{ pid = $p.Id; tool = (Request-Tool $req); label = $label; at = (Now-Iso) } | ConvertTo-Json)
+  Write-Log "request $id started ($($req.action), pid $($p.Id))"
+}
+
+# One request, in its own process (worker.ps1).
+function Invoke-HelperWorker([string]$id) {
+  $script:JobId = $id
+  $resultFile = Join-Path $Jobs "$id.result.json"
+  try {
+    Update-Path
+    $req = Read-Json (Join-Path $Jobs "$id.req.json")
+    $result = Invoke-Request $req (Get-Tools)
+  } catch {
+    Write-Log "failed: $_"
+    $result = @{ text = "تعذّر تنفيذ الطلب «$($req.label)»: $_"; kind = 'bad' }
+  }
+  $result.at = (Now-Iso)
+  Write-Utf8 $resultFile ($result | ConvertTo-Json -Depth 5)
+}
+
 function Invoke-HelperCycle {
   Update-Path
   $found = Get-Tools
   $state = Load-State
   $probeKey = $HelperVersion + ':' + (($Tools.Keys | Where-Object { $found[$_] }) -join ',')
   if ($state.probed -ne $probeKey) {
-    Write-Status $found $state ''
+    Write-Status $found $state @()
     try { Invoke-Probe $found } catch { Write-Log "probe failed: $_" }
     $state.probed = $probeKey
-    Save-State $state
   }
+  $running = @(Update-Jobs $state)
+  $busyTools = @($running | ForEach-Object { $_.tool })
   $reqs = Read-Json (Join-Path $Folder 'requests.json')
-  $next = $null
   if ($reqs) {
     foreach ($r in @($reqs.requests)) {
-      if ($r -and $r.id -and -not (@($state.done) -contains $r.id)) { $next = $r; break }
+      if (-not ($r -and $r.id) -or (@($state.done) -contains $r.id) -or (@($running | ForEach-Object { $_.id }) -contains $r.id)) { continue }
+      $tool = Request-Tool $r
+      if ($tool -and ($busyTools -contains $tool)) { continue }
+      try {
+        Start-Worker $r
+        $running += @{ id = [string]$r.id; tool = $tool; label = [string]$r.label }
+        $busyTools += $tool
+      } catch {
+        Write-Log "request $($r.id) could not start: $_"
+      }
     }
   }
-  if (-not $next) {
-    Write-Status $found $state ''
-    return
-  }
-  Write-Log "request $($next.id) $($next.action)"
-  try {
-    $result = Invoke-Request $next $found $state
-  } catch {
-    Write-Log "request $($next.id) failed: $_"
-    $result = @{ text = "تعذّر تنفيذ الطلب «$($next.label)»: $_"; kind = 'bad' }
-  }
-  $script:Progress = ''
-  $result.at = (Now-Iso)
-  $state.done = @($state.done) + $next.id
-  $state.results = @($state.results) + $result
   Save-State $state
-  Write-Status $found $state ''
+  Write-Status $found $state $running
 }
 
 function Invoke-HelperInstall {
