@@ -148,7 +148,7 @@
   .times .trow { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-top: 4px; }
   .times input, .times select { font: inherit; padding: 4px 6px; border-radius: 8px; border: 1px solid var(--line);
     background: var(--card); color: var(--text); }
-  .times input { width: 4.5em; }
+  .times input { width: 7em; }
   .times button { width: auto; padding: 4px 10px; }
   #boxes h2 { font-size: 1.15rem; }
   .sec { border-top: 1px solid var(--line); padding-top: 14px; margin-top: 14px; }
@@ -1231,8 +1231,8 @@
     return d;
   }
 
-  // When a model may work: "يبدأ بعد" and "يتوقف بعد" a number of minutes, hours or days.
-  var UNITS = [{ v: 1, t: 'دقيقة' }, { v: 60, t: 'ساعة' }, { v: 1440, t: 'يوم' }];
+  // When a model may work: "يبدأ" and "يتوقف" at a day and a clock time.
+  var DAYS = ['اليوم', 'غداً', 'بعد غد'];
 
   function timeRows(m) {
     var t = BOXES.times[m.id] || {};
@@ -1242,26 +1242,39 @@
     return box;
   }
 
+  function dayName(offset) {
+    if (offset < DAYS.length) return DAYS[offset];
+    var d = new Date();
+    d.setDate(d.getDate() + offset);
+    try {
+      return d.toLocaleDateString('ar', { calendar: 'gregory', numberingSystem: 'latn', weekday: 'long', day: 'numeric', month: 'long' });
+    } catch (e) {
+      return d.toDateString();
+    }
+  }
+
   function timeRow(id, key, label, iso, none) {
     var row = el('div', 'trow');
     var at = Date.parse(iso || '');
     var later = isFinite(at) && at > Date.now();
-    row.appendChild(el('span', '', label + ': ' + (later ? 'نحو ' + when(iso) : key === 'stop' && isFinite(at) ? 'توقّف' : none) + '، أو بعد'));
-    var num = el('input');
-    num.type = 'number';
-    num.min = '0';
-    num.inputMode = 'numeric';
-    row.appendChild(num);
-    var unit = el('select');
-    UNITS.forEach(function (u) { var o = el('option', '', u.t); o.value = String(u.v); unit.appendChild(o); });
-    unit.value = '60';
-    row.appendChild(unit);
+    row.appendChild(el('span', '', label + ': ' + (later ? when(iso) : key === 'stop' && isFinite(at) ? 'توقّف' : none) + '. غيّره إلى'));
+    var day = el('select');
+    for (var i = 0; i < 8; i++) { var o = el('option', '', dayName(i)); o.value = String(i); day.appendChild(o); }
+    row.appendChild(day);
+    row.appendChild(el('span', '', 'الساعة'));
+    var clock = el('input');
+    clock.type = 'time';
+    row.appendChild(clock);
     var set = el('button', 'small plain', 'حدّد');
     set.type = 'button';
     set.addEventListener('click', function () {
-      var n = Number(num.value);
-      if (!(n > 0)) return setMsg('اكتب عدداً أكبر من صفر.');
-      setTime(id, key, new Date(Date.now() + n * Number(unit.value) * 60000).toISOString());
+      var hm = /^(\d{1,2}):(\d{2})/.exec(clock.value || '');
+      if (!hm) return setMsg('اختر الساعة.');
+      var d = new Date();
+      d.setDate(d.getDate() + Number(day.value));
+      d.setHours(Number(hm[1]), Number(hm[2]), 0, 0);
+      if (d.getTime() <= Date.now()) return setMsg('هذا الوقت مضى، اختر وقتاً بعد الآن.');
+      setTime(id, key, d.toISOString());
     });
     row.appendChild(set);
     if (isFinite(at)) {
@@ -1278,7 +1291,7 @@
     var t = next.times[id] || {};
     t[key] = iso;
     if (t.start || t.stop) next.times[id] = t; else delete next.times[id];
-    saveBoxes(next, key === 'start' ? (iso ? 'يبدأ نحو ' + when(iso) + '.' : 'يبدأ الآن.') : (iso ? 'يتوقف نحو ' + when(iso) + '.' : 'لا يتوقف.'));
+    saveBoxes(next, key === 'start' ? (iso ? 'يبدأ ' + when(iso) + '.' : 'يبدأ الآن.') : (iso ? 'يتوقف ' + when(iso) + '.' : 'لا يتوقف.'));
   }
 
   function copyBoxes(b) {

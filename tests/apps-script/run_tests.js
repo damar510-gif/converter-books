@@ -2475,17 +2475,26 @@ test('the page: models move between the boxes with a tap (or a drag), are saved,
   page.answer(call, env.ctx.setHelperBoxes(call.args[0]));
   assert.deepStrictEqual(JSON.parse(env.props.get('HELPER_BOXES')).transcribe, [GEMINI, GROK]);
 
-  // A start time: Grok begins in 90 minutes.
+  // A start time: Grok begins tomorrow at 14:30 (local time).
   const find = (node, pred) => { if (pred(node)) return node; for (const k of node.kids || []) { const f = find(k, pred); if (f) return f; } return null; };
   let onBox = pair(boxes.kids.filter((k) => k.className === 'sec')[0]).kids[1];
   const times = onBox.kids.filter((k) => k.className === 'times')[1];
   const startRow = times.kids[0];
-  startRow.kids.find((k) => k.tag === 'input').value = '90';
-  startRow.kids.find((k) => k.tag === 'select').value = '1';
+  const daySel = startRow.kids.find((k) => k.tag === 'select');
+  const clock = startRow.kids.find((k) => k.tag === 'input');
+  daySel.value = '0';
+  clock.value = '00:00';
+  page.click(find(startRow, (k) => k.tag === 'button' && k.own === 'حدّد'));
+  assert.strictEqual(page.pending('setHelperBoxes').length, 0, 'a time already past is not saved');
+  assert.ok(/مضى/.test(page.byId.msg.textContent));
+  daySel.value = '1';
+  clock.value = '14:30';
   page.click(find(startRow, (k) => k.tag === 'button' && k.own === 'حدّد'));
   const timed = JSON.parse(page.pending('setHelperBoxes')[0].args[0]);
-  const wait = (Date.parse(timed.times[GROK].start) - Date.now()) / 60000;
-  assert.ok(wait > 88 && wait < 92, 'starts in 90 minutes: ' + wait);
+  const expect = new Date();
+  expect.setDate(expect.getDate() + 1);
+  expect.setHours(14, 30, 0, 0);
+  assert.strictEqual(Date.parse(timed.times[GROK].start), expect.getTime(), 'tomorrow at 14:30');
   page.answer(page.pending('setHelperBoxes')[0], env.ctx.setHelperBoxes(JSON.stringify(timed)));
   assert.strictEqual(JSON.parse(env.props.get('HELPER_BOXES')).times[GROK].start, timed.times[GROK].start);
 
