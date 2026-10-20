@@ -1,34 +1,32 @@
 # تقرير التحويل
 
 - عدد الصفحات: 263
-- صُححت بمقارنة القراءتين على الصورة: 198
-- لم تُحسم (مشكوك فيها): 65
-- طلبات gemini-3.8-flash في هذا التشغيل: 5
-- طلبات gemini-3.7-flash في هذا التشغيل: 2
-- طلبات gemini-3.6-flash في هذا التشغيل: 21
+- صُححت بمقارنة القراءتين على الصورة: 199
+- لم تُحسم (مشكوك فيها): 64
+- طلبات gemini-3.7-flash في هذا التشغيل: 3
+- طلبات gemini-3.8-flash في هذا التشغيل: 3
+- طلبات gemini-3.6-flash في هذا التشغيل: 4
 - طلبات gemini-3-flash في هذا التشغيل: 1
 - طلبات gemini-2.5-flash في هذا التشغيل: 1
-- طلبات gemini-3.5-flash-lite في هذا التشغيل: 1
 
-**القراءة اكتملت، و56 صفحة تنتظر الحكّام** (انتهى رصيدهم اليومي). تُعرض عليهم بعد تجدده، ثم يُسلَّم الكتاب.
+**القراءة اكتملت، و49 صفحة تنتظر الحكّام** (انتهى رصيدهم اليومي). تُعرض عليهم بعد تجدده، ثم يُسلَّم الكتاب.
 
-صفحات مشكوك فيها (اختلفت القراءتان ولم يُحسم الخلاف، أو يبدو أن فيها سطراً ساقطاً): 6، 14، 16، 18-19، 29، 32-33، 36-37، 47، 71، 79، 89، 93-95، 101، 104، 110، 113، 122-123، 125، 129-131، 133-135، 139، 141-145، 149-153، 155، 158، 170، 172، 176، 182-185، 188، 190-191، 211-212، 216، 218، 222، 225، 236، 241-242، 244، 246-247
+صفحات مشكوك فيها (اختلفت القراءتان ولم يُحسم الخلاف، أو يبدو أن فيها سطراً ساقطاً): 6، 14، 16، 18-19، 29، 32-33، 36-37، 47، 71، 89، 93-95، 101، 104، 110، 113، 122-123، 125، 129-131، 133-135، 139، 141-145، 149-153، 155، 158، 170، 172، 176، 182-185، 188، 190-191، 211-212، 216، 218، 222، 225، 236، 241-242، 244، 246-247
 - ص 6:   [gemini-3.8-flash: used, 2 lines may be missing]
-- ص 14:   [gemini-3.8-flash: no answer: error 503 UNAVAILABLE. {'error': {'code': 503, 'message': 'This model is current]
+- ص 14:   [gemini-3.7-flash: used, 1 lines may be missing]
 - ص 16:   [gemini-3.6-flash: used, 2 lines may be missing]
 - ص 18:   [gemini-3.6-flash: used, 1 lines may be missing]
-- ص 19: «الحركة» / «الحركات»؛ «اثنين» / «اللين»؛ «والضغطَة» / «والضغط»  [gemini-3.1-flash-lite: chars=2843 finish=FinishReason.STOP؛ gemini-3.6-flash: rejected: drops text the readings agree on]
+- ص 19: «الحركة» / «الحركات»؛ «اثنين» / «اللين»؛ «والضغطَة» / «والضغط»  [gemini-3.1-flash-lite: chars=2843 finish=FinishReason.STOP؛ gemini-3.8-flash: rejected: drops text the readings agree on]
 - ص 29:   [gemini-3.6-flash: used, 1 lines may be missing]
 - ص 32:   [gemini-3.6-flash: used, 1 lines may be missing]
 - ص 33:   [gemini-3.6-flash: used, 1 lines may be missing]
 - ص 36:   [gemini-3.6-flash: used, 1 lines may be missing]
 - ص 37:   [gemini-3.6-flash: used, 2 lines may be missing]
 - ص 47:   [gemini-3.6-flash: used, 1 lines may be missing]
-- ص 71: «من السعادة إلى الشقاء أو العكس كما أن التغير» / «—»؛ «peripeiteia والتعرف anagnorisis لا يشيران إلى» / «—»؛ «شخص ذاته ويشير جون جونز بحق إلى صعوبة» / «—»  [gemini-3.5-flash-lite: chars=3211 finish=FinishReason.STOP؛ gemini-3.6-flash: rejected: drops text the readings agree on]
-- ص 79: 
-- ص 89: 
-- ص 93: 
-- ص 94: 
+- ص 71: «من السعادة إلى الشقاء أو العكس كما أن التغير» / «—»؛ «peripeiteia والتعرف anagnorisis لا يشيران إلى» / «—»؛ «شخص ذاته ويشير جون جونز بحق إلى صعوبة» / «—»  [gemini-3.5-flash-lite: chars=3211 finish=FinishReason.STOP؛ gemini-3.8-flash: rejected: drops text the readings agree on]
+- ص 89:   [gemini-3.6-flash: used, 1 lines may be missing]
+- ص 93:   [gemini-3.6-flash: used, 2 lines may be missing]
+- ص 94:   [gemini-3.6-flash: used, 1 lines may be missing]
 - ص 95: 
 - ص 101: 
 - ص 104: «تعرض» / «تتعرض»؛ «وتدركي ما يعجزون عن فهمه» / «—»؛ «من» / «—»  [gemini-3.1-flash-lite: chars=2161 finish=FinishReason.STOP]
@@ -43,3 +41,4 @@
 - ص 133: 
 - ص 134: 
 - ص 135: 
+- ص 139: «وتعاستها وتدعى أن الله هو الذي أراد لها الشقاء» / «—»؛ «بححب» / «بحب»؛ «وتواسيتها مرجريت قائلة ما حاجتنا إلى أقاربك» / «—»  [gemini-3.1-flash-lite: chars=3248 finish=FinishReason.STOP]
