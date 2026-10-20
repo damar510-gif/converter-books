@@ -684,7 +684,7 @@ function refineNext_(ctx) {
     if (j.stage === 'delivered' && !j.refineDone && j.unsure === undefined) backfill_(ctx, j);
     if (j.stage !== 'delivered' || j.refineDone || !(j.unsure > 0) || j.refineDay === today) return;
     if ((j.refines || 0) >= CONFIG.MAX_REFINES) {
-      finalize_(ctx, j, true);
+      stopRefining_(ctx, j);
       return;
     }
     if (!pick || String(j.finishedAt) < String(pick.finishedAt)) pick = j;
@@ -742,8 +742,26 @@ function backfill_(ctx, job) {
  * The book will not change any more: its EPUB and report move to "6- مكتمل".
  * With mail, the user is told which pages (if any) are still unsure.
  */
+/**
+ * The judges cannot improve the book any more, but pages are still unsure: no more
+ * improvement rounds, and the book stays in "3- جاهز" until the user's review brings
+ * its unsure pages to none (only then it is finished, see finalize_).
+ */
+function stopRefining_(ctx, job) {
+  job.refineDone = true;
+  saveJobs_(ctx.jobs);
+  var rv = loadRv_(job.fileId);
+  sendMail_('انتهت مراجعة النماذج: ' + job.title, [
+    'لم تعد النماذج تحسّن «' + job.title + '» أكثر.',
+    'بقيت ' + job.unsure + ' صفحة مشكوكاً فيها' + (job.unsureList ? ' (' + job.unsureList + ')' : '') +
+      '، فيبقى الكتاب في «' + CONFIG.FOLDERS.ready + '» حتى تراجعها، ثم يُنقل إلى «' + CONFIG.FOLDERS.final + '».'
+  ].concat(reviewLines_(job, rv)));
+}
+
+/** No page is unsure any more: the book moves to "6- مكتمل" and will not change. */
 function finalize_(ctx, job, mail) {
   job.refineDone = true;
+  job.final = true;
   [job.epubId, job.reportId].forEach(function (id) {
     if (!id) return;
     try { DriveApp.getFileById(id).moveTo(ctx.folders.final); } catch (err) { Logger.log('final move ' + id + ': ' + err); }
@@ -1101,8 +1119,6 @@ function startReviewRound_(ctx, job, prepare) {
   if (again.driveName) job.driveName = again.driveName;
   job.humanRound = true;
   if (prepare) job.prepareRound = true;
-  // The new EPUB goes where the old one is ("3- جاهز" or "6- مكتمل").
-  job.humanFolderId = parentId_(job.epubId) || ctx.folders.ready.getId();
   job.oldEpubId = job.epubId || '';
   job.oldReportId = job.reportId || '';
   job.epubId = '';
@@ -1112,16 +1128,6 @@ function startReviewRound_(ctx, job, prepare) {
   job.pendingCount = false;
   saveJobs_(ctx.jobs);
   return (prepare ? 'preparing ' : 'review ') + job.fileId + ': ' + dispatch_(ctx, job, false);
-}
-
-function parentId_(fileId) {
-  if (!fileId) return '';
-  try {
-    var parents = DriveApp.getFileById(fileId).getParents();
-    return parents.hasNext() ? parents.next().getId() : '';
-  } catch (err) {
-    return '';
-  }
 }
 
 function advanceReview_(ctx, job) {
@@ -1191,9 +1197,8 @@ function deliverReview_(ctx, job, s) {
   var used = (Number(s.review_applied) || 0) + (Number(s.review_kept) || 0);
   // A preparation round that applied no answer keeps the book the user already has.
   var keepOld = prepare && !used;
-  var folder = null;
-  try { folder = DriveApp.getFolderById(job.humanFolderId); } catch (err) { /* gone */ }
-  if (!folder || folder.isTrashed()) folder = ctx.folders.ready;
+  // The new EPUB goes to "3- جاهز"; finalize_ moves it on when nothing is unsure.
+  var folder = ctx.folders.ready;
   if (!keepOld && !job.epubId) {
     var epubName = String(s.epub || '').trim();
     if (!epubName) return reviewFailed_(ctx, job, 'no EPUB');
@@ -1244,7 +1249,7 @@ function deliverReview_(ctx, job, s) {
     rv = { t: job.title, x: 'no-data' };
     saveRv_(job.fileId, rv);
   }
-  var finalNow = !unsure.length && !job.refineDone;
+  var finalNow = !unsure.length;
   if (finalNow) finalize_(ctx, job, false);
   saveJobs_(ctx.jobs);
 
@@ -1373,10 +1378,14 @@ function deliver_(ctx, job, s, incomplete) {
     job.oldReportId = '';
     // A round cut short by the judges' quota is not a sign the book cannot improve.
     var cutShort = pageList_(s.pages_judging).length > 0;
-    if (!unsure.length || (unsure.length >= before && !cutShort)) {
-      job.unsureList = shorten_(compressPages_(unsure), 300);
+    job.unsureList = shorten_(compressPages_(unsure), 300);
+    if (!unsure.length) {
       finalize_(ctx, job, true);
-      return 'refined and final (' + before + ' -> ' + unsure.length + ')';
+      return 'refined and final (' + before + ' -> 0)';
+    }
+    if (unsure.length >= before && !cutShort) {
+      stopRefining_(ctx, job);
+      return 'refined, judges done (' + before + ' -> ' + unsure.length + ')';
     }
     if (cutShort && unsure.length >= before) {
       // Nothing was judged (no quota left): this round does not count toward MAX_REFINES.

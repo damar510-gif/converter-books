@@ -49,6 +49,9 @@ The workflow writes to branch `results`, folder `<result_dir>/`:
   with one JPEG per page (`review/pNNNN-<hash>.jpg`, the places framed and numbered;
   boxes are in the JPEG's pixels). `answers_seen` is the time of the latest answer the
   run used: an answer saved later hides its place until the next run.
+- `review/judge-answers.json` (optional): answers a judge model gave when the user asked
+  for one, in the same form as the user's; every run applies them, and the user's own
+  answer to the same place wins.
 - `review/review-applied.json` (what the run did with each answer: `kept`, `applied`,
   `already` or `conflict`) and `review/answers.json` (the answers file it used).
 

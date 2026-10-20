@@ -1399,9 +1399,13 @@ def generate_epub_from_pdf(filepath, output_path, args):
     os.makedirs(cache_dir, exist_ok=True)
     print(f"{len(doc)} pages, processing {len(selected)}; progress saved in {cache_dir}")
     pins, human, notes = load_pins(args.human, book_hash)
-    answers = (review.load(args.answers) or {}).get("answers") if args.answers else None
-    if not isinstance(answers, dict):
-        answers = {}
+    # A judge model's answers (asked for by the user) count like the user's own, but the
+    # user's answer to the same place wins.
+    answers = {}
+    for path in (args.judge_answers, args.answers):
+        got = (review.load(path) or {}).get("answers") if path else None
+        if isinstance(got, dict):
+            answers.update(got)
 
     pool = None
     needs_ocr = any(len(doc[i].get_text().strip()) < MIN_TEXT_LAYER_CHARS for i in selected)
@@ -1575,6 +1579,8 @@ def main():
     parser.add_argument("--keep-markdown", action="store_true")
     parser.add_argument("--review-out", default="", help="Where to write the places for the user to check")
     parser.add_argument("--answers", default="", help="The user's answers (JSON from the Drive inbox)")
+    parser.add_argument("--judge-answers", default="",
+                        help="A judge model's answers (same form as --answers); the user's answers win")
     parser.add_argument("--human", default="", help="human.json of the previous run: the pages the user answered")
     parser.add_argument("--review-only", action="store_true",
                         help="Apply the answers and rebuild the book from saved pages only: no reading, "

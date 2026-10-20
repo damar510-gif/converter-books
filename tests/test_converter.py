@@ -348,6 +348,34 @@ class Pipeline(unittest.TestCase):
         self.assertNotIn("كاقية", md)
         self.assertEqual(st["pages_human"], [30])
 
+    def test_judge_answers_apply_and_the_users_win(self):
+        code, st, md, items = self.review_round()
+        page = items["pages"][0]
+        item = page["items"][0]
+        base = {**{k: item[k] for k in ("kind", "fp", "before", "core", "after", "pos")}, "page": 30,
+                "base": page["base"], "at": "2026-10-20T10:00:00Z"}
+        judge = os.path.join(self.tmp, "judge.json")
+        with open(judge, "w", encoding="utf-8") as f:
+            json.dump({"answers": {item["id"]: {**base, "verdict": "fix", "text": "كافية"}}}, f, ensure_ascii=False)
+        refuse = lambda p, n: (_ for _ in ()).throw(AssertionError("no request expected"))
+        code, st, md, fake = self.run_book({"gemini-3.5-flash-lite": refuse, "gemini-3.1-flash-lite": refuse},
+                                           pages="30", extra=("--review-only", "--judge-answers", judge, "--review-out",
+                                                              os.path.join(self.tmp, "rv-j")))
+        self.assertNotIn("كاقية", md)
+        self.assertEqual(st["review_applied"], 1)
+        # Same place, the user says the reading is right: theirs wins.
+        shutil.rmtree(os.path.join(self.tmp, "work"))
+        self.review_round()
+        user = os.path.join(self.tmp, "user.json")
+        with open(user, "w", encoding="utf-8") as f:
+            json.dump({"answers": {item["id"]: {**base, "verdict": "keep"}}}, f, ensure_ascii=False)
+        code, st, md, fake = self.run_book({"gemini-3.5-flash-lite": refuse, "gemini-3.1-flash-lite": refuse},
+                                           pages="30", extra=("--review-only", "--judge-answers", judge,
+                                                              "--answers", user, "--review-out",
+                                                              os.path.join(self.tmp, "rv-u")))
+        self.assertIn("كاقية", md)
+        self.assertEqual((st["review_applied"], st["review_kept"]), (0, 1))
+
     def test_review_only_needs_saved_pages(self):
         refuse = lambda p, n: (_ for _ in ()).throw(AssertionError("no request expected"))
         code, st, md, fake = self.run_book({"gemini-3.5-flash-lite": refuse, "gemini-3.1-flash-lite": refuse},
