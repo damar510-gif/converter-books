@@ -677,6 +677,39 @@ def check_pages(pool, filepath, records, cache_dir, dual, workers):
 MAX_JUDGES = 2
 
 
+def resolve_models(pool, names):
+    """Maps each judge name to a model this account has. Google renames models (for
+    example "gemini-3-flash" is served as "gemini-3-flash-preview"); a name not found
+    as is takes the closest "<name>-..." model. Names stay as given if listing fails."""
+    try:
+        have = {}
+        for m in pool.client.models.list():
+            name = (getattr(m, "name", "") or "").split("/")[-1]
+            actions = getattr(m, "supported_actions", None)
+            if name and (not actions or "generateContent" in actions):
+                have[name] = True
+    except Exception as e:
+        print(f"Could not list models ({str(e)[:120]}); judges used by their given names")
+        return names
+    if not have:
+        return names
+    skip = ("lite", "image", "tts", "audio", "live", "embedding")
+    out = []
+    for n in names:
+        if n in have:
+            out.append(n)
+            continue
+        close = [a for a in have if a.startswith(n + "-") and not any(s in a[len(n):] for s in skip)]
+        close.sort(key=lambda a: (a != n + "-preview", a != n + "-latest", len(a), a))
+        if close:
+            print(f"Judge {n} is served as {close[0]}")
+            out.append(close[0])
+        else:
+            print(f"Judge {n} is not available to this account")
+            out.append(n)
+    return list(dict.fromkeys(out))
+
+
 def arbitrate(pool, filepath, records, cache_dir, models, limit):
     """Shows pages still unsure to stronger models with small daily quotas, one
     after another as each quota runs out. A page a judge could not settle may be
@@ -720,6 +753,7 @@ def arbitrate(pool, filepath, records, cache_dir, models, limit):
                 except Exception as e:
                     if "404" in str(e) or "not found" in str(e).lower():
                         # A model name this account does not have: skip it for the run.
+                        print(f"  {m}: not found, skipped: {str(e)[:200]}")
                         pool.exhausted.add(m)
                         pool.missing.add(m)
                         continue
@@ -1236,6 +1270,8 @@ def generate_epub_from_pdf(filepath, output_path, args):
     if pool:
         check_pages(pool, filepath, records, cache_dir, dual, args.workers)
         judges = [m for m in args.arbiter_models.split(",") if m]
+        if any((r.get("check") or {}).get("state") == "unsure" for r in records):
+            judges = resolve_models(pool, judges)
         # One pass per judge a page may see, so a page the first judge could not settle
         # reaches the next one in the same run while quota is left.
         for _ in range(MAX_JUDGES):

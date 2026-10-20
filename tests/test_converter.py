@@ -43,6 +43,21 @@ class FakeModels:
         return self.behaviour[model](prompt, n)
 
 
+class ResolveModels(unittest.TestCase):
+    def test_renamed_models_are_found(self):
+        listed = [pytypes.SimpleNamespace(name="models/" + n, supported_actions=["generateContent"])
+                  for n in ("gemini-3.8-flash", "gemini-3-flash-preview", "gemini-3-flash-lite-preview",
+                            "gemini-2.5-flash", "gemini-2.5-flash-image")]
+        pool = pytypes.SimpleNamespace(client=pytypes.SimpleNamespace(
+            models=pytypes.SimpleNamespace(list=lambda: listed)))
+        got = c.resolve_models(pool, ["gemini-3.8-flash", "gemini-3-flash", "gemini-2.5-flash", "gemini-9-flash"])
+        self.assertEqual(got, ["gemini-3.8-flash", "gemini-3-flash-preview", "gemini-2.5-flash", "gemini-9-flash"])
+
+    def test_listing_failure_keeps_names(self):
+        pool = pytypes.SimpleNamespace(client=pytypes.SimpleNamespace(models=object()))
+        self.assertEqual(c.resolve_models(pool, ["a", "b"]), ["a", "b"])
+
+
 class Pipeline(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp()
