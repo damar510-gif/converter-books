@@ -44,6 +44,10 @@ on:
         description: 'Folder in the results branch (default: the book name)'
         required: false
         type: string
+      review:
+        description: 'Drive inbox only: the answers file ID, with ":only" to rebuild the book from saved pages only'
+        required: false
+        type: string
 
 permissions:
   contents: write
@@ -127,6 +131,36 @@ jobs:
           if [ -z "$DRIVE_FILE_ID" ]; then
             echo "RESULT_DIR=${RESULT_DIR_INPUT:-${BASENAME%.*}}" | tr -d '/' >> "$GITHUB_ENV"
           fi
+
+      # The pages the user already answered about (human.json in the results branch) and,
+      # from the Drive inbox, the file of their answers.
+      - name: Restore review state
+        if: inputs.compare_models == '' && inputs.text_check_models == '' && env.RESULT_DIR != ''
+        env:
+          REVIEW: ${{ inputs.review }}
+        run: |
+          mkdir -p review-in
+          # Checkout fetched only this branch.
+          if git fetch -q --depth 1 origin +refs/heads/results:refs/remotes/origin/results 2>/dev/null; then
+            git show "origin/results:$RESULT_DIR/human.json" > review-in/human.json 2>/dev/null || true
+          fi
+          [ -s review-in/human.json ] || rm -f review-in/human.json
+          ANSWERS_ID="${REVIEW%%:*}"
+          if [[ "$ANSWERS_ID" =~ ^[A-Za-z0-9_-]+$ ]]; then
+            # Read from the event file like the book's own download, never printed.
+            DRIVE_TOKEN=$(jq -r '.inputs.drive_token // ""' "$GITHUB_EVENT_PATH")
+            [ -n "$DRIVE_TOKEN" ] && echo "::add-mask::$DRIVE_TOKEN"
+            if curl -fsSL --retry 3 -H "Authorization: Bearer $DRIVE_TOKEN" \
+                 "https://www.googleapis.com/drive/v3/files/${ANSWERS_ID}?alt=media&supportsAllDrives=true" \
+                 -o review-in/answers.json && jq -e .answers review-in/answers.json >/dev/null; then
+              echo "Answers: $(jq '.answers | length' review-in/answers.json)"
+            else
+              echo "::warning::Could not read the answers file."
+              rm -f review-in/answers.json
+            fi
+          fi
+          if [[ "$REVIEW" == *":only" ]]; then echo "REVIEW_ONLY=1" >> "$GITHUB_ENV"; fi
+          ls -l review-in
 
       # Pages already read in earlier runs are kept here, so a run stopped by the
       # daily limit continues tomorrow from where it stopped.
@@ -212,9 +246,13 @@ jobs:
           PYTHONUNBUFFERED: '1'
         run: |
           set +e
-          ARGS=(-o "$EPUB_OUTPUT" --work-dir work --report report.md --status status.json --keep-markdown)
+          ARGS=(-o "$EPUB_OUTPUT" --work-dir work --report report.md --status status.json --keep-markdown
+                --review-out review-out)
           [ -n "$BOOK_TITLE" ] && ARGS+=(--title "$BOOK_TITLE")
           [ -n "$BOOK_PAGES" ] && ARGS+=(--pages "$BOOK_PAGES")
+          [ -f review-in/answers.json ] && ARGS+=(--answers review-in/answers.json)
+          [ -f review-in/human.json ] && ARGS+=(--human review-in/human.json)
+          [ -n "$REVIEW_ONLY" ] && ARGS+=(--review-only)
           python converter.py "$TARGET_FILE" "${ARGS[@]}"
           CODE=$?
           echo "code=$CODE" >> "$GITHUB_OUTPUT"
@@ -289,6 +327,21 @@ jobs:
           [ -n "$EPUB_OUTPUT" ] && [ -f "$EPUB_OUTPUT.md" ] && cp "$EPUB_OUTPUT.md" "$DIR/text.md"
           [ -f report.md ] && cp report.md "$DIR/report.md"
           cp status.json "$DIR/status.json"
+          # The places for the user to check, with their page images; written only by a
+          # run that finished, so a crash leaves the previous ones.
+          if [ -f review-out/items.json ]; then
+            mkdir -p "$DIR/review"
+            cp -n review-out/*.jpg "$DIR/review/" 2>/dev/null || true
+            cp review-out/items.json "$DIR/review/items.json"
+            jq -r '.pages[].img' review-out/items.json > review-out/keep.txt
+            for f in "$DIR"/review/*.jpg; do
+              [ -e "$f" ] || continue
+              grep -qxF "$(basename "$f")" review-out/keep.txt || rm -f "$f"
+            done
+            if [ -f review-out/human.json ]; then cp review-out/human.json "$DIR/human.json"; fi
+            if [ -f review-out/review-applied.json ]; then cp review-out/review-applied.json "$DIR/review/"; fi
+            if [ -f review-in/answers.json ]; then cp review-in/answers.json "$DIR/review/answers.json"; fi
+          fi
           cd "$TMP"
           git add -A
           git commit -q -m "Result: $RESULT_DIR (run ${GITHUB_RUN_NUMBER})" || exit 0
