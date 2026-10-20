@@ -1856,7 +1856,7 @@ test('review without the original: one message and no run; a book dropped from J
   minutes(env, 10);
   tick(env);
   assert.strictEqual(env.gh.dispatches.length, n, 'not again by itself');
-  assert.strictEqual(status(env).reviews[0].note, 'orig-gone');
+  assert.strictEqual(status(env).reviews.length, 0, 'a deleted book is not listed');
   env.drive.items.get(f.id).trashed = false;
   // Long after, the job itself was dropped from JOBS.
   const all = jobs(env);
