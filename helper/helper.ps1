@@ -4,7 +4,7 @@
 # results under «نتائج», and reports in helper-status.json, which the status page shows.
 # Windows PowerShell 5.1: no ?? or ?: operators.
 
-$HelperVersion = '2026-10-20.1'
+$HelperVersion = '2026-10-20.2'
 $ResultsName = 'نتائج'
 $TestPagesName = 'صفحات الاختبار'
 $PageTimeoutSec = 20 * 60
@@ -88,8 +88,11 @@ function Update-Path {
   $env:Path = [Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' + [Environment]::GetEnvironmentVariable('Path', 'User')
 }
 
+# Only what Windows can start: npm also puts an extension-less shell script next to the
+# .cmd, and Get-Command lists it too.
 function Find-Tool([string]$name) {
-  $c = Get-Command $name -CommandType Application -ErrorAction SilentlyContinue |
+  $c = Get-Command $name -CommandType Application -All -ErrorAction SilentlyContinue |
+    Where-Object { $_.Source -match '\.(exe|cmd|bat)$' } |
     Sort-Object { if ($_.Source -match '\.exe$') { 0 } else { 1 } } | Select-Object -First 1
   if ($c) { return $c.Source }
   return $null
@@ -380,12 +383,14 @@ function Invoke-HelperInstall {
     $found = Get-Tools
   }
   if ($found['codex']) {
-    $r = Invoke-Tool $found['codex'] @('login', 'status') $Local 60
-    if ($r.code -ne 0) {
-      Write-Host ''
-      Write-Host 'تُفتح الآن صفحة ChatGPT في المتصفح: سجّل الدخول بحسابك، ثم ارجع إلى هنا.'
-      & $found['codex'] login
-    }
+    try {
+      $r = Invoke-Tool $found['codex'] @('login', 'status') $Local 60
+      if ($r.code -ne 0) {
+        Write-Host ''
+        Write-Host 'تُفتح الآن صفحة ChatGPT في المتصفح: سجّل الدخول بحسابك، ثم ارجع إلى هنا.'
+        & $found['codex'] login
+      }
+    } catch { Write-Host "تعذّر تسجيل الدخول إلى Codex الآن: $_" }
   }
 
   # Start at every sign-in, hidden (a Unicode .vbs: the user's folder name may be Arabic).

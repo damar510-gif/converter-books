@@ -2122,7 +2122,7 @@ test('helper: a request from the page reaches requests.json, and leaves once the
   assert.strictEqual(h.minutes, 20);
 });
 
-test('helper: files are copied again only when they change on GitHub (hourly), the install link stays', () => {
+test('helper: files are copied again only when they change on GitHub (each check), the install link stays', () => {
   const env = helperEnv();
   const line = status(env).helper.line;
   const program = sub(env, helperFolder(env), 'البرنامج');
@@ -2130,13 +2130,13 @@ test('helper: files are copied again only when they change on GitHub (hourly), t
   env.gh.repoFiles['helper/helper.ps1'] = '# helper v2\n';
   env.gh.repoFiles['helper/install.ps1'] = '# install v2\n';
   tick(env);
-  assert.strictEqual(liveIn(env, program).find((f) => f.name === 'helper.ps1').id, before, 'not before an hour');
-  minutes(env, 61);
+  assert.strictEqual(liveIn(env, program).find((f) => f.name === 'helper.ps1').id, before, 'not in the same minute');
+  minutes(env, 10);
   tick(env);
   const files = liveIn(env, program);
   assert.strictEqual(files.filter((f) => f.name === 'helper.ps1').length, 1);
   assert.strictEqual(files.find((f) => f.name === 'helper.ps1').content.toString('utf8'), '# helper v2\n');
-  assert.strictEqual(files.find((f) => f.name === 'launcher.ps1').created, env.clock - 61 * 60000, 'unchanged file kept');
+  assert.strictEqual(files.find((f) => f.name === 'launcher.ps1').created, env.clock - 10 * 60000, 'unchanged file kept');
   assert.strictEqual(env.drive.DriveApp.getFileById(env.props.get('HELPER_INSTALL_ID')).content.toString('utf8'), '# install v2\n');
   assert.strictEqual(status(env).helper.line, line);
 });
