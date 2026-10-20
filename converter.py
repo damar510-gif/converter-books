@@ -17,6 +17,7 @@ from google import genai
 from google.genai import types
 
 import crosscheck
+import helperbox
 import review
 
 # Bump when the OCR prompt or page format changes, so cached pages are redone.
@@ -465,9 +466,11 @@ def save_record(cache_dir, rec):
     os.replace(path + ".tmp", path)
 
 
-def read_page(pool, doc, index, cache_dir, total, dual):
+def read_page(pool, doc, index, cache_dir, total, dual, helper=False):
     """First and second reading of one page, saved to cache_dir/NNNN.json.
-    Returns the record, or None when the page has to wait for tomorrow's quota."""
+    Returns the record, or None when the page has to wait for tomorrow's quota.
+    helper: the second reading is left to the helper's models (docs/helper-boxes-plan.md),
+    except on a page they handed back."""
     page_no = index + 1
     rec = load_record(cache_dir, page_no, pool.rescue if pool else "")
     if rec and rec.get("status") in ("empty", "text-layer"):
@@ -481,6 +484,9 @@ def read_page(pool, doc, index, cache_dir, total, dual):
             save_record(cache_dir, rec)
             return rec
 
+    handed_back = {"hskip": True} if (rec or {}).get("hskip") else {}
+    if helper and not handed_back:
+        dual = False
     need_a = rec is None or rec.get("status") != "ok"
     b = (rec or {}).get("b")
     need_b = dual and (need_a or b is None or b.get("status") in ("failed", "suspicious"))
@@ -497,7 +503,7 @@ def read_page(pool, doc, index, cache_dir, total, dual):
         if status == "pending":
             return None
         rec = {"page": page_no, "ink": round(ink, 4), "spread": spread, "status": status,
-               "text": reading["text"] if reading else "", "a": reading}
+               "text": reading["text"] if reading else "", "a": reading, **handed_back}
         if error:
             rec["error"] = error
     if dual and rec["status"] == "ok":
@@ -611,6 +617,46 @@ def check_page(pool, doc, rec, tess, vocab):
     return "done"
 
 
+def from_helper(rec):
+    """The second reading came from the helper's models (helperbox.merge)."""
+    return (rec.get("b") or {}).get("via") == "helper"
+
+
+def check_helper_page(rec, tess, vocab):
+    """check_page for a page whose second reading, and settled text, came from the
+    helper's models: nothing is asked of Gemini, and their text has to pass the same tests
+    as a settled text from Gemini. Returns 'done' or 'wait' (not settled by them yet)."""
+    a = rec["a"]["text"]
+    b = rec["b"]["text"]
+    miss_a = missing_lines(tess, a, vocab) if tess else []
+    miss_b = missing_lines(tess, b, vocab) if tess else []
+    ratio, diffs = crosscheck.compare(a, b)
+    info = {"ratio": round(ratio, 4), "diffs": len(diffs), "missing_a": len(miss_a), "missing_b": len(miss_b)}
+    if not miss_a and not diffs:
+        rec["text"] = a
+        rec["check"] = {**info, "v": CHECK_VERSION, "state": "agreed"}
+        return "done"
+    final = rec.get("hfinal")
+    if not final:
+        return "wait"
+    model = final.get("model") or rec["b"]["model"]
+    text = clean_settled(final["text"])
+    if not text:
+        info["rejected"] = f"{model}: no answer"
+    elif not crosscheck.validate_final(text, a, b):
+        info["rejected"] = f"{model}: drops text the readings agree on"
+    else:
+        miss_f = missing_lines(tess, text, vocab) if tess else []
+        if len(miss_f) <= min(len(miss_a), len(miss_b)):
+            rec["text"] = text
+            info.update(model=model, missing_final=len(miss_f))
+            rec["check"] = {**info, "v": CHECK_VERSION, "state": "unsure" if miss_f else "reconciled"}
+            return "done"
+        info["rejected"] = f"{model}: {len(miss_f)} lines missing (readings: {len(miss_a)}/{len(miss_b)})"
+    settle_state(rec, info, a, b, diffs, miss_a, miss_b)
+    return "done"
+
+
 def upgrade_check(rec):
     """Checks saved by CHECK_VERSION 1 that are still valid under the current rules
     are kept without spending a request; the others are checked again."""
@@ -651,23 +697,45 @@ def tesseract_for(filepath, cache_dir, page_no, kind="txt"):
     return tess
 
 
-def check_pages(pool, filepath, records, cache_dir, dual, workers):
-    """Runs check_page on every read page whose check is missing or out of date.
-    Pages the user answered about are theirs and never checked again."""
-    for r in records:
-        if not review.pin_of(r):
-            upgrade_check(r)
-    todo = [r for r in records if r.get("status") == "ok" and r.get("a") and not review.pin_of(r)
-            and (r.get("check") or {}).get("v") != CHECK_VERSION and (not dual or "b" in r)]
-    if not todo:
-        return
+def book_vocab(records):
     vocab = set()
     for r in records:
         vocab.update(norm_words(r.get("text") or ""))
         vocab.update(norm_words((r.get("b") or {}).get("text") or ""))
+    return vocab
+
+
+def check_pages(pool, filepath, records, cache_dir, dual, workers, transcribe=False):
+    """Runs check_page on every read page whose check is missing or out of date.
+    Pages the user answered about are theirs and never checked again.
+    A page with the helper's second reading is checked with check_helper_page. With
+    transcribe (the helper's models are on), Gemini never settles a page the helper has
+    not handed back: such pages wait for the helper. Returns the pages waiting for it."""
+    for r in records:
+        if not review.pin_of(r):
+            upgrade_check(r)
+    due = [r for r in records if r.get("status") == "ok" and r.get("a") and not review.pin_of(r)
+           and (r.get("check") or {}).get("v") != CHECK_VERSION]
+    by_helper = [r for r in due if from_helper(r)]
+    waiting = {r["page"] for r in due if transcribe and not from_helper(r) and not r.get("hskip")}
+    todo = [r for r in due if not from_helper(r) and r["page"] not in waiting and (not dual or "b" in r)]
+    if not todo and not by_helper:
+        return waiting
+    vocab = book_vocab(records)
     with ThreadPoolExecutor(max_workers=os.cpu_count() or 2) as tp:
-        tess = dict(zip((r["page"] for r in todo),
-                        tp.map(lambda r: tesseract_for(filepath, cache_dir, r["page"]), todo)))
+        tess = dict(zip((r["page"] for r in todo + by_helper),
+                        tp.map(lambda r: tesseract_for(filepath, cache_dir, r["page"]), todo + by_helper)))
+    for r in by_helper:
+        if check_helper_page(r, tess[r["page"]], vocab) == "done":
+            save_record(cache_dir, r)
+            print(f"  check page {r['page']}: {r['check']['state']} (helper, diffs {r['check']['diffs']})")
+        elif transcribe:
+            waiting.add(r["page"])
+        else:
+            # The helper is off: Gemini settles what its models read.
+            todo.append(r)
+    if not todo:
+        return waiting
     print(f"Checking {len(todo)} pages against each other and Tesseract")
 
     def work(rec):
@@ -683,6 +751,7 @@ def check_pages(pool, filepath, records, cache_dir, dual, workers):
 
     with ThreadPoolExecutor(max_workers=workers) as tp:
         list(tp.map(work, todo))
+    return waiting
 
 
 # Each unsure page is shown to at most this many judges.
@@ -1146,16 +1215,18 @@ def pacific_day():
         return datetime.fromtimestamp(time.time() - 8 * 3600, timezone.utc).strftime("%Y-%m-%d")
 
 
-def summarize(records, dual, review_pages=None, applied=None):
+def summarize(records, dual, review_pages=None, applied=None, helper_wait=()):
     """Book state for status.json and the report. review_pages and applied (from
-    review.build and review.overlay) add the review's numbers."""
+    review.build and review.overlay) add the review's numbers; helper_wait are the pages
+    waiting for the helper's models (check_pages)."""
     missing = [r["page"] for r in records if r["status"] in ("failed", "suspicious")]
     retry = [r["page"] for r in records if (r.get("check") or {}).get("state") == "retry"]
     judging = [r["page"] for r in records if r.get("judge_waiting")]
+    helper = sorted(set(helper_wait))
     # Pages the user answered about are finished, whatever the checks would say.
     waiting = [r["page"] for r in records if r["status"] == "pending"
                or (r["status"] == "ok" and r["page"] not in retry and r["page"] not in judging
-                   and not review.pin_of(r)
+                   and r["page"] not in helper_wait and not review.pin_of(r)
                    and ((r.get("check") or {}).get("v") != CHECK_VERSION or (dual and "b" not in r)))]
     unsure = [r["page"] for r in records if (r.get("check") or {}).get("state") == "unsure"]
     states = {}
@@ -1167,7 +1238,9 @@ def summarize(records, dual, review_pages=None, applied=None):
     # "judging": every page is read and checked, only the judges' quota is missing. The
     # Drive inbox parks such a book and starts the next one, so the readers' quota is
     # not left unused; the parked book returns to the judges the next day.
-    state = ("paused" if waiting else "incomplete" if missing or retry else "judging" if judging else "done")
+    # "helper": the same for pages waiting for the helper's models on the user's computer.
+    state = ("paused" if waiting else "helper" if helper else "incomplete" if missing or retry
+             else "judging" if judging else "done")
     samples = {r["page"]: r["check"].get("sample", []) for r in records
                if (r.get("check") or {}).get("state") == "unsure"}
     # Why each unsure page stayed unsure (for tuning the check).
@@ -1179,11 +1252,13 @@ def summarize(records, dual, review_pages=None, applied=None):
                                                       "قراءة واحدة" if r.get("a", {}).get("refused") else "")
                                          if x)
     out = {"state": state, "pages_total": len(records),
-           "pages_done": len(records) - len(missing) - len(waiting) - len(retry),
-           "pages_judging": judging,
+           "pages_done": len(records) - len(missing) - len(waiting) - len(retry) - len(helper),
+           "pages_judging": judging, "pages_helper": helper,
            "pages_unsure": unsure, "pages_missing": missing, "pages_waiting": waiting,
            "pages_retry": retry, "counts": states, "samples": samples, "reasons": reasons,
-           "pages_human": [r["page"] for r in records if review.pin_of(r)]}
+           "pages_human": [r["page"] for r in records if review.pin_of(r)],
+           # Pages checked against a second reading from the helper's models.
+           "helper_checked": sum(1 for r in records if from_helper(r) and (r.get("check") or {}).get("v") == CHECK_VERSION)}
     if review_pages is not None:
         results = list((applied or {}).get("results", {}).values())
         out.update(review_items=sum(len(p["items"]) + p.get("more", 0) for p in review_pages),
@@ -1213,7 +1288,12 @@ def write_report(path, summary, pool, notes=()):
         lines.append(f"- إجابات لم تُطبَّق لأن الصفحة تغيّرت (تظهر من جديد): {summary['review_conflicts_new']}")
     if summary.get("review_items"):
         lines.append(f"- مواضع تنتظر مراجعتك: {summary['review_items']}")
+    if summary.get("helper_checked"):
+        lines.append(f"- صفحات قرأتها نماذجك على الجهاز قراءةً ثانية: {summary['helper_checked']}")
     lines += [f"- {n}" for n in notes]
+    if summary["state"] == "helper":
+        lines += ["", f"**القراءة الأولى اكتملت، و{len(summary['pages_helper'])} صفحة تنتظر نماذجك على الجهاز** "
+                  "(القراءة الثانية وحسم الخلاف). يكمل الكتاب حين تنتهي منها."]
     if summary["state"] == "judging":
         lines += ["", f"**القراءة اكتملت، و{len(summary['pages_judging'])} صفحة تنتظر الحكّام** "
                   "(انتهى رصيدهم اليومي). تُعرض عليهم بعد تجدده، ثم يُسلَّم الكتاب."]
@@ -1246,13 +1326,13 @@ def write_status(path, summary, title, epub_name, quota_day=""):
     data = {k: v for k, v in summary.items() if k not in ("counts", "samples", "reasons")}
     data.update(book=title, epub=epub_name or "",
                 updated_at=datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"))
-    if summary["state"] in ("paused", "judging"):
+    if summary["state"] in ("paused", "judging", "helper"):
         # The Pacific date the quota ran out on; the inbox starts again the day after.
         data["quota_day"] = quota_day or pacific_day()
-    if summary["state"] == "judging":
-        # Written as "paused" so an older inbox script (which knows no "judging") still
-        # waits for the next day; the current one parks the book on waiting_for.
-        data.update(state="paused", waiting_for="judges")
+    if summary["state"] in ("judging", "helper"):
+        # Written as "paused" so an older inbox script (which knows neither) still waits
+        # for the next day; the current one parks the book on waiting_for.
+        data.update(state="paused", waiting_for="judges" if summary["state"] == "judging" else "helper")
     with open(path, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=1)
 
@@ -1324,7 +1404,7 @@ def extract_cover_from_pdf(doc, cover_path, index=0):
     return False
 
 
-EXIT_CODES = {"done": 0, "incomplete": 2, "paused": 3, "judging": 4}
+EXIT_CODES = {"done": 0, "incomplete": 2, "paused": 3, "judging": 4, "helper": 5}
 
 
 def load_pins(path, book_hash):
@@ -1391,6 +1471,55 @@ def page_heads(cache_dir, pages):
     return heads
 
 
+def page_jpeg(filepath, page_no):
+    """The page image the helper's models look at: the one Gemini gets, as JPEG."""
+    local = open_pdf(filepath)
+    try:
+        _, pix = page_image(local, local[page_no - 1])
+        with PDF_LOCK:
+            return pix.tobytes("jpg", jpg_quality=90)
+    finally:
+        close_pdf(local)
+
+
+def send_readings(box, filepath, records, cache_dir):
+    """The free model's readings the helper has not got yet (pNNNN.a.json), each with the
+    lines Tesseract saw that it may have dropped, as the settling request lists them."""
+    todo = [r for r in records if r.get("status") == "ok" and (r.get("a") or {}).get("via") != "helper"
+            and helperbox.needs_helper(r, CHECK_VERSION) and r["a"].get("up") != helperbox.sha(r["a"]["text"])]
+    if not todo or not box.fresh():
+        return
+    vocab = book_vocab(records)
+    with ThreadPoolExecutor(max_workers=os.cpu_count() or 2) as tp:
+        tess = dict(zip((r["page"] for r in todo),
+                        tp.map(lambda r: tesseract_for(filepath, cache_dir, r["page"]), todo)))
+    payloads = {}
+    for r in todo:
+        t = tess[r["page"]]
+        payloads[r["page"]] = {"page": r["page"], "model": r["a"]["model"], "text": r["a"]["text"],
+                               "spread": bool(r.get("spread")),
+                               "missing": (missing_lines(t, r["a"]["text"], vocab) if t else [])[:5],
+                               "at": helperbox.now()}
+    sent = box.put_readings(payloads)
+    for r in todo:
+        if r["page"] in sent:
+            r["a"]["up"] = helperbox.sha(r["a"]["text"])
+            save_record(cache_dir, r)
+    print(f"Helper: {len(sent)} readings sent")
+
+
+def tell_helper(box, args, total, recs, lite_out):
+    """book.json: the pages the helper's models may still work on ("need"), and those
+    without a first reading they could settle on ("need_a"). Nothing when the helper is
+    off for this run, so it stops working on the book."""
+    need = sorted(p for p, r in recs.items() if helperbox.needs_helper(r, CHECK_VERSION)) if box.transcribe else []
+    box.put_json("book.json", {"v": 1, "title": args.title, "total": total, "need": need,
+                               "need_a": [p for p in need if helperbox.needs_first_reading(recs[p])],
+                               "lite_out": bool(lite_out), "at": helperbox.now(),
+                               "run": os.environ.get("GITHUB_RUN_ID", "")})
+    return need
+
+
 def generate_epub_from_pdf(filepath, output_path, args):
     doc = pymupdf.open(filepath)
     selected = parse_pages(args.pages, len(doc))
@@ -1413,6 +1542,38 @@ def generate_epub_from_pdf(filepath, output_path, args):
         pool = ModelPool(args.model, args.second_model if args.dual else "", args.rescue_model, args.rpm)
     dual = bool(pool and args.dual and args.second_model)
 
+    # The helper on the user's computer (docs/helper-boxes-plan.md): its files are taken
+    # first, so the free model does not read again what its models already read.
+    box = None
+    if pool and dual and args.helper and not args.review_only:
+        box = helperbox.HelperBox.open(args.helper, os.environ.get("DRIVE_TOKEN", ""), cache_dir)
+    transcribe = bool(box and box.transcribe)
+
+    def take_helper_files(recs):
+        """recs: {page: record or None}; the helper's latest files merged in and saved."""
+        outs = box.fetch()
+        for p in list(recs):
+            if p in outs:
+                rec, changed = helperbox.merge(recs[p], outs[p], p, CHECK_VERSION)
+                if changed:
+                    recs[p] = rec
+                    save_record(cache_dir, rec)
+
+    if box:
+        start = {}
+        for i in selected:
+            rec = load_record(cache_dir, i + 1, args.rescue_model)
+            if (i + 1) in pins or (rec and rec.get("status") in ("text-layer", "empty")):
+                continue
+            with PDF_LOCK:
+                layer = len(doc[i].get_text("text", sort=True).strip())
+            if rec is not None or layer < MIN_TEXT_LAYER_CHARS:
+                start[i + 1] = rec
+        take_helper_files(start)
+        need = tell_helper(box, args, len(doc), start, False)
+        if transcribe:
+            box.start_images(need, lambda p: page_jpeg(filepath, p))
+
     def work(i):
         rec = load_record(cache_dir, i + 1, args.rescue_model)
         if (i + 1) in pins or (rec and review.pin_of(rec)):
@@ -1427,7 +1588,7 @@ def generate_epub_from_pdf(filepath, output_path, args):
         # Each worker opens its own document: PyMuPDF objects are not thread safe.
         local = open_pdf(filepath)
         try:
-            return read_page(pool, local, i, cache_dir, len(doc), dual)
+            return read_page(pool, local, i, cache_dir, len(doc), dual, helper=transcribe)
         finally:
             close_pdf(local)
 
@@ -1441,8 +1602,16 @@ def generate_epub_from_pdf(filepath, output_path, args):
             save_record(cache_dir, r)
     if applied["results"]:
         print(f"Answers: {len(applied['results'])}, pages pinned: {compress(sorted(applied['touched']))}")
+    helper_wait = set()
+    if box:
+        if transcribe:
+            send_readings(box, filepath, records, cache_dir)
+        # What the helper did while the free model read.
+        recs = {r["page"]: r for r in records if r.get("status") not in ("text-layer", "empty")}
+        take_helper_files(recs)
+        records = [recs.get(r["page"], r) for r in records]
     if pool and not args.review_only:
-        check_pages(pool, filepath, records, cache_dir, dual, args.workers)
+        helper_wait = check_pages(pool, filepath, records, cache_dir, dual, args.workers, transcribe)
         judges = [m for m in args.arbiter_models.split(",") if m]
         if any((r.get("check") or {}).get("state") == "unsure" and not review.pin_of(r) for r in records):
             judges = resolve_models(pool, judges)
@@ -1457,6 +1626,13 @@ def generate_epub_from_pdf(filepath, output_path, args):
             if c.get("state") == "unsure" and len(c.get("judges", [])) < MAX_JUDGES and not review.pin_of(r) \
                     and any(m not in pool.missing and m not in c.get("judges", []) for m in judges):
                 r["judge_waiting"] = True
+    if transcribe:
+        lite_out = pool.model in pool.exhausted and (not pool.second or pool.second in pool.exhausted)
+        tell_helper(box, args, len(doc), {r["page"]: r for r in records
+                                          if r.get("status") not in ("text-layer", "empty")}, lite_out)
+    if box:
+        box.wait_images()
+        notes = notes + [f"المساعد: {n}" for n in box.notes]
 
     review_pages = images = None
     if args.review_out:
@@ -1473,7 +1649,7 @@ def generate_epub_from_pdf(filepath, output_path, args):
                 save_record(cache_dir, r)
         print(f"Review: {sum(len(p['items']) for p in review_pages)} places on {len(review_pages)} pages")
 
-    summary = summarize(records, dual, review_pages, applied)
+    summary = summarize(records, dual, review_pages, applied, helper_wait)
     md = assemble(records, review_pages)
     if not args.pages:
         md = keep_main_headings(md, pool, cache_dir)
@@ -1585,6 +1761,10 @@ def main():
     parser.add_argument("--review-only", action="store_true",
                         help="Apply the answers and rebuild the book from saved pages only: no reading, "
                              "settling or judging requests")
+    parser.add_argument("--helper", default="",
+                        help="The book's Drive folder for the helper on the user's computer, as "
+                             "<folder id>:transcribe (its models give the second reading and settle) or "
+                             "<folder id>:import (their work so far is used); the Drive token is in DRIVE_TOKEN")
     args = parser.parse_args()
 
     input_path = args.input

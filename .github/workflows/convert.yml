@@ -48,6 +48,15 @@ on:
         description: 'Drive inbox only: the answers file ID, with ":only" to rebuild the book from saved pages only'
         required: false
         type: string
+      # The helper on the user's computer (docs/helper-boxes-plan.md).
+      helper:
+        description: 'Drive inbox only: the book''s helper folder ID, with ":transcribe" or ":import"'
+        required: false
+        type: string
+      judge:
+        description: 'Drive inbox only: the file ID of the helper models'' verdicts on the unsure places'
+        required: false
+        type: string
 
 permissions:
   contents: write
@@ -138,6 +147,7 @@ jobs:
         if: inputs.compare_models == '' && inputs.text_check_models == '' && env.RESULT_DIR != ''
         env:
           REVIEW: ${{ inputs.review }}
+          JUDGE: ${{ inputs.judge }}
         run: |
           mkdir -p review-in
           # Checkout fetched only this branch.
@@ -165,6 +175,27 @@ jobs:
             fi
           fi
           if [[ "$REVIEW" == *":only" ]]; then echo "REVIEW_ONLY=1" >> "$GITHUB_ENV"; fi
+          # The helper models' verdicts join the saved ones (the newer verdict on a place
+          # wins); the user's own answers still win over both.
+          if [[ "$JUDGE" =~ ^[A-Za-z0-9_-]+$ ]]; then
+            DRIVE_TOKEN=$(jq -r '.inputs.drive_token // ""' "$GITHUB_EVENT_PATH")
+            [ -n "$DRIVE_TOKEN" ] && echo "::add-mask::$DRIVE_TOKEN"
+            if curl -fsSL --retry 3 -H "Authorization: Bearer $DRIVE_TOKEN" \
+                 "https://www.googleapis.com/drive/v3/files/${JUDGE}?alt=media&supportsAllDrives=true" \
+                 -o review-in/helper-judge.json && jq -e '.answers | type == "object"' review-in/helper-judge.json >/dev/null; then
+              if [ -f review-in/judge.json ]; then
+                jq -s '{v: 1, answers: (.[0].answers + .[1].answers)}' review-in/judge.json review-in/helper-judge.json > review-in/merged.json
+              else
+                jq '{v: 1, answers: .answers}' review-in/helper-judge.json > review-in/merged.json
+              fi
+              mv review-in/merged.json review-in/judge.json
+              echo "JUDGE_SAVE=1" >> "$GITHUB_ENV"
+              echo "Helper verdicts: $(jq '.answers | length' review-in/helper-judge.json)"
+            else
+              echo "::warning::Could not read the helper's verdicts."
+            fi
+            rm -f review-in/helper-judge.json
+          fi
           ls -l review-in
 
       # Pages already read in earlier runs are kept here, so a run stopped by the
@@ -248,11 +279,20 @@ jobs:
           GEMINI_ARBITER_MODELS: ${{ vars.GEMINI_ARBITER_MODELS }}
           BOOK_TITLE: ${{ inputs.title }}
           BOOK_PAGES: ${{ inputs.pages }}
+          HELPER: ${{ inputs.helper }}
           PYTHONUNBUFFERED: '1'
         run: |
           set +e
           ARGS=(-o "$EPUB_OUTPUT" --work-dir work --report report.md --status status.json --keep-markdown
                 --review-out review-out)
+          if [[ "$HELPER" =~ ^[A-Za-z0-9_-]+:(transcribe|import)$ ]]; then
+            # The converter exchanges files with the helper's folder with the run's Drive
+            # token, read from the event file and masked like the book's own download.
+            DRIVE_TOKEN=$(jq -r '.inputs.drive_token // ""' "$GITHUB_EVENT_PATH")
+            [ -n "$DRIVE_TOKEN" ] && echo "::add-mask::$DRIVE_TOKEN"
+            export DRIVE_TOKEN
+            ARGS+=(--helper "$HELPER")
+          fi
           [ -n "$BOOK_TITLE" ] && ARGS+=(--title "$BOOK_TITLE")
           [ -n "$BOOK_PAGES" ] && ARGS+=(--pages "$BOOK_PAGES")
           [ -f review-in/answers.json ] && ARGS+=(--answers review-in/answers.json)
@@ -347,6 +387,8 @@ jobs:
             if [ -f review-out/human.json ]; then cp review-out/human.json "$DIR/human.json"; fi
             if [ -f review-out/review-applied.json ]; then cp review-out/review-applied.json "$DIR/review/"; fi
             if [ -f review-in/answers.json ]; then cp review-in/answers.json "$DIR/review/answers.json"; fi
+            # The helper models' verdicts, kept with the saved ones for every later run.
+            if [ -n "$JUDGE_SAVE" ] && [ -f review-in/judge.json ]; then cp review-in/judge.json "$DIR/review/judge-answers.json"; fi
           fi
           cd "$TMP"
           git add -A
@@ -366,6 +408,7 @@ jobs:
           case "$CODE" in
             3) echo "Paused: today's Gemini quota is used up. Progress is saved; run the same book again tomorrow." ;;
             4) echo "Read and checked; some unsure pages wait for tomorrow's judges. Run the same book again tomorrow." ;;
+            5) echo "Read once; the other pages wait for the helper's models on the user's computer (the Drive inbox runs the book again)." ;;
             2) echo "Some pages could not be read (see report.md). Run the same book again to retry them." ;;
             *) echo "The conversion failed (see the log above)." ;;
           esac

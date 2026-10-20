@@ -1828,7 +1828,7 @@ function pageSandbox(env, initial) {
       withSuccessHandler(f) { call.ok = f; return chain; },
       withFailureHandler(f) { call.fail = f; return chain; }
     };
-    ['getStatus', 'tick', 'judgeNow', 'getReview', 'getReviewImage', 'saveAnswers', 'sendReview'].forEach((name) => {
+    ['getStatus', 'tick', 'judgeNow', 'getReview', 'getReviewImage', 'saveAnswers', 'sendReview', 'setHelperBoxes', 'helperRequest'].forEach((name) => {
       chain[name] = (...args) => { call.name = name; call.args = args; calls.push(call); };
     });
     return chain;
@@ -2139,6 +2139,277 @@ test('helper: files are copied again only when they change on GitHub (each check
   assert.strictEqual(files.find((f) => f.name === 'launcher.ps1').created, env.clock - 10 * 60000, 'unchanged file kept');
   assert.strictEqual(env.drive.DriveApp.getFileById(env.props.get('HELPER_INSTALL_ID')).content.toString('utf8'), '# install v2\n');
   assert.strictEqual(status(env).helper.line, line);
+});
+
+// ---------------------------------------------------------------------------
+// The boxes on the page: the helper's models transcribe and review (docs/helper-boxes-plan.md)
+// ---------------------------------------------------------------------------
+
+const GEMINI = 'agy|gemini-3.8-flash';
+const GROK = 'grok|grok-4.7';
+const MODELS = [{ id: GEMINI, label: 'Gemini 3.8 Flash', tool: 'Antigravity' }, { id: GROK, label: 'Grok 4.7', tool: 'Grok Build' }];
+
+function boxesEnv(boxes) {
+  const env = helperEnv();
+  status(env);
+  const r = JSON.parse(env.ctx.setHelperBoxes(JSON.stringify(boxes)));
+  assert.strictEqual(r.ok, true, JSON.stringify(r));
+  writeHelperStatus(env, { models: MODELS });
+  return env;
+}
+
+function requestsFile(env) {
+  return JSON.parse(liveIn(env, helperFolder(env)).find((x) => x.name === 'requests.json').content.toString('utf8'));
+}
+
+function bookFolderOf(env, fileId) {
+  const books = sub(env, helperFolder(env), 'كتب');
+  return books ? sub(env, books, fileId) : undefined;
+}
+
+test('boxes: the page saves the models of each box; requests.json carries them; unknown ones are refused', () => {
+  const env = helperEnv();
+  status(env);
+  const bad = JSON.parse(env.ctx.setHelperBoxes(JSON.stringify({ transcribe: ['rm|-rf'], review: [] })));
+  assert.strictEqual(bad.ok, false);
+  const r = JSON.parse(env.ctx.setHelperBoxes(JSON.stringify({ transcribe: [GEMINI, GROK, GEMINI], review: [GROK] })));
+  assert.deepStrictEqual(r.boxes, { transcribe: [GEMINI, GROK], review: [GROK] });
+  assert.deepStrictEqual(requestsFile(env).boxes, { transcribe: [GEMINI, GROK], review: [GROK] });
+  assert.strictEqual(env.userLockHeld, false);
+  writeHelperStatus(env, { models: MODELS.concat([{ id: 'bad id', label: 'x' }]),
+    chips: { [GEMINI]: { state: 'working', text: 'يقرأ ص 3' }, [GROK]: { state: 'odd', text: 'x' } } });
+  const h = status(env).helper;
+  assert.deepStrictEqual(h.models.map((m) => m.id), [GEMINI, GROK]);
+  assert.deepStrictEqual(h.boxes, { transcribe: [GEMINI, GROK], review: [GROK] });
+  assert.deepStrictEqual(h.chips[GEMINI], { state: 'working', text: 'يقرأ ص 3' });
+  assert.strictEqual(h.chips[GROK].state, 'idle');
+});
+
+test('transcribe: with models in the box the run gets the book folder; the book waits for the helper without holding the slot', () => {
+  const env = boxesEnv({ transcribe: [GEMINI], review: [] });
+  const a = addBook(env, 'أول.pdf');
+  tick(env);
+  const folderA = bookFolderOf(env, a.id);
+  assert.ok(folderA, 'book folder made under كتب');
+  assert.strictEqual(lastDispatch(env).body.inputs.helper, folderA.id + ':transcribe');
+  assert.strictEqual(lastDispatch(env).body.inputs.judge, undefined);
+
+  const b = addBook(env, 'ثان.pdf');
+  minutes(env, 25);
+  writeStatus(env, a.id, 'paused', { waiting_for: 'helper', epub: 'أول.epub', pages_helper: [1, 2, 3], pages_done: 7 });
+  writeHelperStatus(env, { models: MODELS });
+  tick(env);
+  assert.strictEqual(jobs(env)[a.id].stage, 'helper');
+  assert.ok(names(env, 'working').indexOf('أول.pdf') >= 0, 'parked book stays in the working folder');
+  assert.strictEqual(env.gh.dispatches.length, 2, 'the next book started right away');
+  assert.strictEqual(lastDispatch(env).body.inputs.drive_file_id, b.id);
+  assert.strictEqual(env.mails.length, 0, 'no mail for waiting on the helper');
+  const s = status(env);
+  assert.deepStrictEqual(s.parked.map((p) => [p.title, p.stage]), [['أول', 'helper']]);
+  assert.ok(!s.recent.some((j) => j.title === 'أول'), 'a parked book is not listed as ready');
+
+  // The helper finished the three pages: seen twice, eight minutes apart, then the book runs again.
+  minutes(env, 30);
+  writeStatus(env, b.id, 'done', { epub: 'ثان.epub' });
+  writeEpub(env, b.id, 'ثان.epub');
+  const bookAt = new Date(env.clock - 20 * 60000).toISOString();
+  writeHelperStatus(env, { models: MODELS, books: { [a.id]: { need: 3, finished: 3, book_at: bookAt } } });
+  tick(env);
+  assert.strictEqual(jobs(env)[b.id].stage, 'delivered');
+  assert.strictEqual(env.gh.dispatches.length, 2, 'not on the first sight');
+  minutes(env, 10);
+  writeHelperStatus(env, { models: MODELS, books: { [a.id]: { need: 3, finished: 3, book_at: bookAt } } });
+  tick(env);
+  assert.strictEqual(env.gh.dispatches.length, 3);
+  assert.strictEqual(lastDispatch(env).body.inputs.drive_file_id, a.id);
+  assert.strictEqual(lastDispatch(env).body.inputs.helper, folderA.id + ':transcribe');
+
+  minutes(env, 10);
+  writeStatus(env, a.id, 'done', { epub: 'أول.epub' });
+  writeEpub(env, a.id, 'أول.epub');
+  tick(env);
+  assert.strictEqual(jobs(env)[a.id].stage, 'delivered');
+  assert.strictEqual(bookFolderOf(env, a.id), undefined, 'the exchange folder is removed once the book is delivered');
+});
+
+test('transcribe: an empty box, a computer away for an hour, or a helper that stopped moving hands the book to the free model', () => {
+  const env = boxesEnv({ transcribe: [GEMINI], review: [] });
+  const a = addBook(env, 'أ.pdf');
+  tick(env);
+  minutes(env, 25);
+  writeStatus(env, a.id, 'paused', { waiting_for: 'helper', epub: 'أ.epub', pages_helper: [1] });
+  writeHelperStatus(env, { models: MODELS });
+  tick(env);
+  assert.strictEqual(jobs(env)[a.id].stage, 'helper');
+  const folderA = bookFolderOf(env, a.id);
+
+  // The user empties the box: the book goes on with the free model, the folder's work used.
+  env.ctx.setHelperBoxes(JSON.stringify({ transcribe: [], review: [] }));
+  minutes(env, 10);
+  tick(env);
+  assert.strictEqual(lastDispatch(env).body.inputs.drive_file_id, a.id);
+  assert.strictEqual(lastDispatch(env).body.inputs.helper, folderA.id + ':import');
+
+  // Away for over an hour.
+  const env2 = boxesEnv({ transcribe: [GEMINI], review: [] });
+  const c = addBook(env2, 'ج.pdf');
+  tick(env2);
+  minutes(env2, 25);
+  writeStatus(env2, c.id, 'paused', { waiting_for: 'helper', epub: 'ج.epub', pages_helper: [1] });
+  writeHelperStatus(env2, { models: MODELS });
+  tick(env2);
+  minutes(env2, 50);
+  tick(env2);
+  assert.strictEqual(env2.gh.dispatches.length, 1, 'still within the hour');
+  minutes(env2, 15);
+  tick(env2);
+  assert.strictEqual(env2.gh.dispatches.length, 2);
+  assert.ok(/:import$/.test(lastDispatch(env2).body.inputs.helper));
+
+  // Connected but not moving for six hours.
+  const env3 = boxesEnv({ transcribe: [GEMINI], review: [] });
+  const d = addBook(env3, 'د.pdf');
+  tick(env3);
+  minutes(env3, 25);
+  writeStatus(env3, d.id, 'paused', { waiting_for: 'helper', epub: 'د.epub', pages_helper: [1, 2] });
+  const parkedAt = env3.clock;
+  while (env3.gh.dispatches.length < 2 && env3.clock - parkedAt < 8 * 3600000) {
+    writeHelperStatus(env3, { models: MODELS, books: { [d.id]: { need: 2, finished: 1, book_at: new Date(env3.clock).toISOString() } } });
+    tick(env3);
+    minutes(env3, 10);
+  }
+  assert.strictEqual(env3.gh.dispatches.length, 2, 'stalled');
+  assert.ok(env3.clock - parkedAt > 6 * 3600000, 'not before six hours without progress');
+  assert.ok(/:import$/.test(lastDispatch(env3).body.inputs.helper));
+});
+
+test('transcribe: no helper, no box or not a PDF: runs as before; a book paused for the quota resumes once the helper read the rest', () => {
+  const plain = readyEnv();
+  addBook(plain, 'عادي.pdf');
+  tick(plain);
+  assert.strictEqual(lastDispatch(plain).body.inputs.helper, undefined);
+
+  const env = boxesEnv({ transcribe: [], review: [] });
+  addBook(env, 'كتاب.pdf');
+  tick(env);
+  assert.strictEqual(lastDispatch(env).body.inputs.helper, undefined, 'empty box, no folder');
+
+  const env2 = boxesEnv({ transcribe: [GEMINI], review: [] });
+  addBook(env2, 'نص.docx');
+  tick(env2);
+  assert.strictEqual(lastDispatch(env2).body.inputs.helper, undefined, 'only scanned books');
+
+  const env3 = boxesEnv({ transcribe: [GEMINI, GROK], review: [] });
+  const f = addBook(env3, 'كبير.pdf');
+  tick(env3);
+  minutes(env3, 30);
+  writeStatus(env3, f.id, 'paused', { epub: 'كبير.epub', pages_waiting: [5, 6], pages_helper: [3] });
+  tick(env3);
+  assert.ok(jobs(env3)[f.id].pausedDay, 'paused for the quota');
+  minutes(env3, 60);
+  const bookAt = new Date(env3.clock - 30 * 60000).toISOString();
+  writeHelperStatus(env3, { models: MODELS, books: { [f.id]: { need: 3, finished: 3, book_at: bookAt } } });
+  tick(env3);
+  minutes(env3, 10);
+  writeHelperStatus(env3, { models: MODELS, books: { [f.id]: { need: 3, finished: 3, book_at: bookAt } } });
+  tick(env3);
+  assert.strictEqual(env3.gh.dispatches.length, 2, 'resumed the same day');
+  assert.ok(/:transcribe$/.test(lastDispatch(env3).body.inputs.helper));
+});
+
+test('review: with models in the review box the places are copied for the helper, and its finished verdicts are applied in a round', () => {
+  const env = boxesEnv({ transcribe: [], review: [GEMINI, GROK] });
+  const { f, items: placed } = deliverWithPlaces(env, 'مراجع.pdf', 3);
+  env.gh.files['drive-' + f.id + '/review/p0003-0123456789.jpg'] = Buffer.from([0xff, 0xd8, 1]);
+  env.gh.files['drive-' + f.id + '/review/answers.json'] = '{}';
+  minutes(env, 10);
+  tick(env);
+  const dir = sub(env, sub(env, helperFolder(env), 'مراجعة'), f.id);
+  assert.ok(dir, 'review folder for the book');
+  assert.deepStrictEqual(liveIn(env, dir).map((x) => x.name).sort(), ['items.json', 'p0003-0123456789.jpg']);
+  const copied = liveIn(env, dir).find((x) => x.name === 'items.json').id;
+  minutes(env, 10);
+  tick(env);
+  assert.strictEqual(liveIn(env, dir).find((x) => x.name === 'items.json').id, copied, 'not copied again unchanged');
+
+  // The helper is still judging: nothing happens.
+  const verdicts = helperFolder(env).createFolder('أحكام');
+  const items = placed.pages[0].items;
+  const answers = {};
+  answers[items[0].id] = Object.assign(answerFor(items[0], 'keep'), { by: [GEMINI] });
+  const file = verdicts.createFile(f.id + '.json', JSON.stringify({ v: 1, fileId: f.id, answers, done: false }), 'application/json');
+  const before = env.gh.dispatches.length;
+  minutes(env, 10);
+  tick(env);
+  assert.strictEqual(env.gh.dispatches.length, before);
+
+  // Done: one review round with the verdicts, then nothing more until there are new ones.
+  file.setContent(JSON.stringify({ v: 1, fileId: f.id, answers, done: true }));
+  minutes(env, 10);
+  tick(env);
+  assert.strictEqual(env.gh.dispatches.length, before + 1);
+  const d = lastDispatch(env).body.inputs;
+  assert.strictEqual(d.judge, file.id);
+  assert.ok(/:only$/.test(d.review), d.review);
+  minutes(env, 5);
+  writeStatus(env, f.id, 'done', { epub: 'مراجع.epub', pages_unsure: [3], review_items: 2, review_kept: 1 });
+  writeEpub(env, f.id, 'مراجع.epub');
+  tick(env);
+  assert.ok(env.mails.some((m) => /طُبّقت أحكام النماذج/.test(m.subject)), env.mails.map((m) => m.subject).join(' | '));
+  minutes(env, 10);
+  tick(env);
+  assert.strictEqual(env.gh.dispatches.length, before + 1, 'the same verdicts are not applied twice');
+  // Every later run of the book carries them too.
+  env.ctx.judgeNow();
+  if (env.gh.dispatches.length > before + 1) assert.strictEqual(lastDispatch(env).body.inputs.judge, file.id);
+
+  // Nothing open any more: the copy for the helper goes.
+  writeStatus(env, f.id, 'done', { epub: 'مراجع.epub', pages_unsure: [], review_items: 0 });
+  const rvNow = JSON.parse(env.props.get('RV_' + f.id));
+  rvNow.o = 0;
+  env.props.set('RV_' + f.id, JSON.stringify(rvNow));
+  minutes(env, 10);
+  tick(env);
+  assert.strictEqual(sub(env, sub(env, helperFolder(env), 'مراجعة'), f.id), undefined);
+});
+
+test('the page: models move between the boxes with a tap (or a drag), are saved, and come back if saving fails', () => {
+  const env = boxesEnv({ transcribe: [GEMINI], review: [] });
+  writeHelperStatus(env, { models: MODELS.concat([{ id: 'agy|gemini-4-argon', label: 'Gemini 4 Argon', tool: 'Antigravity',
+    warn: 'لا للتفريغ: يستنفد الحدود' }]), chips: { [GEMINI]: { state: 'working', text: 'يقرأ ص 12 من «أول»' } } });
+  const page = pageSandbox(env, status(env));
+  const boxes = page.byId.boxes;
+  assert.strictEqual(boxes.hidden, false);
+  const sections = boxes.kids.filter((k) => k.className === 'sec');
+  assert.strictEqual(sections.length, 2);
+  const pair = (sec) => sec.kids.find((k) => k.className === 'pair');
+  const chipIn = (box, text) => box.kids.find((k) => k.tag === 'button' && k.textContent.indexOf(text) >= 0);
+  const [offT, onT] = pair(sections[0]).kids;
+  assert.ok(/Gemini 3\.8 Flash/.test(onT.textContent) && /يقرأ ص 12/.test(onT.textContent), onT.textContent);
+  assert.ok(/Grok 4\.7/.test(offT.textContent) && /يستنفد الحدود/.test(offT.textContent));
+  assert.ok(/فارغ: المواضع تبقى لك/.test(pair(sections[1]).kids[1].textContent));
+
+  // A tap on Grok in the right box puts it to work.
+  page.click(chipIn(offT, 'Grok 4.7'));
+  const call = page.pending('setHelperBoxes')[0];
+  assert.deepStrictEqual(JSON.parse(call.args[0]), { transcribe: [GEMINI, GROK], review: [] });
+  let now = pair(boxes.kids.filter((k) => k.className === 'sec')[0]).kids[1];
+  assert.ok(/Grok 4\.7/.test(now.textContent), 'shown in the left box at once');
+  page.answer(call, env.ctx.setHelperBoxes(call.args[0]));
+  assert.deepStrictEqual(JSON.parse(env.props.get('HELPER_BOXES')).transcribe, [GEMINI, GROK]);
+
+  // Saving fails: it goes back.
+  now = pair(boxes.kids.filter((k) => k.className === 'sec')[0]).kids[1];
+  page.click(chipIn(now, 'Gemini 3.8 Flash'));
+  page.fail(page.pending('setHelperBoxes')[0], 'offline');
+  now = pair(boxes.kids.filter((k) => k.className === 'sec')[0]).kids[1];
+  assert.ok(/Gemini 3\.8 Flash/.test(now.textContent), now.textContent);
+  assert.ok(/تعذّر الحفظ/.test(page.byId.msg.textContent));
+
+  // A drop on the left box of the review section.
+  const reviewOn = pair(boxes.kids.filter((k) => k.className === 'sec')[1]).kids[1];
+  reviewOn.handlers.drop[0]({ preventDefault() {}, dataTransfer: { getData: () => JSON.stringify({ id: GEMINI }) } });
+  assert.deepStrictEqual(JSON.parse(page.pending('setHelperBoxes')[0].args[0]).review, [GEMINI]);
 });
 
 test('the fake GitHub saw only known endpoints', () => {

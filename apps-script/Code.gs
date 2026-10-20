@@ -78,7 +78,21 @@ var CONFIG = {
   HELPER_STALE_MS: 15 * 60 * 1000,
   HELPER_MAX_REQUESTS: 10,
   // Every check (a helper fix reaches the computer within about ten minutes).
-  HELPER_SYNC_MS: 9 * 60 * 1000
+  HELPER_SYNC_MS: 9 * 60 * 1000,
+  // The models the user puts to work from the page (docs/helper-boxes-plan.md), and the
+  // folders where the helper and the runs exchange files.
+  HELPER_MAX_CHIPS: 12,
+  HELPER_BOOKS: 'كتب',
+  HELPER_REVIEWS: 'مراجعة',
+  HELPER_VERDICTS: 'أحكام',
+  // A book waiting for the helper goes on with the free model when the computer has not
+  // been seen for this long, or when the helper has not moved for this long.
+  HELPER_GONE_MS: 60 * 60 * 1000,
+  HELPER_STALL_MS: 6 * 60 * 60 * 1000,
+  // "Finished" must be seen by two checks this far apart, so its last files reached Drive.
+  HELPER_DONE_WAIT_MS: 8 * 60 * 1000,
+  // Review files copied for the helper in one check.
+  HELPER_REVIEW_FILES: 60
 };
 
 var SUPPORTED_EXT = { pdf: true, docx: true, txt: true };
@@ -95,6 +109,8 @@ var FILE_ID_RE = /^[A-Za-z0-9_-]{10,100}$/;
 var IMAGE_RE = /^p\d{4}-[0-9a-f]{10}\.jpg$/;
 var PLACE_ID_RE = /^p(\d{1,5})-[0-9a-f]{10}$/;
 var REST_ID_RE = /^p(\d{1,5})-rest-[0-9a-z]{1,20}$/;
+// A model on the user's computer: "<tool>|<model>" (helper/helper.ps1, $Tools).
+var CHIP_RE = /^(grok|agy|codex|claude)\|[A-Za-z0-9._-]{1,60}$/;
 var INCOMPLETE_SUFFIX = ' (فيه صفحات ناقصة)';
 
 // Set by gh_() from the GitHub-Authentication-Token-Expiration response header.
@@ -325,7 +341,16 @@ function getStatus() {
     out.reviews = reviewSummaries_(jobs);
     if (out.setUp && cfg.token) out.helper = helperInfo_(now);
 
-    out.recent = finishedJobs_(jobs).slice(0, 10).map(function (j) {
+    // Books waiting in "2- قيد التحويل" for the judges or the helper's models.
+    var hs = out.helper && out.helper.progress ? out.helper.progress : {};
+    out.parked = Object.keys(jobs).map(function (id) { return jobs[id]; })
+      .filter(function (j) { return j && isParked_(j); })
+      .map(function (j) {
+        var p = hs[j.fileId] || {};
+        return { title: j.title, stage: j.stage, need: Number(p.need) || 0, finished: Number(p.finished) || 0 };
+      });
+
+    out.recent = finishedJobs_(jobs).filter(function (j) { return !isParked_(j); }).slice(0, 10).map(function (j) {
       return {
         title: j.title,
         stage: j.stage,
@@ -529,6 +554,39 @@ function helperRequest(json) {
   }
 }
 
+/**
+ * From the page: the models the user put in the left box of each section, as JSON
+ * {transcribe: [ids], review: [ids]}. They go into requests.json, where the helper finds
+ * them within a minute or two. Returns {ok, boxes} or {ok: false, error}.
+ */
+function setHelperBoxes(json) {
+  try {
+    var r = parseJson_(json);
+    if (!r || typeof r !== 'object' || Array.isArray(r)) return JSON.stringify({ ok: false, error: 'طلب غير مفهوم' });
+    var boxes = {};
+    var bad = false;
+    ['transcribe', 'review'].forEach(function (k) {
+      var list = Array.isArray(r[k]) ? r[k].map(String) : [];
+      if (list.length > CONFIG.HELPER_MAX_CHIPS || list.some(function (id) { return !CHIP_RE.test(id); })) bad = true;
+      boxes[k] = list.filter(function (id, i) { return list.indexOf(id) === i; });
+    });
+    if (bad) return JSON.stringify({ ok: false, error: 'نموذج غير معروف' });
+    var lock = LockService.getUserLock();
+    if (!lock.tryLock(20000)) return JSON.stringify({ ok: false, error: 'مشغول، أعد المحاولة بعد دقيقة.' });
+    try {
+      boxes.at = now_().toISOString();
+      props_().setProperty('HELPER_BOXES', JSON.stringify(boxes));
+      writeRequests_();
+    } finally {
+      lock.releaseLock();
+    }
+    return JSON.stringify({ ok: true, boxes: helperBoxes_() });
+  } catch (err) {
+    Logger.log('setHelperBoxes failed: ' + (err && err.stack ? err.stack : err));
+    return JSON.stringify({ ok: false, error: String(err && err.message ? err.message : err) });
+  }
+}
+
 // ============================================================================
 // One check
 // ============================================================================
@@ -556,11 +614,12 @@ function runTick_() {
   }
   // A finished job frees the slot, so the next book can start in the same check.
   if (!activeJob_(ctx.jobs) && ctx.dispatched === 0) {
-    // The user's answers first (a quick round with no model request), then parked books
-    // back to the judges on a new day (their quota is separate and small), then new
-    // books, then improvement rounds.
-    var applied = applyNext_(ctx);
-    var judged = applied || judgeNext_(ctx);
+    // The user's answers first (a quick round with no model request), then the verdicts
+    // of the helper's models (the same kind of round), then parked books back to the
+    // judges on a new day (their quota is separate and small), then books the helper
+    // finished, then new books, then improvement rounds.
+    var applied = applyNext_(ctx) || helperJudgeNext_(ctx);
+    var judged = applied || judgeNext_(ctx) || helperNext_(ctx);
     var started = judged || startNext_(ctx);
     notes.push(started);
     // Nothing new to convert: use the day's judge quota on a finished book's unsure pages.
@@ -602,9 +661,11 @@ function handleStatus_(ctx, job, s) {
 
   // Failures count in a row only: any other result starts the count again.
   if (s.state !== 'failed') job.failStreak = 0;
+  delete job.helperOff;
 
-  // Waiting only for the judges is written as "paused" for older scripts.
-  var state = s.state === 'paused' && s.waiting_for === 'judges' ? 'judging' : s.state;
+  // Waiting only for the judges, or the helper, is written as "paused" for older scripts.
+  var state = s.state === 'paused' && s.waiting_for === 'judges' ? 'judging'
+    : s.state === 'paused' && s.waiting_for === 'helper' ? 'helper' : s.state;
   switch (state) {
     case 'done':
       return deliver_(ctx, job, s, false);
@@ -657,6 +718,19 @@ function handleStatus_(ctx, job, s) {
       }
       return 'judging (parked)';
 
+    case 'helper':
+      // Read once by the free model; the helper's models on the user's computer give the
+      // second reading and settle the pages. The book waits without holding the slot, so
+      // the free model starts the next book; helperNext_ brings it back.
+      job.stage = 'helper';
+      job.helperAt = now_().toISOString();
+      job.helperMovedAt = job.helperAt;
+      job.helperFinished = 0;
+      job.helperPages = pageList_(s.pages_helper).length;
+      delete job.helperDoneSeen;
+      saveJobs_(ctx.jobs);
+      return 'helper (parked)';
+
     case 'failed':
       return failedOrGiveUp_(ctx, job, 'فشل التحويل مرتين متتاليتين.');
 
@@ -671,6 +745,8 @@ function resumeIfNewDay_(ctx, job) {
   if (today > job.pausedDay) {
     return 'quota reset, resume: ' + dispatch_(ctx, job, false);
   }
+  // The helper's models read what the free model could not: no need to wait for tomorrow.
+  if (helperDoneFor_(ctx, job)) return 'helper finished, resume: ' + dispatch_(ctx, job, false);
   return 'paused until after ' + job.pausedDay + ' (Pacific)';
 }
 
@@ -921,6 +997,12 @@ function dispatch_(ctx, job, countAttempt) {
   var rv = loadRv_(job.fileId);
   var review = (rv && rv.a ? rv.a : '') + (job.humanRound ? ':only' : '');
   if (review) body.inputs.review = review;
+  // The helper on the user's computer (docs/helper-boxes-plan.md): the book's folder,
+  // and the verdicts of its models, which go with every run like the user's answers.
+  var helper = helperInput_(ctx, job);
+  if (helper) body.inputs.helper = helper;
+  var verdicts = verdictsFile_(job.fileId);
+  if (verdicts) body.inputs.judge = verdicts.getId();
   var r = gh_(ctx.cfg, 'post', '/repos/' + ctx.cfg.repo + '/actions/workflows/' + CONFIG.WORKFLOW + '/dispatches', body);
 
   if (r.code === 204 || r.code === 200) {
@@ -930,6 +1012,7 @@ function dispatch_(ctx, job, countAttempt) {
     job.pausedDay = '';
     job.lastError = '';
     delete job.pendingCount;
+    delete job.helperDoneSeen;
     if (rv && rv.a) {
       // Answers saved until now travel with this run; the old mark comes back if a
       // review round fails.
@@ -1210,7 +1293,7 @@ function advanceReview_(ctx, job) {
 }
 
 function clearReviewRound_(job) {
-  ['humanRound', 'prepareRound', 'humanFolderId', 'oldEpubId', 'oldReportId', 'rvDonePrev', 'downloadFails']
+  ['humanRound', 'prepareRound', 'judgeRound', 'humanFolderId', 'oldEpubId', 'oldReportId', 'rvDonePrev', 'downloadFails']
     .forEach(function (k) { delete job[k]; });
 }
 
@@ -1256,6 +1339,8 @@ function reviewFailed_(ctx, job, why) {
 /** Delivery of a review round: the book stays in its folder, its old files are replaced. */
 function deliverReview_(ctx, job, s) {
   var prepare = !!job.prepareRound;
+  // A round that applied the verdicts of the helper's models (helperJudgeNext_).
+  var judged = !!job.judgeRound;
   var used = (Number(s.review_applied) || 0) + (Number(s.review_kept) || 0);
   // A preparation round that applied no answer keeps the book the user already has.
   var keepOld = prepare && !used;
@@ -1321,10 +1406,11 @@ function deliverReview_(ctx, job, s) {
     return 'prepared (' + (rv.o || 0) + ' places)';
   }
   var lines = [
-    'طُبّقت مراجعتك على «' + job.title + '»: ' + (Number(s.review_applied) || 0) + ' تصحيحاً و' +
-      (Number(s.review_kept) || 0) + ' تأكيداً.',
+    (judged ? 'طُبّقت أحكام نماذجك على «' : 'طُبّقت مراجعتك على «') + job.title + '»: ' +
+      (Number(s.review_applied) || 0) + ' تصحيحاً و' + (Number(s.review_kept) || 0) + ' تأكيداً.',
     'الصفحات المشكوك فيها: ' + before + ' ← ' + unsure.length + '.'
   ];
+  if (judged) lines.push('المواضع التي اختلفت فيها النماذج، أو احتاجت تصحيحاً كبيراً لم يتفق عليه نموذجان، بقيت لك.');
   if (Number(s.review_conflicts_new) > 0) {
     lines.push(s.review_conflicts_new + ' إجابة لم تُطبَّق لأن صفحتها تغيّرت منذ أن رأيتها؛ ستجد مواضعها من جديد في صفحة المراجعة.');
   }
@@ -1335,7 +1421,7 @@ function deliverReview_(ctx, job, s) {
     lines.push('لم تبقَ صفحات مشكوك فيها' + (finalNow ? '، ونقلت الكتاب إلى «' + CONFIG.FOLDERS.final + '».' : '.'));
     lines.push('يمكنك الآن حذف ملفه الأصلي من «' + CONFIG.FOLDERS.originals + '» إن احتجت المساحة.');
   }
-  sendMail_('طُبّقت مراجعتك: ' + job.title, lines);
+  sendMail_((judged ? 'طُبّقت أحكام النماذج: ' : 'طُبّقت مراجعتك: ') + job.title, lines);
   return 'review delivered (' + before + ' -> ' + unsure.length + ')';
 }
 
@@ -1418,6 +1504,8 @@ function deliver_(ctx, job, s, incomplete) {
   }
 
   moveFile_(job.fileId, ctx.folders.originals);
+  // Its pages are all read: the files exchanged with the helper are not needed any more.
+  if (!job.refining) dropBookFolder_(job.fileId);
   var unsure = pageList_(s.pages_unsure);
   var missing = pageList_(s.pages_missing);
   var url = 'https://drive.google.com/file/d/' + job.epubId + '/view';
@@ -1528,6 +1616,7 @@ function giveUp_(ctx, job, reason) {
     }
   }
   moveFile_(job.fileId, ctx.folders.problem);
+  dropBookFolder_(job.fileId);
   job.stage = 'problem';
   job.lastError = shorten_(reason, 200);
   job.finishedAt = now_().toISOString();
@@ -1739,8 +1828,33 @@ function helperInfo_(now) {
           link: l.path ? helperPathUrl_(String(l.path)) : '', linkText: shorten_(String(l.linkText || ''), 40) };
       }),
       actions: status && Array.isArray(status.actions) ? status.actions.slice(0, 10) : [],
-      pending: helperRequests_().filter(function (r) { return handled.indexOf(r.id) < 0; })
+      pending: helperRequests_().filter(function (r) { return handled.indexOf(r.id) < 0; }),
+      // The boxes on the page: the models found on the computer, where the user put them,
+      // and what each is doing.
+      models: (status && Array.isArray(status.models) ? status.models : []).filter(function (m) {
+        return m && CHIP_RE.test(String(m.id));
+      }).slice(0, 40).map(function (m) {
+        return { id: String(m.id), label: shorten_(String(m.label || m.id), 80), tool: shorten_(String(m.tool || ''), 30),
+          warn: shorten_(String(m.warn || ''), 120) };
+      }),
+      boxes: helperBoxes_(),
+      chips: {},
+      progress: {}
     };
+    var chips = status && status.chips && typeof status.chips === 'object' ? status.chips : {};
+    Object.keys(chips).slice(0, 40).forEach(function (id) {
+      var c = chips[id];
+      if (!CHIP_RE.test(id) || !c || typeof c !== 'object') return;
+      info.chips[id] = { state: /^(working|idle|exhausted|failing)$/.test(c.state) ? c.state : 'idle',
+        text: shorten_(String(c.text || ''), 160) };
+    });
+    var books = status && status.books && typeof status.books === 'object' ? status.books : {};
+    Object.keys(books).slice(0, 50).forEach(function (id) {
+      var b = books[id];
+      if (FILE_ID_RE.test(id) && b && typeof b === 'object') {
+        info.progress[id] = { need: Number(b.need) || 0, finished: Number(b.finished) || 0 };
+      }
+    });
     if (!info.line) info.error = 'لم أستطع تجهيز ملف التثبيت بعد، أعد فتح الصفحة بعد دقائق.';
     return info;
   } catch (err) {
@@ -1765,9 +1879,259 @@ function helperTick_() {
       writeRequests_();
     }
     syncHelperFiles_(false);
+    syncHelperReviews_(config_());
   } finally {
     lock.releaseLock();
   }
+}
+
+// ----------------------------------------------------------------------------
+// The boxes: models the user put to work from the page (docs/helper-boxes-plan.md)
+// ----------------------------------------------------------------------------
+
+/** {transcribe: [ids], review: [ids]}: the models in the left box of each section. */
+function helperBoxes_() {
+  var v = parseJson_(props_().getProperty('HELPER_BOXES')) || {};
+  var clean = function (list) {
+    list = Array.isArray(list) ? list.map(String) : [];
+    return list.filter(function (id, i) { return CHIP_RE.test(id) && list.indexOf(id) === i; })
+      .slice(0, CONFIG.HELPER_MAX_CHIPS);
+  };
+  return { transcribe: clean(v.transcribe), review: clean(v.review) };
+}
+
+/** The helper's status file, read once per check. */
+function helperStatusOf_(ctx) {
+  if (ctx.helperStatus === undefined) {
+    ctx.helperStatus = props_().getProperty('HELPER_INSTALL_ID') ? readHelperStatus_() : null;
+  }
+  return ctx.helperStatus;
+}
+
+/**
+ * True when the helper's models give the second readings: some of the models in the box
+ * are on the computer, and the helper was seen within the hour.
+ */
+function helperTranscribes_(status) {
+  var boxes = helperBoxes_().transcribe;
+  var at = status ? Date.parse(status.at) : NaN;
+  if (!boxes.length || !isFinite(at) || now_().getTime() - at > CONFIG.HELPER_GONE_MS) return false;
+  var found = (Array.isArray(status.models) ? status.models : []).map(function (m) { return m && String(m.id); });
+  return boxes.some(function (id) { return found.indexOf(id) >= 0; });
+}
+
+/** The helper's work on a book's pages: {need, finished, bookAt} (bookAt: when the run that listed them wrote book.json). */
+function helperProgress_(status, fileId) {
+  var b = status && status.books && typeof status.books === 'object' ? status.books[fileId] : null;
+  if (!b || typeof b !== 'object') return null;
+  return { need: Number(b.need) || 0, finished: Number(b.finished) || 0, bookAt: String(b.book_at || '') };
+}
+
+/**
+ * The helper has finished every page the book's last run left to it, as seen by two
+ * checks HELPER_DONE_WAIT_MS apart (its last files need a moment to reach Drive).
+ */
+function helperDoneFor_(ctx, job) {
+  var p = helperProgress_(helperStatusOf_(ctx), job.fileId);
+  var done = !!p && p.need > 0 && p.finished >= p.need && Date.parse(p.bookAt) >= Date.parse(job.dispatchedAt || '');
+  if (!done) {
+    if (job.helperDoneSeen) {
+      delete job.helperDoneSeen;
+      saveJobs_(ctx.jobs);
+    }
+    return false;
+  }
+  if (!job.helperDoneSeen) {
+    job.helperDoneSeen = now_().toISOString();
+    saveJobs_(ctx.jobs);
+    return false;
+  }
+  return now_().getTime() - Date.parse(job.helperDoneSeen) >= CONFIG.HELPER_DONE_WAIT_MS;
+}
+
+/**
+ * A book parked for the helper runs again when the helper has finished its pages; or,
+ * with the free model doing the rest, when the helper is off (the box was emptied, or the
+ * computer has not been seen for an hour) or has not moved for hours.
+ */
+function helperNext_(ctx) {
+  var parked = Object.keys(ctx.jobs).map(function (id) { return ctx.jobs[id]; })
+    .filter(function (j) { return j && j.stage === 'helper'; })
+    .sort(function (a, b) { return String(a.helperAt) < String(b.helperAt) ? -1 : 1; });
+  if (!parked.length) return '';
+  var status = helperStatusOf_(ctx);
+  var on = helperTranscribes_(status);
+  var now = now_().getTime();
+  for (var i = 0; i < parked.length; i++) {
+    var j = parked[i];
+    var p = helperProgress_(status, j.fileId);
+    if (p && Date.parse(p.bookAt) >= Date.parse(j.dispatchedAt || '') && p.finished > (j.helperFinished || 0)) {
+      j.helperFinished = p.finished;
+      j.helperMovedAt = new Date(now).toISOString();
+      saveJobs_(ctx.jobs);
+    }
+    var why = !on ? 'helper off'
+      : helperDoneFor_(ctx, j) ? 'helper done'
+      : now - Date.parse(j.helperMovedAt || j.helperAt) > CONFIG.HELPER_STALL_MS ? 'helper stalled' : '';
+    if (!why) continue;
+    j.stage = 'queued';
+    j.pendingCount = false;
+    // Off or stalled: the free model does the rest (transcribing would only park it again).
+    if (why !== 'helper done') j.helperOff = true;
+    saveJobs_(ctx.jobs);
+    return 'helper ' + j.fileId + ' (' + why + '): ' + dispatch_(ctx, j, false);
+  }
+  return '';
+}
+
+/**
+ * The run's helper input: the book's folder, with ":transcribe" when the helper's models
+ * give the second readings (the folder is made then), or ":import" so their work so far
+ * is used. Nothing for review and improvement rounds, which read nothing.
+ */
+function helperInput_(ctx, job) {
+  if (job.humanRound || job.refining || !props_().getProperty('HELPER_INSTALL_ID')) return '';
+  var on = extOf_(job.driveName || job.name) === 'pdf' && !job.helperOff && helperTranscribes_(helperStatusOf_(ctx));
+  var f = bookFolder_(job.fileId, on);
+  return f ? f.getId() + (on ? ':transcribe' : ':import') : '';
+}
+
+/** A folder in the helper's folder ("كتب", "مراجعة", "أحكام"), made when create is true. */
+function helperSub_(name, create) {
+  var root = folderFromProp_('HELPER_FOLDER');
+  if (!root) return null;
+  var it = root.getFoldersByName(name);
+  while (it.hasNext()) {
+    var f = it.next();
+    if (!f.isTrashed()) return f;
+  }
+  return create ? root.createFolder(name) : null;
+}
+
+function liveFolder_(parent, name) {
+  var it = parent.getFoldersByName(name);
+  while (it.hasNext()) {
+    var f = it.next();
+    if (!f.isTrashed()) return f;
+  }
+  return null;
+}
+
+/** The book's folder for the helper's readings ("كتب/<fileId>"). */
+function bookFolder_(fileId, create) {
+  var parent = helperSub_(CONFIG.HELPER_BOOKS, create);
+  if (!parent) return null;
+  return liveFolder_(parent, fileId) || (create ? parent.createFolder(fileId) : null);
+}
+
+function dropBookFolder_(fileId) {
+  try {
+    var f = bookFolder_(fileId, false);
+    if (f) f.setTrashed(true);
+  } catch (err) {
+    Logger.log('could not remove the helper folder of ' + fileId + ': ' + err);
+  }
+}
+
+/** The verdicts of the helper's models on a book's unsure places ("أحكام/<fileId>.json"), or null. */
+function verdictsFile_(fileId) {
+  var dir = helperSub_(CONFIG.HELPER_VERDICTS, false);
+  if (!dir) return null;
+  return liveFiles_(dir, fileId + '.json').sort(function (a, b) {
+    return b.getLastUpdated().getTime() - a.getLastUpdated().getTime();
+  })[0] || null;
+}
+
+/**
+ * A delivered book whose places the helper's models have finished judging, with verdicts
+ * no run has applied yet: a review round applies them, with no model request.
+ */
+function helperJudgeNext_(ctx) {
+  if (!helperBoxes_().review.length) return '';
+  var pick = null;
+  reviewIds_().forEach(function (id) {
+    var rv = loadRv_(id);
+    var j = ctx.jobs[id];
+    if (!rv || rv.x || !j || j.stage !== 'delivered') return;
+    var f = verdictsFile_(id);
+    var data = f ? parseJson_(f.getBlob().getDataAsString('UTF-8')) : null;
+    if (!data || data.done !== true || !data.answers || typeof data.answers !== 'object') return;
+    var n = Object.keys(data.answers).length;
+    if (n > (rv.jn || 0) && (!pick || String(j.finishedAt) < String(pick.job.finishedAt))) {
+      pick = { job: j, rv: rv, n: n };
+    }
+  });
+  if (!pick) return '';
+  pick.rv.jn = pick.n;
+  saveRv_(pick.job.fileId, pick.rv);
+  pick.job.judgeRound = true;
+  return startReviewRound_(ctx, pick.job, false);
+}
+
+/**
+ * With models in the review box: the open places of delivered books (review/ in the
+ * results branch) are copied for the helper into "مراجعة/<fileId>", a few files per
+ * check, and the folders of books with nothing open are removed.
+ */
+function syncHelperReviews_(cfg) {
+  if (!helperBoxes_().review.length) return;
+  var parent = helperSub_(CONFIG.HELPER_REVIEWS, true);
+  if (!parent) return;
+  var jobs = loadJobs_();
+  var open = {};
+  reviewIds_().forEach(function (id) {
+    var rv = loadRv_(id);
+    if (rv && rv.o > 0 && !rv.x) open[id] = rv;
+  });
+  // A folder goes once nothing is open (a round running on the book keeps it, and the
+  // verdicts in it).
+  var it = parent.getFolders();
+  while (it.hasNext()) {
+    var f = it.next();
+    if (!f.isTrashed() && !open[f.getName()]) f.setTrashed(true);
+  }
+  var budget = CONFIG.HELPER_REVIEW_FILES;
+  Object.keys(open).forEach(function (id) {
+    var j = jobs[id];
+    // Copied from a delivered book only: a running round is about to change its places.
+    if (budget > 0 && (!j || j.stage === 'delivered')) budget -= syncReviewFolder_(cfg, id, open[id], parent, budget);
+  });
+}
+
+/** One book's items.json and place images; returns how many files it fetched. */
+function syncReviewFolder_(cfg, id, rv, parent, budget) {
+  var r = gh_(cfg, 'get', '/repos/' + cfg.repo + '/contents/' + encodeURIComponent('drive-' + id) +
+    '/review?ref=' + encodeURIComponent(CONFIG.RESULTS_BRANCH));
+  var list = r.code === 200 ? parseJson_(ghText_(r)) : null;
+  if (!Array.isArray(list)) return 0;
+  var folder = liveFolder_(parent, id) || parent.createFolder(id);
+  var want = {};
+  var used = 0;
+  list.forEach(function (item) {
+    var name = item && item.type === 'file' ? String(item.name) : '';
+    if (name !== 'items.json' && !IMAGE_RE.test(name)) return;
+    want[name] = true;
+    var have = liveFiles_(folder, name);
+    // Image names carry a hash of their content; items.json changes with every run.
+    if (have.length && (name !== 'items.json' || rv.hs === item.sha)) return;
+    if (used >= budget) return;
+    used++;
+    var f = gh_(cfg, 'get', contentsPath_(cfg, 'drive-' + id + '/review/' + name), null, GH_RAW);
+    if (f.code !== 200) return;
+    have.forEach(function (old) { old.setTrashed(true); });
+    folder.createFile(Utilities.newBlob(f.resp.getContent(), name === 'items.json' ? 'application/json' : 'image/jpeg', name));
+    if (name === 'items.json') {
+      rv.hs = item.sha;
+      saveRv_(id, rv);
+    }
+  });
+  // Images of places that are gone.
+  var files = folder.getFiles();
+  while (files.hasNext()) {
+    var x = files.next();
+    if (!x.isTrashed() && IMAGE_RE.test(x.getName()) && !want[x.getName()]) x.setTrashed(true);
+  }
+  return used;
 }
 
 function helperRequests_() {
@@ -1803,6 +2167,7 @@ function writeRequests_() {
     v: 1,
     at: now_().toISOString(),
     requests: helperRequests_(),
+    boxes: helperBoxes_(),
     books: Object.keys(jobs).map(function (id) {
       var j = jobs[id];
       return j ? { id: id, title: j.title || '', stage: j.stage || '', unsure: j.unsure || 0 } : null;
@@ -2070,6 +2435,11 @@ function isActive_(job) {
   return job.stage === 'queued' || job.stage === 'running';
 }
 
+/** Waiting in "2- قيد التحويل" without holding the slot: for the judges or the helper. */
+function isParked_(job) {
+  return job.stage === 'judging' || job.stage === 'helper';
+}
+
 function activeJob_(jobs) {
   var best = null;
   Object.keys(jobs).forEach(function (id) {
@@ -2090,12 +2460,13 @@ function finishedJobs_(jobs) {
 
 /** Keeps JOBS small: finished jobs are trimmed to what the page needs, oldest dropped. */
 function pruneJobs_(jobs) {
-  // Parked books (judging) still need all their fields and must never be dropped.
-  var finished = finishedJobs_(jobs).filter(function (j) { return j.stage !== 'judging'; });
+  // Parked books (judging, helper) still need all their fields and must never be dropped.
+  var finished = finishedJobs_(jobs).filter(function (j) { return !isParked_(j); });
   finished.forEach(function (j) {
     ['name', 'driveName', 'resultDir', 'dispatchedAt', 'createdAt', 'pausedDay', 'pausedAt',
       'pendingCount', 'noteId', 'pauseMailed', 'pagesDone', 'pagesTotal', 'pauses',
-      'judgeDay', 'judgeRounds', 'judgeMailed', 'rvDonePrev', 'downloadFails']
+      'judgeDay', 'judgeRounds', 'judgeMailed', 'rvDonePrev', 'downloadFails',
+      'helperAt', 'helperMovedAt', 'helperFinished', 'helperPages', 'helperDoneSeen', 'helperOff']
       .forEach(function (k) { delete j[k]; });
     if (j.lastError) j.lastError = shorten_(j.lastError, 120);
   });

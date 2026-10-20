@@ -33,6 +33,8 @@ The answers the user gives on the status page (see "Results" below) are kept in
 | `result_dir` | `drive-<fileId>`. |
 | `title` | Book title (the file name without its extension). |
 | `review` | Optional. The Drive ID of the book's answers file, so the run applies the user's answers; with `:only` appended (or `:only` alone) the run only applies the answers and rebuilds the book from saved pages, with no reading, settling or judging request. |
+| `helper` | Optional. The book's folder for the helper on the user's computer (`بيانات المساعد/كتب/<fileId>`), with `:transcribe` (the models in the user's box give the second reading and settle; the free model reads each page once) or `:import` (their work so far is used, the free model does the rest). See docs/helper-boxes-plan.md. |
+| `judge` | Optional. The Drive ID of `بيانات المساعد/أحكام/<fileId>.json`, the helper models' verdicts on the unsure places. The run adds them to `review/judge-answers.json` and applies them like the user's answers (the user's own answer wins). |
 
 Only one conversion runs at a time. The workflow also declares
 `concurrency: convert`, so a second dispatch waits.
@@ -107,11 +109,16 @@ Read the files with `GET /repos/{repo}/contents/<path>?ref=results` and the head
 | `done` | Every page was read. Some may be listed in `pages_unsure`: the two readings disagreed and the difference could not be settled, or a line seems to be missing. Those pages are still in the book, and the report shows the words in question. |
 | `paused` | The day's reading quota ran out (`pages_waiting`). Progress is saved. Start the same book again after midnight Pacific time; `quota_day` is the Pacific date the quota ran out. |
 | `paused` + `"waiting_for": "judges"` | Every page is read and checked, but some unsure pages (`pages_judging`) still wait for a judge whose quota ran out. The script parks the book in «2- قيد التحويل», starts the next book, and runs this one again first after midnight Pacific time (`quota_day`). |
+| `paused` + `"waiting_for": "helper"` | Read once by the free model; the pages in `pages_helper` wait for the helper's models (second reading and settling). The script parks the book (`stage: 'helper'`) and starts the next one; it runs this one again when the helper reports its pages finished, or with `:import` when the user empties the box, the computer is away for an hour, or the helper has not moved for six hours. |
 | `incomplete` | Some pages could not be read (`pages_missing`), or their check hit temporary API errors (`pages_retry`). The EPUB exists. Starting the same book again retries only those pages. |
 | `failed` | The run crashed; the EPUB may be missing. |
 
 A `status.json` whose `updated_at` is older than the dispatch belongs to an earlier
 attempt and must be ignored.
+
+`helper_checked` counts the pages checked against a second reading from the helper's
+models. A run whose verdicts file came with `judge` writes the merged
+`review/judge-answers.json`.
 
 `pages_human` lists the pages the user answered about; `review_items` counts the places
 still open, and `review_applied` / `review_kept` the corrections and confirmations this
