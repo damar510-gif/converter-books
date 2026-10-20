@@ -77,7 +77,8 @@ var CONFIG = {
   // The helper writes its status every minute or so while the computer is on.
   HELPER_STALE_MS: 15 * 60 * 1000,
   HELPER_MAX_REQUESTS: 10,
-  HELPER_SYNC_MS: 60 * 60 * 1000
+  // Every check (a helper fix reaches the computer within about ten minutes).
+  HELPER_SYNC_MS: 9 * 60 * 1000
 };
 
 var SUPPORTED_EXT = { pdf: true, docx: true, txt: true };
@@ -1748,7 +1749,7 @@ function helperInfo_(now) {
   }
 }
 
-/** Every check: drop the requests the helper finished, and refresh its files hourly. */
+/** Every check: drop the requests the helper finished, and refresh its files. */
 function helperTick_() {
   var props = props_();
   if (!props.getProperty('HELPER_INSTALL_ID')) return;

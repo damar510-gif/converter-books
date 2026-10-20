@@ -13,7 +13,7 @@ or key there, and the helper never calls a Google or GitHub API.
 | File in `بيانات المساعد` | Written by | Content |
 |---|---|---|
 | `install.ps1` | Apps Script (copy of `helper/install.ps1`) | The one public file (anyone with the link can read it): the install's first step. No secret. |
-| `البرنامج/` | Apps Script (copy of `helper/`, hourly, only changed files) | `launcher.ps1`, `helper.ps1`. |
+| `البرنامج/` | Apps Script (copy of `helper/`, each check, only changed files) | `launcher.ps1`, `helper.ps1`. |
 | `صفحات الاختبار/` | Apps Script (copy of `compare/pages` in the results branch) | The six hard test pages (`page_image`). |
 | `requests.json` | Apps Script | `{v, at, requests: [{id, action, choices, label, at}], books: [{id, title, stage, unsure}]}` |
 | `helper-status.json` | helper | `{v, at, version, computer, busy, handled: [ids], lines: [{text, kind, path, linkText}], actions: [...]}` |
@@ -36,7 +36,7 @@ downloads `install.ps1` from Drive and runs it:
 ## Each minute
 
 `launcher.ps1` loads `البرنامج/helper.ps1` (so a change in `helper/` reaches the
-computer within the hour, with no step from the user) and runs one cycle: finds the
+computer within about ten minutes, with no step from the user) and runs one cycle: finds the
 tools, probes them when needed, runs the first request it has not done, and writes
 `helper-status.json`. The status page shows its `lines` and its `actions` (buttons with
 choices), so new buttons need no change to `Code.gs` or `Page.html`. The Apps Script drops
