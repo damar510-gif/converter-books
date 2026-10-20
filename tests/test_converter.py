@@ -53,6 +53,39 @@ class ResolveModels(unittest.TestCase):
         got = c.resolve_models(pool, ["gemini-3.8-flash", "gemini-3-flash", "gemini-2.5-flash", "gemini-9-flash"])
         self.assertEqual(got, ["gemini-3.8-flash", "gemini-3-flash-preview", "gemini-2.5-flash", "gemini-9-flash"])
 
+    def test_new_gemini_models_join_the_judges(self):
+        names = ("gemini-4-pro-preview", "gemini-3.9-flash", "gemini-3.9-flash-lite", "gemini-3.8-flash",
+                 "gemini-3-flash-preview", "gemini-3.9-flash-image", "gemma-5-27b-it", "gemini-2.0-flash",
+                 "gemini-3.9-flash-preview-09-2026", "gemini-3.6-pro", "gemini-nano-3")
+        listed = [pytypes.SimpleNamespace(name="models/" + n, supported_actions=["generateContent"]) for n in names]
+        pool = pytypes.SimpleNamespace(client=pytypes.SimpleNamespace(
+            models=pytypes.SimpleNamespace(list=lambda: listed)))
+        got = c.resolve_models(pool, ["gemini-3.8-flash", "gemini-3.7-flash", "gemini-3-flash", "gemini-2.5-flash"])
+        self.assertEqual(got, ["gemini-4-pro-preview", "gemini-3.9-flash", "gemini-3.8-flash", "gemini-3.7-flash",
+                               "gemini-3.6-pro", "gemini-3-flash-preview", "gemini-2.5-flash"])
+        self.assertEqual(pool.added_judges, ["gemini-4-pro-preview", "gemini-3.9-flash", "gemini-3.6-pro"])
+
+    def test_model_without_free_quota_is_skipped_at_once(self):
+        calls = []
+
+        def generate_content(model, contents, config):
+            calls.append(model)
+            raise Exception("429 RESOURCE_EXHAUSTED. Quota exceeded for metric: "
+                            "generate_content_free_tier_requests, limit: 0, model: gemini-4-pro")
+        client, sleep = c.genai.Client, c.time.sleep
+        os.environ["GEMINI_API_KEY"] = "test"
+        c.genai.Client = lambda **kw: pytypes.SimpleNamespace(models=pytypes.SimpleNamespace(
+            generate_content=generate_content))
+        c.time.sleep = lambda s: None
+        try:
+            pool = c.ModelPool("a", "b", "", 60)
+            with self.assertRaises(c.QuotaExhausted):
+                pool.read(None, "x", "gemini-4-pro")
+        finally:
+            c.genai.Client, c.time.sleep = client, sleep
+        self.assertEqual(calls, ["gemini-4-pro"])
+        self.assertIn("gemini-4-pro", pool.exhausted)
+
     def test_listing_failure_keeps_names(self):
         pool = pytypes.SimpleNamespace(client=pytypes.SimpleNamespace(models=object()))
         self.assertEqual(c.resolve_models(pool, ["a", "b"]), ["a", "b"])
