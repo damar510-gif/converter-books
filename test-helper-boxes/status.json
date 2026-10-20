@@ -1,0 +1,23 @@
+{
+  "state": "done",
+  "pages_total": 2,
+  "pages_done": 2,
+  "pages_judging": [],
+  "pages_helper": [],
+  "pages_unsure": [],
+  "pages_missing": [],
+  "pages_waiting": [],
+  "pages_retry": [],
+  "pages_human": [],
+  "helper_checked": 0,
+  "review_items": 0,
+  "review_applied": 0,
+  "review_kept": 0,
+  "review_conflicts_new": 0,
+  "review_seen": "",
+  "book": "اختبار المربعات",
+  "epub": "تراث الانسانية 3-1-246.epub",
+  "updated_at": "2026-10-20T18:53:22Z",
+  "run_id": 39478551852,
+  "run_number": 27
+}
