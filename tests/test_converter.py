@@ -84,7 +84,16 @@ class ResolveModels(unittest.TestCase):
         finally:
             c.genai.Client, c.time.sleep = client, sleep
         self.assertEqual(calls, ["gemini-4-pro"])
-        self.assertIn("gemini-4-pro", pool.exhausted)
+        self.assertIn("gemini-4-pro", pool.missing)
+        self.assertEqual(pool.quota_day, "")
+
+    def test_plain_name_preferred_and_dated_names_ranked(self):
+        names = ("gemini-4-flash-preview", "gemini-4-flash", "gemini-3.8-flash-preview-11-2026", "gemini-3-pro-preview")
+        listed = [pytypes.SimpleNamespace(name="models/" + n, supported_actions=["generateContent"]) for n in names]
+        pool = pytypes.SimpleNamespace(client=pytypes.SimpleNamespace(
+            models=pytypes.SimpleNamespace(list=lambda: listed)))
+        got = c.resolve_models(pool, ["gemini-3.8-flash"])
+        self.assertEqual(got, ["gemini-4-flash", "gemini-3.8-flash-preview-11-2026", "gemini-3-pro-preview"])
 
     def test_listing_failure_keeps_names(self):
         pool = pytypes.SimpleNamespace(client=pytypes.SimpleNamespace(models=object()))

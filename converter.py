@@ -319,9 +319,15 @@ class ModelPool:
                 msg = str(e)
                 low = msg.lower()
                 if "429" in msg or "resource_exhausted" in low:
-                    # "limit: 0": no free quota for this model at all; skip it like a used-up one.
-                    if "perday" in low.replace(" ", "") or "per day" in low or "daily" in low \
-                            or "limit: 0" in low:
+                    if "limit: 0" in low:
+                        # No free quota for this model at all: unusable on this key, so
+                        # no page waits for it.
+                        with self.lock:
+                            self.exhausted.add(model)
+                            self.missing.add(model)
+                        print(f"  {model}: no free quota on this key, skipped")
+                        raise QuotaExhausted(model) from e
+                    if "perday" in low.replace(" ", "") or "per day" in low or "daily" in low:
                         with self.lock:
                             self.exhausted.add(model)
                             self.quota_day = self.quota_day or pacific_day()
@@ -686,7 +692,7 @@ NEW_JUDGE = re.compile(r"^gemini-(\d+(?:\.\d+)?)-(flash|pro)(?:-preview|-latest)
 
 def judge_rank(name):
     """(version, Pro before Flash) for ordering judges strongest first; (0,) if unknown."""
-    m = NEW_JUDGE.match(name)
+    m = NEW_JUDGE.match(re.sub(r"-(preview|latest|exp)(-[\w-]*)?$|-\d{3}$", "", name))
     if not m:
         return (0,)
     major, _, minor = m.group(1).partition(".")
@@ -729,7 +735,8 @@ def resolve_models(pool, names):
     base = lambda a: re.sub(r"-(preview|latest)$", "", a)
     known = {base(a) for a in out}
     added = []
-    for a in sorted(have, key=judge_rank, reverse=True):
+    # Same rank: the plain name first (it outlives its -preview/-latest aliases).
+    for a in sorted(have, key=lambda a: (judge_rank(a), a == base(a)), reverse=True):
         m = NEW_JUDGE.match(a)
         if not m or int(m.group(1).split(".")[0]) < 3 or base(a) in known:
             continue
@@ -759,6 +766,7 @@ def arbitrate(pool, filepath, records, cache_dir, models, limit):
     vocab = set()
     for r in records:
         vocab.update(norm_words(r.get("text") or ""))
+    failed = {}
     local = open_pdf(filepath)
     try:
         for rec in todo:
@@ -792,6 +800,15 @@ def arbitrate(pool, filepath, records, cache_dir, models, limit):
                         print(f"  {m}: not found, skipped: {str(e)[:200]}")
                         pool.exhausted.add(m)
                         pool.missing.add(m)
+                        continue
+                    if any(x in str(e) for x in ("500", "502", "503", "504")) or "unavailable" in str(e).lower() \
+                            or "timeout" in str(e).lower() or "timed out" in str(e).lower():
+                        # Temporary trouble: the page keeps its judge slot for another model,
+                        # and a model failing like this twice is left out for the run.
+                        failed[m] = failed.get(m, 0) + 1
+                        if failed[m] >= 2:
+                            print(f"  {m}: keeps failing, skipped for this run")
+                            pool.exhausted.add(m)
                         continue
                     text, finish, model = "", f"error {str(e)[:100]}", m
                     break
