@@ -2058,7 +2058,8 @@ test('helper: the page gives one install line; its file is public, the program a
   const install = env.drive.DriveApp.getFileById(env.props.get('HELPER_INSTALL_ID'));
   assert.strictEqual(install.sharing, 'ANYONE_WITH_LINK/VIEW');
   assert.strictEqual(install.content.toString('utf8'), env.gh.repoFiles['helper/install.ps1']);
-  assert.ok(h.line.indexOf("DownloadData('https://drive.google.com/uc?export=download&id=" + install.id + "')") > 0, h.line);
+  assert.ok(h.line.indexOf("DownloadData('https://drive.usercontent.google.com/download?id=" + install.id +
+    "&export=download&confirm=t')") > 0, h.line);
   assert.ok(/UTF8\.GetString/.test(h.line), 'decodes the file as UTF-8');
   const folder = helperFolder(env);
   assert.strictEqual(folder.name, 'بيانات المساعد');

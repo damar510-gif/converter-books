@@ -1885,12 +1885,17 @@ function liveFiles_(folder, name) {
   return out;
 }
 
-/** The one line the user pastes into PowerShell, or '' before the install file exists. */
+/**
+ * The one line the user pastes into PowerShell, or '' before the install file exists.
+ * drive.google.com/uc answers a .ps1 file with a "virus scan warning" page; this address
+ * with confirm=t gives the file itself.
+ */
 function installLine_() {
   var id = props_().getProperty('HELPER_INSTALL_ID');
   if (!id) return '';
   return "[Net.ServicePointManager]::SecurityProtocol='Tls12';iex ([Text.Encoding]::UTF8.GetString(" +
-    "(New-Object Net.WebClient).DownloadData('https://drive.google.com/uc?export=download&id=" + id + "')))";
+    "(New-Object Net.WebClient).DownloadData('https://drive.usercontent.google.com/download?id=" + id +
+    "&export=download&confirm=t')))";
 }
 
 /** The helper's own status file (the newest, if Drive for desktop left two). */
