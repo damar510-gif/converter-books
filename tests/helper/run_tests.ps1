@@ -284,6 +284,26 @@ Test 'the status page gets the models, what each model in a box is doing, and th
   Same (Iso-Of $s.books.book1.book_at) '2026-10-20T10:00:00Z' 'with the time of book.json'
 }
 
+Test '"try again now" on the page: a resting model works again at once' {
+  Set-Boxes @($GEMINI) @()
+  Make-Book 'book1' @(1) @() $false @{ 1 = $RIGHT } | Out-Null
+  $script:Answer = { param($tool, $model, $kind, $task) @{ code = 1; err = '429 rate limit reached' } }
+  Work 'agy' | Out-Null
+  Same (Load-Chips 'agy')[$GEMINI].state 'exhausted' 'resting'
+  $reqs = Read-Json (Join-Path $Folder 'requests.json')
+  $reqs | Add-Member -NotePropertyName requests -NotePropertyValue @(@{ id = 'r1'; action = 'retry'; choices = @{ model = $GEMINI } }) -Force
+  Write-Utf8 (Join-Path $Folder 'requests.json') ($reqs | ConvertTo-Json -Depth 6)
+  function Start-Hidden([string]$id) { return [pscustomobject]@{ Id = $PID } }
+  function Invoke-Tool { throw 'no tools here' }
+  Invoke-HelperCycle
+  $c = (Load-Chips 'agy')[$GEMINI]
+  Check (Chip-Ready $c) 'ready again'
+  Same $c.outs 0 'the waits start from two hours again'
+  Check (@((Load-State).done) -contains 'r1') 'the request is done'
+  $script:Answer = { param($tool, $model, $kind, $task) @{ text = $RIGHT } }
+  Same (Work 'agy').kind 'readB' 'and takes work'
+}
+
 Remove-Item -LiteralPath $Tmp -Recurse -Force -ErrorAction SilentlyContinue
 Write-Host ''
 Write-Host "$($script:Count - $script:Failed) of $($script:Count) tests passed$(if ($script:Failed) { ", $($script:Failed) FAILED" })"

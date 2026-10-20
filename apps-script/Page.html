@@ -125,13 +125,25 @@
   details { margin-top: 10px; }
   .tag { display: inline-block; font-size: .8rem; padding: 0 8px; border-radius: 999px; background: var(--ok-bg);
     color: var(--ok); margin-inline-start: 6px; }
-  /* The boxes: models on the user's computer, put to work by moving them to the left box.
-     On a computer screen the card is wider than the others. */
-  @media (min-width: 760px) {
-    #boxes { width: min(1100px, calc(100vw - 64px));
-      margin-left: calc((100% - min(1100px, calc(100vw - 64px))) / 2);
-      margin-right: calc((100% - min(1100px, calc(100vw - 64px))) / 2); }
-  }
+  /* The home page: wider on a computer, its cards two by two. */
+  main#home { max-width: 1100px; }
+  .top { display: flex; gap: 12px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+  .tools { display: flex; gap: 8px; flex-wrap: wrap; }
+  .tools button { width: auto; padding: 8px 16px; }
+  .pills { display: flex; gap: 8px; flex-wrap: wrap; margin: 12px 0 2px; }
+  .pill { font-size: .9rem; padding: 4px 12px; border-radius: 999px; background: var(--card); border: 1px solid var(--line); }
+  .pill.ok { background: var(--ok-bg); color: var(--ok); border-color: transparent; }
+  .pill.warn { background: var(--warn-bg); color: var(--warn); border-color: transparent; }
+  .pill.bad { background: var(--bad-bg); color: var(--bad); border-color: transparent; }
+  .grid2 { display: grid; grid-template-columns: 1fr; column-gap: 14px; }
+  .grid2 > .card { min-width: 0; }
+  @media (min-width: 900px) { .grid2 { grid-template-columns: 1fr 1fr; align-items: start; } }
+  ol.names { margin: 6px 0 0; padding-inline-start: 22px; }
+  ol.names li { border: 0; padding: 2px 0; overflow-wrap: anywhere; }
+  .parked { margin-top: 10px; }
+  .books .links-row { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; margin-top: 4px; }
+  .books .links-row button { width: auto; }
+  .retry { display: block; width: 100%; margin: -4px 0 10px; }
   #boxes h2 { font-size: 1.15rem; }
   .sec { border-top: 1px solid var(--line); padding-top: 14px; margin-top: 14px; }
   .sec > .title { font-size: 1.1rem; }
@@ -162,26 +174,35 @@
 </head>
 <body>
 <main id="home">
-  <h1>تحويل الكتب</h1>
-  <div class="muted" id="sub"></div>
+  <div class="top">
+    <div>
+      <h1>تحويل الكتب</h1>
+      <div class="muted" id="sub"></div>
+    </div>
+    <div class="tools">
+      <button id="check" class="small" type="button">افحص الآن</button>
+      <button id="judge" class="small plain" type="button">اعرض على الحكّام الآن</button>
+    </div>
+  </div>
+  <div class="pills" id="pills"></div>
+  <p id="msg" class="muted" role="status"></p>
 
-  <section class="card" id="now"></section>
-  <section class="card" id="queue"></section>
+  <div class="grid2">
+    <section class="card" id="now"></section>
+    <section class="card" id="queue"></section>
+  </div>
 
   <section class="card" id="reviews" hidden></section>
 
   <section class="card" id="boxes" hidden></section>
 
-  <section class="card" id="helper" hidden></section>
-
-  <button id="check" type="button">افحص الآن</button>
-  <button id="judge" type="button">اعرض على الحكّام الآن</button>
-  <p id="msg" class="muted" role="status"></p>
-
-  <section class="card">
-    <h2>آخر الكتب</h2>
-    <ul id="recent"></ul>
-  </section>
+  <div class="grid2">
+    <section class="card">
+      <h2>آخر الكتب</h2>
+      <ul id="recent" class="books"></ul>
+    </section>
+    <section class="card" id="helper" hidden></section>
+  </div>
 
   <section class="card muted" id="foot"></section>
 </main>
@@ -269,6 +290,7 @@
       return;
     }
     sub.textContent = s.lastTick ? 'آخر فحص: قبل ' + duration(minutesSince(s.lastTick, s.now)) : 'لم يجرِ أي فحص بعد';
+    renderPills(s);
 
     if (!s.setUp) {
       now.appendChild(el('div', 'note warn', 'الإعداد لم يكتمل. شغّل الدالة setup من المحرر (الخطوة 4 في دليل الإعداد).'));
@@ -309,8 +331,14 @@
     // Waiting books.
     queue.appendChild(el('h2', '', 'في الانتظار'));
     queue.appendChild(el('div', '', s.queued
-      ? count(s.queued, 'كتاب واحد', 'كتابان', 'كتب', 'كتاباً') + ' في «1- جديد».'
+      ? count(s.queued, 'كتاب واحد', 'كتابان', 'كتب', 'كتاباً') + ' في «1- جديد»' + (s.queueNames && s.queueNames.length ? '، تبدأ بهذا الترتيب:' : '.')
       : 'لا توجد كتب في «1- جديد».'));
+    if (s.queueNames && s.queueNames.length) {
+      var names = el('ol', 'names');
+      s.queueNames.forEach(function (n) { names.appendChild(el('li', '', n)); });
+      if (s.queued > s.queueNames.length) names.appendChild(el('li', 'muted', '…'));
+      queue.appendChild(names);
+    }
     if (s.uploading) {
       queue.appendChild(el('div', 'muted', 'منها ' + s.uploading + ' ما زال يُرفع أو أُضيف قبل دقائق.'));
     }
@@ -320,29 +348,45 @@
     }
     // Books waiting in «2- قيد التحويل» without stopping the others.
     (s.parked || []).forEach(function (p) {
-      queue.appendChild(el('div', 'muted', p.stage === 'helper'
-        ? '«' + p.title + '» ينتظر نماذجك على الجهاز' + (p.need ? ' (أنهت ' + p.finished + ' من ' + p.need + ' صفحة)' : '') + '.'
-        : p.stage === 'readerWait' ? '«' + p.title + '» ينتظر تجدد رصيد القارئ الثاني، ثم يكمل قبل غيره.'
-        : '«' + p.title + '» ينتظر الحكّام حتى يتجدد رصيدهم.'));
+      var d = el('div', 'parked');
+      d.appendChild(el('div', 'title', '«' + p.title + '»'));
+      d.appendChild(el('div', 'muted', p.stage === 'helper'
+        ? 'ينتظر نماذجك على الجهاز' + (p.need ? ': أنهت ' + p.finished + ' من ' + p.need + ' صفحة.' : '.')
+        : p.stage === 'readerWait' ? 'ينتظر تجدد رصيد القارئ الثاني، ثم يكمل قبل غيره.'
+        : 'ينتظر الحكّام حتى يتجدد رصيدهم.'));
+      if (p.stage === 'helper' && p.need) d.appendChild(progress(p.finished, p.need));
+      queue.appendChild(d);
     });
 
     // Finished books.
     if (!s.recent.length) {
       recent.appendChild(el('li', 'muted', 'لا شيء بعد.'));
     }
+    var open = {};
+    (s.reviews || []).forEach(function (b) { if (b.open && b.note !== 'no-data') open[b.fileId] = b.open; });
     s.recent.forEach(function (j) {
       var li = el('li');
       var row = el('div', 'row');
       row.appendChild(el('span', 'title', j.title));
       var badge = j.stage === 'problem' ? el('span', 'badge bad', 'مشكلة')
         : j.incomplete ? el('span', 'badge warn', 'جاهز، فيه صفحات ناقصة')
+        : j.final ? el('span', 'badge ok', 'مكتمل')
         : el('span', 'badge ok', 'جاهز');
       row.appendChild(badge);
       li.appendChild(row);
-      var meta = el('div', 'muted');
-      meta.appendChild(document.createTextNode(when(j.finishedAt) + (j.reason ? ' — ' + j.reason : '') + ' '));
-      if (j.url) meta.appendChild(link(j.url, j.stage === 'problem' ? 'الملف' : 'افتح الكتاب'));
+      var meta = el('div', 'muted', when(j.finishedAt) + (j.reason ? ' — ' + j.reason : '') +
+        (j.stage !== 'problem' && j.unsure > 0 ? ' — ' + count(j.unsure, 'صفحة مشكوك فيها', 'صفحتان مشكوك فيهما', 'صفحات مشكوك فيها', 'صفحة مشكوك فيها') : ''));
       li.appendChild(meta);
+      var links = el('div', 'links-row');
+      if (j.url) links.appendChild(link(j.url, j.stage === 'problem' ? 'الملف' : 'افتح الكتاب'));
+      var places = j.fileId && open[j.fileId];
+      if (places) {
+        var rv = el('button', 'small plain', 'راجِع ' + count(places, 'موضعاً واحداً', 'موضعين', 'مواضع', 'موضعاً'));
+        rv.type = 'button';
+        rv.addEventListener('click', function () { openReview(j.fileId); });
+        links.appendChild(rv);
+      }
+      if (j.url || places) li.appendChild(links);
       recent.appendChild(li);
     });
 
@@ -366,6 +410,38 @@
   }
 
   function setMsg(text) { document.getElementById('msg').textContent = text; }
+
+  function progress(done, total) {
+    var bar = el('div', 'bar');
+    var fill = el('span');
+    fill.style.width = (total ? Math.min(100, Math.round(100 * done / total)) : 0) + '%';
+    bar.appendChild(fill);
+    return bar;
+  }
+
+  // The day at a glance: what runs, what waits, what needs the user.
+  function renderPills(s) {
+    var box = document.getElementById('pills');
+    box.textContent = '';
+    var add = function (cls, text) { box.appendChild(el('span', 'pill' + (cls ? ' ' + cls : ''), text)); };
+    var a = s.active;
+    if (a) add(a.paused ? 'warn' : 'ok', (a.paused ? 'متوقف حتى الغد: «' : 'يُحوَّل الآن: «') + a.title + '»');
+    else add('', 'لا يوجد تحويل الآن');
+    if (s.queued) add('', 'في «1- جديد»: ' + s.queued);
+    if (s.parked && s.parked.length) add('', 'ينتظر في «2- قيد التحويل»: ' + s.parked.length);
+    var places = 0;
+    (s.reviews || []).forEach(function (b) { places += b.open || 0; });
+    if (places) add('warn', 'للمراجعة: ' + count(places, 'موضع واحد', 'موضعان', 'مواضع', 'موضعاً'));
+    var h = s.helper;
+    if (h && h.seen) add(h.connected ? 'ok' : 'warn', h.connected ? 'جهازك متصل' : 'جهازك غير متصل');
+    var resting = 0;
+    if (h && h.chips) Object.keys(h.chips).forEach(function (id) { if (/^(exhausted|failing)$/.test(h.chips[id].state)) resting++; });
+    if (resting) add('warn', 'نماذج ترتاح: ' + resting);
+    if (s.tokenExpires) {
+      var days = Math.floor((Date.parse(s.tokenExpires) - Date.parse(s.now)) / 86400000);
+      if (days <= 14) add('bad', 'رمز GitHub ينتهي بعد ' + Math.max(0, days) + ' يوم');
+    }
+  }
 
   function refresh(after) {
     google.script.run
@@ -1007,7 +1083,6 @@
   // The boxes: the models on the user's computer go to work when moved from the
   // right box of a section to its left box (dragged on a computer, or tapped).
   // ------------------------------------------------------------------------
-  var LAST = null;
   var BOXES = null;
   var BOXES_SAVING = 0;
   var SECTIONS = [
@@ -1075,8 +1150,10 @@
       offBox.appendChild(group);
     });
     on.forEach(function (id) {
-      var m = modelOf(models, id);
-      onBox.appendChild(chip(sec.key, m || { id: id, label: id, tool: '', gone: true }, true, h));
+      var m = modelOf(models, id) || { id: id, label: id, tool: '', gone: true };
+      onBox.appendChild(chip(sec.key, m, true, h));
+      var c = (h.chips || {})[id];
+      if (c && /^(exhausted|failing)$/.test(c.state) && !m.gone) onBox.appendChild(retryButton(m));
     });
     if (!on.length) onBox.appendChild(el('div', 'muted', sec.empty));
     pair.appendChild(offBox);
@@ -1105,6 +1182,27 @@
     b.addEventListener('dragstart', function (e) {
       e.dataTransfer.setData('text/plain', JSON.stringify({ id: m.id }));
       e.dataTransfer.effectAllowed = 'move';
+    });
+    return b;
+  }
+
+  function retryButton(m) {
+    var b = el('button', 'small plain retry', 'أعد المحاولة الآن');
+    b.type = 'button';
+    b.addEventListener('click', function () {
+      b.disabled = true;
+      setMsg('جارٍ الطلب…');
+      google.script.run
+        .withSuccessHandler(function (text) {
+          var r = parse(text);
+          setMsg(r.ok ? 'يعاود «' + m.label + '» خلال دقيقة أو دقيقتين إن كان جهازك مفتوحاً.' : 'تعذّر الطلب: ' + (r.error || ''));
+          if (!r.ok) b.disabled = false;
+        })
+        .withFailureHandler(function (err) {
+          b.disabled = false;
+          setMsg('تعذّر الطلب: ' + errText(err));
+        })
+        .helperRequest(JSON.stringify({ action: 'retry', choices: { model: m.id }, label: 'أعد المحاولة: ' + m.label }));
     });
     return b;
   }

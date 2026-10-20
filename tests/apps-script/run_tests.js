@@ -2489,6 +2489,28 @@ test('the page: models move between the boxes with a tap (or a drag), are saved,
   assert.deepStrictEqual(JSON.parse(page.pending('setHelperBoxes')[0].args[0]).review, [GEMINI]);
 });
 
+test('the page: the waiting books by name in their order, and how each finished book ended', () => {
+  const env = readyEnv();
+  const first = addBook(env, 'أول.pdf', { ageMin: 30 });
+  addBook(env, 'ثان.pdf', { ageMin: 20 });
+  addBook(env, 'ثالث.docx', { ageMin: 10 });
+  tick(env);
+  let s = status(env);
+  assert.deepStrictEqual(s.queueNames, ['ثان', 'ثالث'], 'without their extension, oldest first');
+  const page = pageSandbox(env, s);
+  assert.ok(/2\. ?|ثان/.test(page.byId.queue.textContent) && /تبدأ بهذا الترتيب/.test(page.byId.queue.textContent));
+  assert.ok(/يُحوَّل الآن: «أول»/.test(page.byId.pills.textContent), page.byId.pills.textContent);
+  minutes(env, 30);
+  writeStatus(env, first.id, 'done', { epub: 'أول.epub', pages_unsure: [4, 9] });
+  writeEpub(env, first.id, 'أول.epub');
+  tick(env);
+  s = status(env);
+  const done = s.recent.find((j) => j.title === 'أول');
+  assert.deepStrictEqual([done.fileId, done.unsure, done.final], [first.id, 2, false]);
+  const page2 = pageSandbox(env, s);
+  assert.ok(/صفحتان مشكوك فيهما/.test(page2.byId.recent.textContent), page2.byId.recent.textContent);
+});
+
 test('the fake GitHub saw only known endpoints', () => {
   // Re-run a full happy path and make sure every request matched a route.
   const env = readyEnv();

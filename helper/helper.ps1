@@ -6,7 +6,7 @@
 # places through the folders «كتب», «مراجعة» and «أحكام» (docs/helper-boxes-plan.md).
 # Windows PowerShell 5.1: no ?? or ?: operators.
 
-$HelperVersion = '2026-10-21.3'
+$HelperVersion = '2026-10-21.4'
 $BooksName = 'كتب'
 $ReviewsName = 'مراجعة'
 $VerdictsName = 'أحكام'
@@ -1242,6 +1242,16 @@ function Invoke-HelperCycle {
   if ($reqs) {
     foreach ($r in @($reqs.requests)) {
       if (-not ($r -and $r.id) -or (@($state.done) -contains $r.id) -or (@($running | ForEach-Object { $_.id }) -contains $r.id)) { continue }
+      # "أعد المحاولة الآن" on the page: the model stops resting (no worker needed).
+      if ([string]$r.action -eq 'retry') {
+        $chip = [string]$r.choices.model
+        if ($chip -match $ChipPattern) {
+          Set-Chip $chip @{ state = 'idle'; text = 'يعاود الآن'; until = ''; fails = 0; outs = 0 } | Out-Null
+          Write-Log "$chip tries again now (asked on the page)"
+        }
+        $state.done = @($state.done) + [string]$r.id
+        continue
+      }
       $tool = Request-Tool $r
       if ($tool -and ($busyTools -contains $tool)) { continue }
       try {
