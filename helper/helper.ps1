@@ -4,7 +4,7 @@
 # results under «نتائج», and reports in helper-status.json, which the status page shows.
 # Windows PowerShell 5.1: no ?? or ?: operators.
 
-$HelperVersion = '2026-10-20.6'
+$HelperVersion = '2026-10-20.7'
 $ResultsName = 'نتائج'
 $TestPagesName = 'صفحات الاختبار'
 $PageTimeoutSec = 20 * 60
@@ -108,6 +108,11 @@ function Find-Tool([string]$name) {
     Where-Object { $_.Source -match '\.(exe|cmd|bat)$' } |
     Sort-Object { if ($_.Source -match '\.exe$') { 0 } else { 1 } } | Select-Object -First 1
   if ($c) { return $c.Source }
+  # Installers that do not always add their folder to Path.
+  foreach ($p in @("$env:USERPROFILE\.local\bin\$name.exe", "$env:USERPROFILE\.$name\bin\$name.exe",
+      "$env:LOCALAPPDATA\$name\bin\$name.exe")) {
+    if (Test-Path -LiteralPath $p) { return $p }
+  }
   return $null
 }
 
