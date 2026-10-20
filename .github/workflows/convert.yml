@@ -131,12 +131,28 @@ jobs:
       # Pages already read in earlier runs are kept here, so a run stopped by the
       # daily limit continues tomorrow from where it stopped.
       - name: Restore saved progress
+        id: restore
         if: env.BOOK_HASH != ''
         uses: actions/cache/restore@v4
         with:
           path: work
           key: ocr-${{ env.BOOK_HASH }}-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: ocr-${{ env.BOOK_HASH }}-
+
+      # GitHub deletes caches unused for 7 days, so every run also keeps a copy of
+      # the progress in the "progress" release (internal; the repository is private).
+      - name: Restore permanent progress copy
+        if: env.BOOK_HASH != '' && steps.restore.outputs.cache-matched-key == ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TMP=$(mktemp -d)
+          if gh release download progress --repo "$GITHUB_REPOSITORY" -p "$BOOK_HASH.tgz" -D "$TMP" 2>/dev/null; then
+            mkdir -p work && tar xzf "$TMP/$BOOK_HASH.tgz" -C work && echo "Progress restored from the permanent copy."
+          else
+            echo "No permanent copy of the progress."
+          fi
+          exit 0
 
       - name: Compare models
         if: inputs.compare_models != ''
@@ -211,6 +227,21 @@ jobs:
         with:
           path: work
           key: ocr-${{ env.BOOK_HASH }}-${{ github.run_id }}-${{ github.run_attempt }}
+
+      - name: Save permanent progress copy
+        if: always() && inputs.compare_models == '' && inputs.text_check_models == '' && env.BOOK_HASH != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          [ -d work ] && [ -n "$(ls -A work)" ] || exit 0
+          gh release view progress --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 ||
+            gh release create progress --repo "$GITHUB_REPOSITORY" --prerelease --target results \
+              --title "Saved progress" --notes "Internal: page-by-page progress of each book (one file per book)."
+          tar czf "$BOOK_HASH.tgz" -C work .
+          # The cache still holds the progress, so a failed upload does not fail the run.
+          gh release upload progress "$BOOK_HASH.tgz" --repo "$GITHUB_REPOSITORY" --clobber ||
+            echo "::warning::Could not save the permanent progress copy."
+          rm -f "$BOOK_HASH.tgz"
 
       - name: Upload EPUB Artifact
         if: always() && inputs.compare_models == '' && inputs.text_check_models == '' && env.EPUB_OUTPUT != ''

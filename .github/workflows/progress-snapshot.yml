@@ -1,0 +1,55 @@
+name: Save book progress permanently
+
+# Rescue only: copies the saved progress of one book from the Actions cache
+# (deleted by GitHub after 7 days unused) to the "progress" release.
+# The book hash is in the conversion log: "progress saved in work/<hash>-v1".
+on:
+  workflow_dispatch:
+    inputs:
+      book_hash:
+        description: 'Book hash (16 characters, from the conversion log)'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      BOOK_HASH: ${{ inputs.book_hash }}
+
+    steps:
+      - name: Check the book hash
+        run: |
+          if [[ ! "$BOOK_HASH" =~ ^[0-9a-f]{16}$ ]]; then
+            echo "Error: the book hash must be 16 characters (0-9, a-f)."
+            exit 1
+          fi
+
+      - name: Restore saved progress
+        id: restore
+        uses: actions/cache/restore@v4
+        with:
+          path: work
+          key: ocr-${{ inputs.book_hash }}-snapshot-${{ github.run_id }}
+          restore-keys: ocr-${{ inputs.book_hash }}-
+
+      - name: Upload to the progress release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MATCHED: ${{ steps.restore.outputs.cache-matched-key }}
+        run: |
+          if [ -z "$MATCHED" ] || [ ! -d work ]; then
+            echo "Error: no saved progress for this book in the cache."
+            exit 1
+          fi
+          echo "Using $MATCHED"
+          gh release view progress --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 ||
+            gh release create progress --repo "$GITHUB_REPOSITORY" --prerelease --target results \
+              --title "Saved progress" --notes "Internal: page-by-page progress of each book (one file per book)."
+          tar czf "$BOOK_HASH.tgz" -C work .
+          ls -l "$BOOK_HASH.tgz"
+          gh release upload progress "$BOOK_HASH.tgz" --repo "$GITHUB_REPOSITORY" --clobber
