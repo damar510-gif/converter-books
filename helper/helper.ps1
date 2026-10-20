@@ -6,7 +6,7 @@
 # places through the folders «كتب», «مراجعة» and «أحكام» (docs/helper-boxes-plan.md).
 # Windows PowerShell 5.1: no ?? or ?: operators.
 
-$HelperVersion = '2026-10-21.2'
+$HelperVersion = '2026-10-21.3'
 $BooksName = 'كتب'
 $ReviewsName = 'مراجعة'
 $VerdictsName = 'أحكام'
@@ -20,20 +20,21 @@ $ClaimMinutes = 30
 # A box worker hands over to a fresh copy of the program after this long.
 $WorkerMinutes = 30
 
-# Models per tool, as the tool's own command line names them. All are offered and the
+# Models per tool, as the tool's own command line names them (`grok models`, `agy models`
+# in probe.txt, 2026-10-21). All are offered and the
 # user chooses; "warn" carries the user's warnings (Gemini 4 Argon is not for
 # transcribing: it uses up the limits; Grok 4.7 Fast costs twice as much).
 $Tools = [ordered]@{
   grok  = @{ label = 'Grok Build'; models = @(
       @{ id = 'grok-4.7'; label = 'Grok 4.7' },
-      @{ id = 'grok-4.7-fast'; label = 'Grok 4.7 Fast'; warn = 'بضعف السعر' },
+      @{ id = 'grok-4.7-build-fast'; label = 'Grok 4.7 Build Fast'; warn = 'بضعف السعر' },
       @{ id = 'grok-4.6'; label = 'Grok 4.6' },
       @{ id = 'grok-4.5'; label = 'Grok 4.5' }) }
   agy   = @{ label = 'Antigravity'; models = @(
       @{ id = 'gemini-4-argon'; label = 'Gemini 4 Argon'; warn = 'لا للتفريغ: يستنفد الحدود' },
       @{ id = 'gemini-3.8-flash'; label = 'Gemini 3.8 Flash' },
-      @{ id = 'claude-sonnet-5.5'; label = 'Claude Sonnet 5.5' },
-      @{ id = 'claude-opus-5.5'; label = 'Claude Opus 5.5' },
+      @{ id = 'claude-sonnet-5-5'; label = 'Claude Sonnet 5.5' },
+      @{ id = 'claude-opus-5-5'; label = 'Claude Opus 5.5' },
       @{ id = 'gpt-oss-120b'; label = 'GPT-OSS 120B' }) }
   # Codex's /model list on the user's free ChatGPT account (2026-10-20); six test pages
   # used 35% of its monthly limit.
