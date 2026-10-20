@@ -220,6 +220,7 @@ function makeEnv(options) {
     isTrashed() { return this.trashed; }
     setTrashed(v) { this.trashed = !!v; return this; }
     getBlob() { return new MockBlob(this.content, this.mime, this.name); }
+    setContent(text) { this.content = Buffer.from(String(text), 'utf8'); this.updated = env.clock; return this; }
     getParents() { return iterator([items.get(this.parentId)]); }
     moveTo(folder) {
       if (!(folder instanceof MockFolder)) throw new Error('moveTo expects a folder');
@@ -299,6 +300,7 @@ function makeEnv(options) {
       return {
         getResponseCode: () => res.code,
         getContentText: () => body.toString('utf8'),
+        getContent: () => Array.from(body),
         getBlob: () => new MockBlob(body, (res.headers || {})['Content-Type'] || 'application/octet-stream', null),
         getHeaders: () => Object.assign({}, res.headers),
         getAllHeaders: () => Object.assign({}, res.headers)
@@ -306,8 +308,10 @@ function makeEnv(options) {
     }
   };
 
+  env.serviceUrl = 'https://script.google.com/macros/s/AKfyTEST/exec';
   const ScriptApp = {
     getOAuthToken() { env.tokens++; return 'ya29.drive-token-' + env.tokens; },
+    getService: () => ({ getUrl: () => env.serviceUrl }),
     getProjectTriggers: () => env.triggers.slice(),
     deleteTrigger: (t) => { env.triggers = env.triggers.filter((x) => x !== t); },
     newTrigger(fn) {
@@ -388,6 +392,7 @@ function makeEnv(options) {
 
   const Utilities = {
     formatDate,
+    base64Encode: (bytes) => Buffer.from(bytes).toString('base64'),
     newBlob: (data, type, name) => new MockBlob(data, type, name),
     sleep: () => {}
   };
@@ -489,6 +494,8 @@ function writeStatus(env, fileId, state, extra) {
     pages_done: 10,
     pages_unsure: [],
     pages_missing: [],
+    // Written by the current workflow; a status without it is from an older one.
+    review_items: 0,
     quota_day: formatDate(env.clock, 'America/Los_Angeles', 'yyyy-MM-dd'),
     run_id: 1000 + env.gh.dispatches.length,
     run_number: env.gh.dispatches.length,
@@ -1395,6 +1402,567 @@ test('the page script renders running, paused, finished and error states', () =>
 
   sandbox.render({ ok: false, error: 'boom' });
   assert.ok(/تعذّر قراءة الحالة: boom/.test(byId.now.textContent));
+});
+
+// ---------------------------------------------------------------------------
+// Review by hand
+// ---------------------------------------------------------------------------
+
+const PLACE_BASE = 'base00000000';
+
+function reviewItems(n, page, seen) {
+  page = page || 3;
+  const items = [];
+  for (let i = 1; i <= n; i++) {
+    items.push({ id: 'p' + page + '-' + ('000000000' + i).slice(-10), fp: 'diff|كلمه' + i + '|كلمة', kind: 'diff', n: i,
+      before: 'قبل ', core: 'كلمة' + i, after: ' بعد', pos: 10 * i, options: [{ label: 'other', text: 'كلمه' }],
+      boxes: [[10, 20, 30, 40]], col: [0, 600], located: true });
+  }
+  return { v: 1, book: 'b', book_hash: 'abc', answers_seen: seen || '', generated_at: ghTime(Date.now()),
+    pages: n ? [{ page, base: PLACE_BASE, img: 'p' + String(page).padStart(4, '0') + '-0123456789.jpg', w: 600, h: 750,
+      more: 0, items }] : [] };
+}
+
+function putItems(env, fileId, items) {
+  env.gh.files['drive-' + fileId + '/review/items.json'] = JSON.stringify(items);
+}
+
+function answerFor(item, verdict, text) {
+  const a = { page: 3, kind: item.kind, fp: item.fp, before: item.before, core: item.core, after: item.after,
+    pos: item.pos, base: PLACE_BASE, place: '', verdict };
+  if (verdict === 'fix') a.text = text;
+  return a;
+}
+
+/** A book delivered with `n` places open on page 3. */
+function deliverWithPlaces(env, name, n, extra) {
+  const f = addBook(env, name);
+  tick(env);
+  minutes(env, 30);
+  const items = reviewItems(n);
+  putItems(env, f.id, items);
+  writeStatus(env, f.id, 'done', Object.assign({ epub: 'b.epub', pages_unsure: [3], review_items: n, review_seen: '' }, extra));
+  writeEpub(env, f.id, 'b.epub', Buffer.from('PK first'));
+  tick(env);
+  assert.strictEqual(jobs(env)[f.id].stage, 'delivered');
+  return { f, items };
+}
+
+function rv(env, fileId) {
+  return JSON.parse(env.props.get('RV_' + fileId) || 'null');
+}
+
+function answersFile(env, fileId) {
+  const root = env.drive.DriveApp.getFolderById(env.props.get('FOLDER_ROOT'));
+  const dir = env.drive.children(root.getId()).find((x) => x.name === 'بيانات المراجعة');
+  assert.ok(dir, 'answers folder made');
+  return env.drive.children(dir.getId()).find((x) => x.name === 'review-' + fileId + '.json');
+}
+
+function epubsIn(env, key) {
+  return filesIn(env, key).filter((x) => /\.epub$/.test(x.name));
+}
+
+test('review: places listed, answers saved in Drive, sent once and applied in a review round', () => {
+  const env = readyEnv();
+  env.ctx.doGet();
+  const { f, items } = deliverWithPlaces(env, 'مراجعة.pdf', 2);
+  const link = 'https://script.google.com/macros/s/AKfyTEST/exec?review=' + f.id;
+  const mail = env.mails[env.mails.length - 1];
+  assert.ok(/جاهز للمراجعة: 2 موضعاً/.test(mail.body) && mail.body.indexOf(link) >= 0, mail.body);
+  let s = status(env);
+  assert.deepStrictEqual(s.reviews, [{ fileId: f.id, title: 'مراجعة', open: 2, saved: 0, pending: false, note: '' }]);
+
+  let r = JSON.parse(env.ctx.getReview(f.id));
+  assert.strictEqual(r.ok, true);
+  assert.strictEqual(r.title, 'مراجعة');
+  assert.deepStrictEqual(r.pages[0].items.map((x) => x.core), ['كلمة1', 'كلمة2']);
+  const one = items.pages[0].items[0];
+  const saved = JSON.parse(env.ctx.saveAnswers(f.id, JSON.stringify({ [one.id]: answerFor(one, 'keep') })));
+  assert.deepStrictEqual(saved, { ok: true, saved: 1, pending: 1 });
+  assert.strictEqual(env.lockHeld, false, 'lock released');
+  const file = answersFile(env, f.id);
+  const stored = JSON.parse(file.content.toString('utf8'));
+  assert.strictEqual(stored.fileId, f.id);
+  assert.strictEqual(stored.answers[one.id].verdict, 'keep');
+  assert.strictEqual(stored.answers[one.id].at, iso(env.clock));
+  r = JSON.parse(env.ctx.getReview(f.id));
+  assert.deepStrictEqual(r.pages[0].items.map((x) => x.core), ['كلمة2'], 'an answered place waits for the next run');
+  assert.strictEqual(r.saved, 1);
+  assert.strictEqual(status(env).reviews[0].saved, 1);
+
+  const sent = JSON.parse(env.ctx.sendReview(f.id));
+  assert.strictEqual(sent.started, true);
+  const d = lastDispatch(env);
+  assert.strictEqual(d.body.inputs.review, file.id + ':only');
+  assert.strictEqual(d.body.inputs.result_dir, 'drive-' + f.id);
+  assert.strictEqual(jobs(env)[f.id].humanRound, true);
+  const n = env.gh.dispatches.length;
+  JSON.parse(env.ctx.sendReview(f.id));
+  assert.strictEqual(env.gh.dispatches.length, n, 'a second press starts no second round');
+  s = status(env);
+  assert.strictEqual(s.reviews[0].pending, true);
+  assert.strictEqual(s.reviews[0].saved, 0);
+
+  minutes(env, 6);
+  const later = reviewItems(2, 3, iso(env.clock - 6 * 60000));
+  later.pages[0].items.shift();
+  putItems(env, f.id, later);
+  writeStatus(env, f.id, 'done', { epub: 'b.epub', pages_unsure: [3], review_items: 1, review_kept: 1, review_applied: 0,
+    review_seen: later.answers_seen });
+  writeEpub(env, f.id, 'b.epub', Buffer.from('PK reviewed'));
+  tick(env);
+  const epubs = epubsIn(env, 'ready');
+  assert.strictEqual(epubs.length, 1, 'old EPUB replaced in its folder');
+  assert.ok(epubs[0].content.equals(Buffer.from('PK reviewed')));
+  const j = jobs(env)[f.id];
+  assert.strictEqual(j.stage, 'delivered');
+  assert.strictEqual(j.humanRound, undefined);
+  assert.strictEqual(j.refines, undefined, 'a review round is not an improvement round');
+  assert.ok(names(env, 'originals').indexOf('مراجعة.pdf') >= 0);
+  const done = env.mails[env.mails.length - 1];
+  assert.ok(/طُبّقت مراجعتك/.test(done.subject));
+  assert.ok(/0 تصحيحاً و1 تأكيداً/.test(done.body) && /1 ← 1/.test(done.body), done.body);
+  assert.ok(/لا تحذف الملف الأصلي/.test(done.body));
+  s = status(env);
+  assert.deepStrictEqual(s.reviews, [{ fileId: f.id, title: 'مراجعة', open: 1, saved: 0, pending: false, note: '' }]);
+  r = JSON.parse(env.ctx.getReview(f.id));
+  assert.deepStrictEqual(r.pages[0].items.map((x) => x.core), ['كلمة2']);
+});
+
+test('review round: a finished book stays in 6- مكتمل; a ready one with nothing left moves there', () => {
+  const env = readyEnv();
+  const { f, items } = deliverWithPlaces(env, 'منتهٍ.pdf', 1);
+  // An improvement round that changes nothing ends the book's improvement.
+  env.clock += 24 * 3600000;
+  tick(env);
+  minutes(env, 20);
+  writeStatus(env, f.id, 'done', { epub: 'b.epub', pages_unsure: [3], review_items: 1 });
+  writeEpub(env, f.id, 'b.epub', Buffer.from('PK same'));
+  tick(env);
+  assert.strictEqual(jobs(env)[f.id].refineDone, true);
+  assert.strictEqual(epubsIn(env, 'final').length, 1);
+  assert.ok(/لا تحذف الملف الأصلي/.test(env.mails[env.mails.length - 1].body), 'not yet: places are open');
+
+  env.ctx.saveAnswers(f.id, JSON.stringify({ [items.pages[0].items[0].id]: answerFor(items.pages[0].items[0], 'fix', 'كلمه') }));
+  env.ctx.sendReview(f.id);
+  minutes(env, 6);
+  putItems(env, f.id, reviewItems(0));
+  writeStatus(env, f.id, 'done', { epub: 'b.epub', pages_unsure: [], review_items: 0, review_applied: 1 });
+  writeEpub(env, f.id, 'b.epub', Buffer.from('PK fixed'));
+  tick(env);
+  assert.strictEqual(epubsIn(env, 'ready').length, 0);
+  const finals = epubsIn(env, 'final');
+  assert.strictEqual(finals.length, 1);
+  assert.ok(finals[0].content.equals(Buffer.from('PK fixed')));
+  assert.ok(/يمكنك الآن حذف ملفه الأصلي/.test(env.mails[env.mails.length - 1].body));
+  assert.deepStrictEqual(status(env).reviews, []);
+
+  const g = deliverWithPlaces(env, 'جاهز.pdf', 1);
+  env.ctx.saveAnswers(g.f.id, JSON.stringify({ [g.items.pages[0].items[0].id]: answerFor(g.items.pages[0].items[0], 'keep') }));
+  env.ctx.sendReview(g.f.id);
+  minutes(env, 6);
+  writeStatus(env, g.f.id, 'done', { epub: 'b.epub', pages_unsure: [], review_items: 0, review_kept: 1 });
+  writeEpub(env, g.f.id, 'b.epub', Buffer.from('PK all checked'));
+  tick(env);
+  assert.strictEqual(jobs(env)[g.f.id].refineDone, true, 'nothing unsure left: finished');
+  assert.ok(epubsIn(env, 'final').some((x) => x.content.equals(Buffer.from('PK all checked'))));
+  assert.ok(/نقلت الكتاب إلى «6- مكتمل»/.test(env.mails[env.mails.length - 1].body));
+});
+
+test('a review round that fails leaves the book as it was, tries once more, then tells the user once', () => {
+  const env = readyEnv();
+  const { f, items } = deliverWithPlaces(env, 'فشل.pdf', 1);
+  env.ctx.saveAnswers(f.id, JSON.stringify({ [items.pages[0].items[0].id]: answerFor(items.pages[0].items[0], 'keep') }));
+  env.ctx.sendReview(f.id);
+  assert.strictEqual(env.gh.dispatches.length, 2);
+  minutes(env, 6);
+  writeStatus(env, f.id, 'failed', { epub: '' });
+  const mails = env.mails.length;
+  tick(env);
+  assert.strictEqual(env.gh.dispatches.length, 3, 'tried again at once');
+  assert.strictEqual(rv(env, f.id).tries, 1);
+  assert.strictEqual(env.mails.length, mails, 'no message after the first failure');
+  // The second try is lost: no run and no status.
+  minutes(env, 25);
+  tick(env);
+  assert.strictEqual(env.gh.dispatches.length, 3, 'no third try');
+  assert.strictEqual(rv(env, f.id).x, 'failed');
+  assert.strictEqual(env.mails.length, mails + 1);
+  assert.ok(/تعذّر تطبيق المراجعة/.test(env.mails[mails].subject));
+  const j = jobs(env)[f.id];
+  assert.strictEqual(j.stage, 'delivered');
+  assert.ok(epubsIn(env, 'ready')[0].content.equals(Buffer.from('PK first')), 'the old book is kept');
+  assert.ok(names(env, 'originals').indexOf('فشل.pdf') >= 0);
+  assert.deepStrictEqual(names(env, 'problem'), []);
+  assert.strictEqual(status(env).reviews[0].note, 'failed');
+  // Pressing send again tries again.
+  env.clock += 3600000;
+  assert.strictEqual(JSON.parse(env.ctx.sendReview(f.id)).started, true);
+  assert.strictEqual(env.gh.dispatches.length, 4);
+  minutes(env, 6);
+  writeStatus(env, f.id, 'paused', { quota_day: '2026-10-19' });
+  tick(env);
+  // Never parked until tomorrow like a paused book: tried again at once.
+  assert.strictEqual(jobs(env)[f.id].stage, 'running');
+  assert.strictEqual(jobs(env)[f.id].pausedDay, '');
+  assert.strictEqual(env.gh.dispatches.length, 5);
+  assert.ok(epubsIn(env, 'ready')[0].content.equals(Buffer.from('PK first')));
+});
+
+test('the answers go with every run of the book, and review rounds come first', () => {
+  const env = readyEnv();
+  const { f, items } = deliverWithPlaces(env, 'أ.pdf', 2, { pages_unsure: [3, 4] });
+  const one = items.pages[0].items[0];
+  env.ctx.saveAnswers(f.id, JSON.stringify({ [one.id]: answerFor(one, 'keep') }));
+  const answersId = rv(env, f.id).a;
+  // Next day, not sent: the improvement round carries them.
+  env.clock += 24 * 3600000;
+  tick(env);
+  assert.strictEqual(lastDispatch(env).body.inputs.review, answersId);
+  assert.strictEqual(rv(env, f.id).n, 0);
+  minutes(env, 20);
+  writeStatus(env, f.id, 'done', { epub: 'b.epub', pages_unsure: [3], review_items: 1, review_kept: 1 });
+  writeEpub(env, f.id, 'b.epub');
+  tick(env);
+  assert.strictEqual(jobs(env)[f.id].stage, 'delivered');
+
+  // Another book is converting when the user sends: the review waits, then goes before the inbox.
+  const b = addBook(env, 'ب.pdf');
+  tick(env);
+  assert.strictEqual(lastDispatch(env).body.inputs.drive_file_id, b.id);
+  const two = items.pages[0].items[1];
+  env.ctx.saveAnswers(f.id, JSON.stringify({ [two.id]: answerFor(two, 'fix', 'كلمة') }));
+  assert.strictEqual(JSON.parse(env.ctx.sendReview(f.id)).started, false);
+  addBook(env, 'ج.pdf');
+  minutes(env, 30);
+  writeStatus(env, b.id, 'done', { epub: 'ب.epub' });
+  writeEpub(env, b.id, 'ب.epub');
+  tick(env);
+  const d = lastDispatch(env);
+  assert.strictEqual(d.body.inputs.drive_file_id, f.id, 'the review round first');
+  assert.strictEqual(d.body.inputs.review, answersId + ':only');
+});
+
+test('finished books from before the review get their places once; without saved pages it stays quiet', () => {
+  const env = readyEnv();
+  const f = addBook(env, 'قديم.pdf');
+  tick(env);
+  minutes(env, 30);
+  // An older workflow: no review numbers.
+  writeStatus(env, f.id, 'done', { epub: 'b.epub', pages_unsure: [5], review_items: undefined });
+  writeEpub(env, f.id, 'b.epub', Buffer.from('PK old'));
+  tick(env);
+  env.clock += 24 * 3600000;
+  tick(env);
+  minutes(env, 20);
+  writeStatus(env, f.id, 'done', { epub: 'b.epub', pages_unsure: [5], review_items: undefined });
+  writeEpub(env, f.id, 'b.epub', Buffer.from('PK old 2'));
+  const before = env.gh.dispatches.length;
+  tick(env);
+  assert.strictEqual(jobs(env)[f.id].refineDone, true);
+  assert.strictEqual(env.gh.dispatches.length, before + 1, 'idle: its places are prepared');
+  assert.strictEqual(lastDispatch(env).body.inputs.review, ':only');
+  minutes(env, 6);
+  const mails = env.mails.length;
+  writeStatus(env, f.id, 'paused', { pages_waiting: [1, 2] });
+  tick(env);
+  assert.strictEqual(rv(env, f.id).x, 'no-data');
+  assert.strictEqual(env.mails.length, mails, 'no message');
+  assert.ok(epubsIn(env, 'final')[0].content.equals(Buffer.from('PK old 2')), 'the book is unchanged');
+  env.clock += 24 * 3600000;
+  const n = env.gh.dispatches.length;
+  tick(env);
+  assert.strictEqual(env.gh.dispatches.length, n, 'prepared once only');
+  assert.strictEqual(status(env).reviews[0].note, 'no-data');
+
+  // With saved pages: the places are made and the user is told; the book stays as it is.
+  const g = addBook(env, 'قديم ثان.pdf');
+  tick(env);
+  minutes(env, 30);
+  writeStatus(env, g.id, 'done', { epub: 'g.epub', pages_unsure: [2], review_items: undefined });
+  writeEpub(env, g.id, 'g.epub', Buffer.from('PK g'));
+  tick(env);
+  env.clock += 24 * 3600000;
+  tick(env);
+  minutes(env, 20);
+  writeStatus(env, g.id, 'done', { epub: 'g.epub', pages_unsure: [2], review_items: undefined });
+  writeEpub(env, g.id, 'g.epub', Buffer.from('PK g2'));
+  tick(env);
+  assert.strictEqual(lastDispatch(env).body.inputs.drive_file_id, g.id);
+  minutes(env, 6);
+  writeStatus(env, g.id, 'done', { epub: 'g.epub', pages_unsure: [2], review_items: 3, review_applied: 0, review_kept: 0 });
+  writeEpub(env, g.id, 'g.epub', Buffer.from('PK g3'));
+  tick(env);
+  assert.ok(epubsIn(env, 'final').some((x) => x.content.equals(Buffer.from('PK g2'))), 'old EPUB kept');
+  assert.ok(!epubsIn(env, 'final').some((x) => x.content.equals(Buffer.from('PK g3'))));
+  assert.ok(/جاهز للمراجعة/.test(env.mails[env.mails.length - 1].subject));
+  assert.strictEqual(rv(env, g.id).o, 3);
+});
+
+test('review data: ids, image names and answers are checked', () => {
+  const env = readyEnv();
+  const { f, items } = deliverWithPlaces(env, 'تحقق.pdf', 1);
+  assert.strictEqual(JSON.parse(env.ctx.getReview('../x')).ok, false);
+  assert.strictEqual(JSON.parse(env.ctx.getReviewImage(f.id, '../status.json')).ok, false);
+  assert.strictEqual(JSON.parse(env.ctx.getReviewImage(f.id, 'p0003-0123456789.jpg')).ok, false, '404');
+  env.gh.files['drive-' + f.id + '/review/p0003-0123456789.jpg'] = Buffer.from([0xff, 0xd8, 0xff, 0xe0]);
+  const img = JSON.parse(env.ctx.getReviewImage(f.id, 'p0003-0123456789.jpg'));
+  assert.deepStrictEqual(img, { ok: true, src: 'data:image/jpeg;base64,/9j/4A==' });
+
+  const item = items.pages[0].items[0];
+  const bad = [
+    { [item.id]: Object.assign(answerFor(item, 'keep'), { verdict: 'maybe' }) },
+    { [item.id]: answerFor(item, 'fix', 'ب'.repeat(2001)) },
+    { [item.id]: Object.assign(answerFor(item, 'keep'), { page: 4 }) },
+    { 'p3-rest-1': { kind: 'rest', page: 3, verdict: 'keep', ids: Array(26).fill(item.id) } },
+    { 'p3-x': answerFor(item, 'keep') },
+    [answerFor(item, 'keep')]
+  ];
+  bad.forEach((b) => assert.strictEqual(JSON.parse(env.ctx.saveAnswers(f.id, JSON.stringify(b))).ok, false, JSON.stringify(b).slice(0, 80)));
+  assert.strictEqual(rv(env, f.id).a, undefined, 'nothing saved');
+  const rest = { kind: 'rest', page: 3, verdict: 'keep', ids: [item.id], fps: [item.fp] };
+  assert.strictEqual(JSON.parse(env.ctx.saveAnswers(f.id, JSON.stringify({ 'p3-rest-k1': rest }))).ok, true);
+  env.lockBusy = true;
+  assert.deepStrictEqual(JSON.parse(env.ctx.saveAnswers(f.id, JSON.stringify({ 'p3-rest-k1': rest }))), { ok: false, busy: true });
+  env.lockBusy = false;
+  assert.deepStrictEqual(JSON.parse(env.ctx.getReview(f.id)).pages, [], 'the rest of the page is answered');
+});
+
+test('the page address is kept from /exec only, and ?review= opens a book', () => {
+  const env = readyEnv();
+  env.serviceUrl = 'https://script.google.com/macros/s/AKfyTEST/dev';
+  env.ctx.doGet();
+  assert.strictEqual(env.props.get('PAGE_URL'), undefined);
+  env.serviceUrl = null;
+  env.ctx.doGet(undefined);
+  env.serviceUrl = 'https://script.google.com/macros/s/AKfyTEST/exec';
+  const id = '1BxyzABCDEFGHIJKLMNOP';
+  const html = env.ctx.doGet({ parameter: { review: id } }).getContent();
+  assert.strictEqual(env.props.get('PAGE_URL'), env.serviceUrl);
+  const data = JSON.parse(/var INITIAL = (.*);\n/.exec(html)[1]);
+  assert.strictEqual(data.openReview, id);
+  const odd = JSON.parse(/var INITIAL = (.*);\n/.exec(env.ctx.doGet({ parameter: { review: '<x>' } }).getContent())[1]);
+  assert.strictEqual(odd.openReview, '');
+});
+
+test('review without the original: one message and no run; a book dropped from JOBS is rebuilt', () => {
+  const env = readyEnv();
+  const { f, items } = deliverWithPlaces(env, 'محذوف.pdf', 1);
+  env.ctx.saveAnswers(f.id, JSON.stringify({ [items.pages[0].items[0].id]: answerFor(items.pages[0].items[0], 'keep') }));
+  env.drive.items.get(f.id).trashed = true;
+  const n = env.gh.dispatches.length;
+  env.ctx.sendReview(f.id);
+  assert.strictEqual(env.gh.dispatches.length, n);
+  assert.strictEqual(rv(env, f.id).x, 'orig-gone');
+  assert.ok(/المراجعة تنتظر الأصل/.test(env.mails[env.mails.length - 1].subject));
+  minutes(env, 10);
+  tick(env);
+  assert.strictEqual(env.gh.dispatches.length, n, 'not again by itself');
+  assert.strictEqual(status(env).reviews[0].note, 'orig-gone');
+  env.drive.items.get(f.id).trashed = false;
+  // Long after, the job itself was dropped from JOBS.
+  const all = jobs(env);
+  delete all[f.id];
+  env.props.set('JOBS', JSON.stringify(all));
+  assert.strictEqual(JSON.parse(env.ctx.sendReview(f.id)).started, true);
+  assert.strictEqual(jobs(env)[f.id].humanRound, true);
+  minutes(env, 6);
+  writeStatus(env, f.id, 'done', { epub: 'b.epub', pages_unsure: [], review_items: 0, review_kept: 1 });
+  writeEpub(env, f.id, 'b.epub', Buffer.from('PK rebuilt'));
+  tick(env);
+  assert.ok(epubsIn(env, 'ready').concat(epubsIn(env, 'final')).some((x) => x.content.equals(Buffer.from('PK rebuilt'))));
+  assert.strictEqual(epubsIn(env, 'ready').concat(epubsIn(env, 'final')).length, 1, 'the old one replaced');
+});
+
+/**
+ * The page's script in a small DOM: nodes keep their children, click handlers,
+ * value/disabled/hidden; google.script.run records each call and answers it when the
+ * test says so (calls stay pending until then).
+ */
+function pageSandbox(env, initial) {
+  const byId = {};
+  const node = (tag) => {
+    const n = {
+      tag, kids: [], className: '', style: {}, own: '', disabled: false, hidden: false, value: '', handlers: {},
+      set textContent(v) { this.own = String(v); this.kids = []; },
+      get textContent() { return [this.own].concat(this.kids.map((k) => k.textContent)).join(' '); },
+      appendChild(c) { this.kids.push(c); return c; },
+      addEventListener(type, fn) { (this.handlers[type] = this.handlers[type] || []).push(fn); }
+    };
+    return n;
+  };
+  const calls = [];
+  const run = () => {
+    const call = { ok: null, fail: null };
+    const chain = {
+      withSuccessHandler(f) { call.ok = f; return chain; },
+      withFailureHandler(f) { call.fail = f; return chain; }
+    };
+    ['getStatus', 'tick', 'judgeNow', 'getReview', 'getReviewImage', 'saveAnswers', 'sendReview'].forEach((name) => {
+      chain[name] = (...args) => { call.name = name; call.args = args; calls.push(call); };
+    });
+    return chain;
+  };
+  const timers = [];
+  const storage = {};
+  const sandbox = {
+    document: {
+      hidden: false,
+      createElement: node,
+      createTextNode: (t) => ({ textContent: String(t) }),
+      getElementById: (id) => byId[id] || (byId[id] = node('div')),
+      addEventListener() {}
+    },
+    google: { script: { get run() { return run(); } } },
+    setInterval: () => 0,
+    setTimeout: (fn, ms) => { timers.push({ fn, ms }); return timers.length; },
+    localStorage: { getItem: (k) => (k in storage ? storage[k] : null), setItem: (k, v) => { storage[k] = String(v); } },
+    Date, JSON, Math, String, Object, Array
+  };
+  const html = env.ctx.doGet().getContent().replace(/var INITIAL = .*;\n/, 'var INITIAL = ' + JSON.stringify(initial) + ';\n');
+  const script = /<script>([\s\S]*?)<\/script>/.exec(html)[1];
+  vm.createContext(sandbox);
+  vm.runInContext(script, sandbox);
+  const find = (root, pred) => {
+    if (pred(root)) return root;
+    for (const k of root.kids || []) { const f = find(k, pred); if (f) return f; }
+    return null;
+  };
+  const api = {
+    byId, calls, timers, storage, sandbox,
+    button(text, root) {
+      // The static elements are separate nodes here (no HTML parsing): look in all of them.
+      const roots = root ? [root] : Object.values(byId);
+      let b = null;
+      roots.some((r) => (b = find(r, (x) => x.tag === 'button' && x.own.indexOf(text) >= 0)));
+      assert.ok(b, 'button ' + text);
+      return b;
+    },
+    click(b) { (b.handlers.click || []).forEach((fn) => fn.call(b)); },
+    pending(name) { return calls.filter((c) => c.name === name && !c.done); },
+    answer(call, value) { call.done = true; call.ok(typeof value === 'string' ? value : JSON.stringify(value)); },
+    fail(call, err) { call.done = true; call.fail(new Error(err)); },
+    textarea() { return find(byId['rv-body'], (x) => x.tag === 'textarea'); }
+  };
+  return api;
+}
+
+function reviewForPage() {
+  const items = reviewItems(3).pages[0];
+  items.items[1] = { id: 'p3-00000000aa', fp: 'missing|سطر', kind: 'missing', n: 2, before: 'آخر السطر', core: '\n\n',
+    after: 'أول الفقرة', pos: 50, place: 'after', hint: 'heading', boxes: [[5, 5, 50, 20]], col: [0, 600], located: true,
+    options: [{ label: 'other', text: 'السطر الساقط كاملاً' }, { label: 'ocr', text: 'السطر السافط' }] };
+  items.items[2].hint = 'likely-ok';
+  return { ok: true, fileId: '1Bbook0000000aBcDeF', title: 'كتاب', pages: [items], saved: 0, sent: false, running: false, note: '' };
+}
+
+test('the review screen: one place at a time, each button gives the right answer, one save at a time, then send', () => {
+  const env = readyEnv();
+  const id = '1Bbook0000000aBcDeF';
+  const status = JSON.parse(env.ctx.getStatus());
+  status.reviews = [{ fileId: id, title: 'كتاب', open: 3, saved: 0, pending: false, note: '' }];
+  const P = pageSandbox(env, status);
+  assert.strictEqual(P.byId.reviews.hidden, false);
+  assert.ok(/مراجعة المشكوك فيه/.test(P.byId.reviews.textContent) && /3 مواضع/.test(P.byId.reviews.textContent));
+  P.click(P.button('راجِع', P.byId.reviews));
+  assert.strictEqual(P.byId.home.hidden, true);
+  assert.strictEqual(P.byId.review.hidden, false);
+  const get = P.pending('getReview')[0];
+  assert.deepStrictEqual(get.args, [id]);
+  P.answer(get, reviewForPage());
+  assert.ok(/الموضع 1 من 3 · صفحة 3 من الأصل/.test(P.byId['rv-count'].textContent));
+  assert.ok(/كلمة1/.test(P.byId['rv-body'].textContent));
+  const img = P.pending('getReviewImage');
+  assert.strictEqual(img.length, 1, 'one image for the page, asked once');
+  assert.deepStrictEqual(img[0].args, [id, 'p0003-0123456789.jpg']);
+  P.answer(img[0], { ok: true, src: 'data:image/jpeg;base64,AAAA' });
+
+  // 1: the reading is right.
+  P.click(P.button('القراءة صحيحة'));
+  let saves = P.pending('saveAnswers');
+  assert.strictEqual(saves.length, 1);
+  const first = JSON.parse(saves[0].args[1]);
+  assert.deepStrictEqual(first['p3-0000000001'], { page: 3, kind: 'diff', fp: 'diff|كلمه1|كلمة', before: 'قبل ',
+    core: 'كلمة1', after: ' بعد', pos: 10, base: PLACE_BASE, place: '', verdict: 'keep' });
+  assert.strictEqual(P.byId['rv-send'].disabled, true, 'not while saving');
+
+  // 2: a line seems missing: the editor starts with the other reading's line, as a heading.
+  assert.ok(/يبدو أن سطراً سقط هنا/.test(P.byId['rv-body'].textContent));
+  P.click(P.button('الصواب هو'));
+  assert.strictEqual(P.textarea().value, '## السطر الساقط كاملاً');
+  P.click(P.button('عنوان'));
+  assert.strictEqual(P.textarea().value, 'السطر الساقط كاملاً');
+  P.click(P.button('القراءة الآلية'));
+  assert.strictEqual(P.textarea().value, 'السطر السافط');
+  P.textarea().value = 'السطر كما في الصورة';
+  P.click(P.button('حفظ والتالي'));
+  assert.strictEqual(P.pending('saveAnswers').length, 1, 'one save at a time');
+
+  // 3: likely right; "the rest of this page is right".
+  assert.ok(/غالباً صحيح/.test(P.byId['rv-body'].textContent));
+  P.click(P.button('كل ما بقي في هذه الصفحة صحيح'));
+  assert.ok(/انتهت المواضع/.test(P.byId['rv-body'].textContent));
+
+  P.answer(saves[0], { ok: true, saved: 1, pending: 1 });
+  saves = P.pending('saveAnswers');
+  assert.strictEqual(saves.length, 1, 'the rest goes in one call');
+  const second = JSON.parse(saves[0].args[1]);
+  assert.deepStrictEqual(second['p3-00000000aa'], { page: 3, kind: 'missing', fp: 'missing|سطر', before: 'آخر السطر',
+    core: '\n\n', after: 'أول الفقرة', pos: 50, base: PLACE_BASE, place: 'after', verdict: 'fix', text: 'السطر كما في الصورة' });
+  const restId = Object.keys(second).find((k) => /^p3-rest-[0-9a-z]+$/.test(k));
+  assert.deepStrictEqual(second[restId], { kind: 'rest', page: 3, verdict: 'keep', ids: ['p3-0000000003'], fps: ['diff|كلمه3|كلمة'] });
+  // The server checks them as the page makes them.
+  Object.keys(second).forEach((k) => assert.ok(env.ctx.cleanAnswer_(k, second[k]), k));
+  assert.ok(env.ctx.cleanAnswer_('p3-0000000001', first['p3-0000000001']));
+
+  // The network drops: tried again after 3 seconds, the copy is kept meanwhile.
+  P.fail(saves[0], 'network');
+  assert.strictEqual(P.timers[P.timers.length - 1].ms, 3000);
+  assert.ok(Object.keys(JSON.parse(P.storage['rv-' + id])).length === 2);
+  P.timers.pop().fn();
+  saves = P.pending('saveAnswers');
+  assert.strictEqual(saves.length, 1);
+  P.answer(saves[0], { ok: true, saved: 2, pending: 3 });
+  assert.deepStrictEqual(JSON.parse(P.storage['rv-' + id]), {});
+  const send = P.byId['rv-send'];
+  assert.strictEqual(send.disabled, false);
+  assert.ok(/\(3\)/.test(send.own));
+
+  // Send asks once more, then calls sendReview.
+  P.click(send);
+  assert.strictEqual(P.pending('sendReview').length, 0);
+  assert.ok(/اضغط مرة أخرى للتأكيد/.test(P.byId['rv-msg'].textContent));
+  P.click(send);
+  const sr = P.pending('sendReview');
+  assert.deepStrictEqual(sr.map((c) => c.args), [[id]]);
+  P.answer(sr[0], { ok: true, started: true });
+  assert.strictEqual(P.byId.home.hidden, false);
+  assert.ok(/بدأ تحديث الكتاب/.test(P.byId.msg.textContent));
+});
+
+test('a link with ?review= opens the review at once; saves that keep failing ask the user', () => {
+  const env = readyEnv();
+  const status = JSON.parse(env.ctx.getStatus());
+  status.openReview = '1Bbook0000000aBcDeF';
+  const P = pageSandbox(env, status);
+  assert.strictEqual(P.byId.review.hidden, false);
+  P.answer(P.pending('getReview')[0], reviewForPage());
+  P.click(P.button('القراءة صحيحة'));
+  for (let i = 0; i < 3; i++) {
+    P.answer(P.pending('saveAnswers')[0], { ok: false, busy: true });
+    P.timers.pop().fn();
+  }
+  P.answer(P.pending('saveAnswers')[0], { ok: false, busy: true });
+  assert.ok(/لم تُحفظ 1 إجابة/.test(P.byId['rv-saving'].textContent), P.byId['rv-saving'].textContent);
+  assert.ok(/نافذة خاصة/.test(P.byId['rv-saving'].textContent));
+  P.click(P.button('أعد المحاولة', P.byId['rv-saving']));
+  assert.strictEqual(P.pending('saveAnswers').length, 1);
+  // Going back to the list stops nothing: the answer is still being saved.
+  P.click(P.byId['rv-back']);
+  assert.strictEqual(P.byId.home.hidden, false);
+  P.answer(P.pending('saveAnswers')[0], { ok: true, saved: 1, pending: 1 });
+  assert.deepStrictEqual(JSON.parse(P.storage['rv-1Bbook0000000aBcDeF']), {});
 });
 
 test('Pacific midnight is found in summer and winter time', () => {
