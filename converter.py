@@ -319,6 +319,14 @@ class ModelPool:
                 msg = str(e)
                 low = msg.lower()
                 if "429" in msg or "resource_exhausted" in low:
+                    if "limit: 0" in low:
+                        # No free quota for this model at all: unusable on this key, so
+                        # no page waits for it.
+                        with self.lock:
+                            self.exhausted.add(model)
+                            self.missing.add(model)
+                        print(f"  {model}: no free quota on this key, skipped")
+                        raise QuotaExhausted(model) from e
                     if "perday" in low.replace(" ", "") or "per day" in low or "daily" in low:
                         with self.lock:
                             self.exhausted.add(model)
@@ -677,10 +685,26 @@ def check_pages(pool, filepath, records, cache_dir, dual, workers):
 MAX_JUDGES = 2
 
 
+# Judges added on their own when Google offers them: Gemini Flash or Pro, version 3 or
+# later. Lite, Gemma, Nano, image/audio models and dated variants never match.
+NEW_JUDGE = re.compile(r"^gemini-(\d+(?:\.\d+)?)-(flash|pro)(?:-preview|-latest)?$")
+
+
+def judge_rank(name):
+    """(version, Pro before Flash) for ordering judges strongest first; (0,) if unknown."""
+    m = NEW_JUDGE.match(re.sub(r"-(preview|latest|exp)(-[\w-]*)?$|-\d{3}$", "", name))
+    if not m:
+        return (0,)
+    major, _, minor = m.group(1).partition(".")
+    return (int(major), int(minor or 0), 1 if m.group(2) == "pro" else 0)
+
+
 def resolve_models(pool, names):
     """Maps each judge name to a model this account has. Google renames models (for
     example "gemini-3-flash" is served as "gemini-3-flash-preview"); a name not found
-    as is takes the closest "<name>-..." model. Names stay as given if listing fails."""
+    as is takes the closest "<name>-..." model. Newer Gemini Flash/Pro models the
+    account has are added, each before the first judge older than it.
+    Names stay as given if listing fails."""
     try:
         have = {}
         for m in pool.client.models.list():
@@ -707,7 +731,26 @@ def resolve_models(pool, names):
         else:
             print(f"Judge {n} is not available to this account")
             out.append(n)
-    return list(dict.fromkeys(out))
+    out = list(dict.fromkeys(out))
+    base = lambda a: re.sub(r"-(preview|latest)$", "", a)
+    known = {base(a) for a in out}
+    added = []
+    # Same rank: the plain name first (it outlives its -preview/-latest aliases).
+    for a in sorted(have, key=lambda a: (judge_rank(a), a == base(a)), reverse=True):
+        m = NEW_JUDGE.match(a)
+        if not m or int(m.group(1).split(".")[0]) < 3 or base(a) in known:
+            continue
+        known.add(base(a))
+        at = next((i for i, j in enumerate(out) if judge_rank(j) < judge_rank(a)), len(out))
+        out.insert(at, a)
+        added.append(a)
+    if added:
+        print(f"New judges added: {', '.join(added)}")
+        try:
+            pool.added_judges = added
+        except AttributeError:
+            pass
+    return out
 
 
 def arbitrate(pool, filepath, records, cache_dir, models, limit):
@@ -723,6 +766,7 @@ def arbitrate(pool, filepath, records, cache_dir, models, limit):
     vocab = set()
     for r in records:
         vocab.update(norm_words(r.get("text") or ""))
+    failed = {}
     local = open_pdf(filepath)
     try:
         for rec in todo:
@@ -756,6 +800,15 @@ def arbitrate(pool, filepath, records, cache_dir, models, limit):
                         print(f"  {m}: not found, skipped: {str(e)[:200]}")
                         pool.exhausted.add(m)
                         pool.missing.add(m)
+                        continue
+                    if any(x in str(e) for x in ("500", "502", "503", "504")) or "unavailable" in str(e).lower() \
+                            or "timeout" in str(e).lower() or "timed out" in str(e).lower():
+                        # Temporary trouble: the page keeps its judge slot for another model,
+                        # and a model failing like this twice is left out for the run.
+                        failed[m] = failed.get(m, 0) + 1
+                        if failed[m] >= 2:
+                            print(f"  {m}: keeps failing, skipped for this run")
+                            pool.exhausted.add(m)
                         continue
                     text, finish, model = "", f"error {str(e)[:100]}", m
                     break
@@ -1130,6 +1183,8 @@ def write_report(path, summary, pool):
     lines += [f"- {label}: {counts[key]}" for key, label in names if counts.get(key)]
     if pool:
         lines += [f"- طلبات {model} في هذا التشغيل: {n}" for model, n in pool.requests.items()]
+        if getattr(pool, "added_judges", None):
+            lines.append(f"- حكّام جدد أُضيفوا تلقائياً: {'، '.join(pool.added_judges)}")
     if summary["state"] == "judging":
         lines += ["", f"**القراءة اكتملت، و{len(summary['pages_judging'])} صفحة تنتظر الحكّام** "
                   "(انتهى رصيدهم اليومي). تُعرض عليهم بعد تجدده، ثم يُسلَّم الكتاب."]
