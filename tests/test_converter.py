@@ -209,6 +209,7 @@ class Pipeline(PipelineBase):
         }, pages="30-32")
         self.assertEqual(code, 3)
         self.assertEqual(st["state"], "paused")
+        self.assertNotIn("waiting_for", st)
         self.assertTrue(st["quota_day"])
         self.assertTrue(st["pages_waiting"])
         self.assertNotIn("gemma-4-26b-a4b-it", {m for m, _ in fake.calls})
@@ -253,8 +254,43 @@ class Pipeline(PipelineBase):
             "gemini-3.1-flash-lite": gone,
             "gemma-4-26b-a4b-it": lambda p, n: answer(TRUE),
         }, pages="30")
-        self.assertEqual(code, 3)
+        self.assertEqual(code, 6)
         self.assertNotIn("gemma-4-26b-a4b-it", {m for m, _ in fake.calls})
+
+    def test_one_reader_out_parks_the_book_for_it_and_only_its_readings_are_done_next_day(self):
+        def gone(p, n):
+            raise Exception("429 RESOURCE_EXHAUSTED GenerateRequestsPerDayPerProjectPerModel-FreeTier")
+        code, st, md, fake = self.run_book({
+            "gemini-3.5-flash-lite": lambda p, n: answer(TRUE),
+            "gemini-3.1-flash-lite": gone,
+        })
+        self.assertEqual(code, 6)
+        self.assertEqual((st["state"], st["waiting_for"]), ("paused", "reader"))
+        self.assertEqual(st["readers_left"], ["gemini-3.5-flash-lite"])
+        self.assertEqual(st["pages_waiting"], [30, 31])
+        self.assertTrue(st["quota_day"])
+        # The next day: only the missing second readings are asked for.
+        code, st, md, fake = self.run_book({
+            "gemini-3.5-flash-lite": lambda p, n: answer(TRUE),
+            "gemini-3.1-flash-lite": lambda p, n: answer(TRUE),
+        })
+        self.assertEqual(code, 0, st)
+        self.assertEqual([m for m, k in fake.calls if k == "read"], ["gemini-3.1-flash-lite"] * 2)
+        self.assertEqual({r["check"]["state"] for r in self.records().values()}, {"agreed"})
+
+    def test_settling_uses_the_reader_that_is_left(self):
+        def gone_for_settling(p, n):
+            if "النسخة (أ)" in p:
+                raise Exception("429 RESOURCE_EXHAUSTED GenerateRequestsPerDayPerProjectPerModel-FreeTier")
+            return answer(TRUE)
+        code, st, md, fake = self.run_book({
+            "gemini-3.5-flash-lite": lambda p, n: answer(TRUE if "النسخة (أ)" in p else WRONG),
+            "gemini-3.1-flash-lite": gone_for_settling,
+        }, pages="30")
+        self.assertEqual(code, 0, st)
+        check = self.records()[30]["check"]
+        self.assertEqual((check["state"], check["model"]), ("reconciled", "gemini-3.5-flash-lite"))
+        self.assertNotIn("كاقية", md)
 
     def test_unsure_page_goes_to_arbiter_and_notice_in_book(self):
         # The two Lite models cannot settle (their answer is too short), the arbiter can.

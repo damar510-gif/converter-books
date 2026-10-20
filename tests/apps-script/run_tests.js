@@ -844,6 +844,74 @@ test('judging: a book waiting for the judges is parked, the next book starts, th
   assert.ok(names(env, 'ready').indexOf('أول.epub') >= 0);
 });
 
+test('reader wait: a book waiting only for one reader is parked, the next starts, both come back the next day oldest first', () => {
+  const env = readyEnv();
+  const a = addBook(env, 'أول.pdf');
+  tick(env);
+  minutes(env, 3);
+  const b = addBook(env, 'ثان.pdf');
+  minutes(env, 30);
+  writeStatus(env, a.id, 'paused', { waiting_for: 'reader', readers_left: ['gemini-3.5-flash-lite'], epub: 'أول.epub',
+    pages_waiting: [3, 4] });
+  tick(env);
+  assert.strictEqual(jobs(env)[a.id].stage, 'readerWait');
+  assert.ok(names(env, 'working').indexOf('أول.pdf') >= 0, 'parked book stays in the working folder');
+  assert.strictEqual(env.gh.dispatches.length, 2, 'the next book started right away');
+  assert.strictEqual(lastDispatch(env).body.inputs.drive_file_id, b.id);
+  assert.strictEqual(env.mails.filter((m) => /ينتظر القارئ الثاني/.test(m.subject)).length, 1);
+
+  // The next book waits for that reader too.
+  minutes(env, 30);
+  writeStatus(env, b.id, 'paused', { waiting_for: 'reader', readers_left: ['gemini-3.5-flash-lite'], epub: 'ثان.epub',
+    pages_waiting: [7] });
+  tick(env);
+  assert.strictEqual(jobs(env)[b.id].stage, 'readerWait');
+  minutes(env, 10);
+  tick(env);
+  assert.strictEqual(env.gh.dispatches.length, 2, 'not before the quota renews');
+  const s = status(env);
+  assert.deepStrictEqual(s.parked.map((p) => [p.title, p.stage]).sort(), [['أول', 'readerWait'], ['ثان', 'readerWait']]);
+  assert.ok(!s.recent.some((j) => j.title === 'أول' || j.title === 'ثان'), 'parked books are not listed as ready');
+
+  // A new Pacific day: the older book first, then the other in the check that delivers it.
+  env.clock += 24 * 3600000;
+  tick(env);
+  assert.strictEqual(env.gh.dispatches.length, 3);
+  assert.strictEqual(lastDispatch(env).body.inputs.drive_file_id, a.id);
+  minutes(env, 15);
+  writeStatus(env, a.id, 'done', { epub: 'أول.epub' });
+  writeEpub(env, a.id, 'أول.epub');
+  tick(env);
+  assert.strictEqual(jobs(env)[a.id].stage, 'delivered');
+  assert.strictEqual(env.gh.dispatches.length, 4);
+  assert.strictEqual(lastDispatch(env).body.inputs.drive_file_id, b.id);
+});
+
+test('reader wait: with both readers out the book keeps its turn; waiting for a reader for a month gives up', () => {
+  const env = readyEnv();
+  const a = addBook(env, 'أ.pdf');
+  tick(env);
+  addBook(env, 'ب.pdf');
+  minutes(env, 30);
+  writeStatus(env, a.id, 'paused', { epub: 'أ.epub', pages_waiting: [3] });
+  tick(env);
+  assert.ok(jobs(env)[a.id].pausedDay, 'paused, holding its turn');
+  assert.strictEqual(env.gh.dispatches.length, 1, 'no other book starts');
+
+  const env2 = readyEnv();
+  const c = addBook(env2, 'ج.pdf');
+  tick(env2);
+  for (let day = 0; day <= 30; day++) {
+    minutes(env2, 30);
+    writeStatus(env2, c.id, 'paused', { waiting_for: 'reader', epub: 'ج.epub', pages_waiting: [3] });
+    tick(env2);
+    env2.clock += 24 * 3600000;
+    tick(env2);
+  }
+  assert.strictEqual(jobs(env2)[c.id].stage, 'problem');
+  assert.ok(env2.mails.some((m) => /مشكلة في تحويل/.test(m.subject) && /القارئ الثاني/.test(m.body)));
+});
+
 test('judgeNow: the judges see a delivered book today; a round cut short by their quota delivers and goes on', () => {
   const env = readyEnv();
   const f = addBook(env, 'ج.pdf');

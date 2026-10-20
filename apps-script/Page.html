@@ -322,6 +322,7 @@
     (s.parked || []).forEach(function (p) {
       queue.appendChild(el('div', 'muted', p.stage === 'helper'
         ? '«' + p.title + '» ينتظر نماذجك على الجهاز' + (p.need ? ' (أنهت ' + p.finished + ' من ' + p.need + ' صفحة)' : '') + '.'
+        : p.stage === 'readerWait' ? '«' + p.title + '» ينتظر تجدد رصيد القارئ الثاني، ثم يكمل قبل غيره.'
         : '«' + p.title + '» ينتظر الحكّام حتى يتجدد رصيدهم.'));
     });
 

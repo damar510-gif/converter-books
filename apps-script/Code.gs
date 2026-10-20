@@ -615,11 +615,12 @@ function runTick_() {
   // A finished job frees the slot, so the next book can start in the same check.
   if (!activeJob_(ctx.jobs) && ctx.dispatched === 0) {
     // The user's answers first (a quick round with no model request), then the verdicts
-    // of the helper's models (the same kind of round), then parked books back to the
-    // judges on a new day (their quota is separate and small), then books the helper
-    // finished, then new books, then improvement rounds.
+    // of the helper's models (the same kind of round), then books parked for a reader
+    // whose quota has renewed (oldest first), then parked books back to the judges on a
+    // new day (their quota is separate and small), then books the helper finished, then
+    // new books, then improvement rounds.
     var applied = applyNext_(ctx) || helperJudgeNext_(ctx);
-    var judged = applied || judgeNext_(ctx) || helperNext_(ctx);
+    var judged = applied || resumeReaderNext_(ctx) || judgeNext_(ctx) || helperNext_(ctx);
     var started = judged || startNext_(ctx);
     notes.push(started);
     // Nothing new to convert: use the day's judge quota on a finished book's unsure pages.
@@ -663,9 +664,10 @@ function handleStatus_(ctx, job, s) {
   if (s.state !== 'failed') job.failStreak = 0;
   delete job.helperOff;
 
-  // Waiting only for the judges, or the helper, is written as "paused" for older scripts.
-  var state = s.state === 'paused' && s.waiting_for === 'judges' ? 'judging'
-    : s.state === 'paused' && s.waiting_for === 'helper' ? 'helper' : s.state;
+  // Waiting only for the judges, the helper or one reader is written as "paused" for older scripts.
+  var waiting = s.state === 'paused' ? String(s.waiting_for || '') : '';
+  var state = waiting === 'judges' ? 'judging' : waiting === 'helper' ? 'helper'
+    : waiting === 'reader' ? 'readerWait' : s.state;
   switch (state) {
     case 'done':
       return deliver_(ctx, job, s, false);
@@ -717,6 +719,32 @@ function handleStatus_(ctx, job, s) {
         ]);
       }
       return 'judging (parked)';
+
+    case 'readerWait':
+      // One free reader's quota is used up and the other still has some: the pages wait
+      // only for second readings from the reader that is out. The book waits without
+      // holding the slot, so the next book starts with the reader that is left;
+      // resumeReaderNext_ brings it back first on a later Pacific day.
+      if (job.refining) return deliver_(ctx, job, s, false);
+      job.stage = 'readerWait';
+      job.readerDay = isDay_(s.quota_day) ? s.quota_day : pacificDay_(new Date(Date.parse(s.updated_at)));
+      job.readerWaits = (job.readerWaits || 0) + 1;
+      if (job.readerWaits > CONFIG.MAX_PAUSES) {
+        return giveUp_(ctx, job, 'انتظر الكتاب القارئ الثاني أكثر من ' + CONFIG.MAX_PAUSES + ' يوماً دون أن يكتمل.');
+      }
+      saveJobs_(ctx.jobs);
+      if (!job.readerMailed) {
+        job.readerMailed = true;
+        saveJobs_(ctx.jobs);
+        sendMail_('ينتظر القارئ الثاني: ' + job.title, [
+          'انتهى اليوم رصيد أحد القارئين المجانيين أثناء «' + job.title + '»، وبقي رصيد للآخر.',
+          'تنتظر ' + pageList_(s.pages_waiting).length + ' صفحة قراءتها الثانية من القارئ الذي نفد رصيده.',
+          'يبقى الكتاب في «' + CONFIG.FOLDERS.working + '»، ويبدأ الكتاب التالي الآن بالقارئ المتاح.',
+          'بعد تجدد الرصيد (نحو الساعة ' + Utilities.formatDate(pacificMidnightAfter_(job.readerDay), scriptTz_(), 'HH:mm') +
+            ' بتوقيتك) يكمل هذا الكتاب أولاً، ثم يصلك في «' + CONFIG.FOLDERS.ready + '».'
+        ]);
+      }
+      return 'reader wait (parked)';
 
     case 'helper':
       // Read once by the free model; the helper's models on the user's computer give the
@@ -923,6 +951,22 @@ function finalize_(ctx, job, mail) {
     lines.push('يمكنك الآن حذف ملفه الأصلي من «' + CONFIG.FOLDERS.originals + '» إن احتجت المساحة.');
   }
   sendMail_('مكتمل: ' + job.title, lines);
+}
+
+/** Dispatches the oldest book parked for a reader whose quota has renewed, or returns ''. */
+function resumeReaderNext_(ctx) {
+  var today = pacificDay_(now_());
+  var pick = null;
+  Object.keys(ctx.jobs).forEach(function (id) {
+    var j = ctx.jobs[id];
+    if (j && j.stage === 'readerWait' && String(j.readerDay || '') < today &&
+        (!pick || String(j.createdAt || '') < String(pick.createdAt || ''))) pick = j;
+  });
+  if (!pick) return '';
+  pick.stage = 'queued';
+  pick.pendingCount = false;
+  saveJobs_(ctx.jobs);
+  return 'reader renewed ' + pick.fileId + ': ' + dispatch_(ctx, pick, false);
 }
 
 /** Dispatches the oldest parked book whose judges' quota has renewed, or returns ''. */
@@ -2435,9 +2479,9 @@ function isActive_(job) {
   return job.stage === 'queued' || job.stage === 'running';
 }
 
-/** Waiting in "2- قيد التحويل" without holding the slot: for the judges or the helper. */
+/** Waiting in "2- قيد التحويل" without holding the slot: for the judges, the helper or a reader. */
 function isParked_(job) {
-  return job.stage === 'judging' || job.stage === 'helper';
+  return job.stage === 'judging' || job.stage === 'helper' || job.stage === 'readerWait';
 }
 
 function activeJob_(jobs) {
@@ -2466,7 +2510,8 @@ function pruneJobs_(jobs) {
     ['name', 'driveName', 'resultDir', 'dispatchedAt', 'createdAt', 'pausedDay', 'pausedAt',
       'pendingCount', 'noteId', 'pauseMailed', 'pagesDone', 'pagesTotal', 'pauses',
       'judgeDay', 'judgeRounds', 'judgeMailed', 'rvDonePrev', 'downloadFails',
-      'helperAt', 'helperMovedAt', 'helperFinished', 'helperPages', 'helperDoneSeen', 'helperOff']
+      'helperAt', 'helperMovedAt', 'helperFinished', 'helperPages', 'helperDoneSeen', 'helperOff',
+      'readerDay', 'readerWaits', 'readerMailed']
       .forEach(function (k) { delete j[k]; });
     if (j.lastError) j.lastError = shorten_(j.lastError, 120);
   });

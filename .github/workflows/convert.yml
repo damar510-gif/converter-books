@@ -409,6 +409,7 @@ jobs:
             3) echo "Paused: today's Gemini quota is used up. Progress is saved; run the same book again tomorrow." ;;
             4) echo "Read and checked; some unsure pages wait for tomorrow's judges. Run the same book again tomorrow." ;;
             5) echo "Read once; the other pages wait for the helper's models on the user's computer (the Drive inbox runs the book again)." ;;
+            6) echo "One free reader's quota is used up: some pages wait for its second reading tomorrow; the next book can start with the other reader." ;;
             2) echo "Some pages could not be read (see report.md). Run the same book again to retry them." ;;
             *) echo "The conversion failed (see the log above)." ;;
           esac
