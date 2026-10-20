@@ -2383,10 +2383,19 @@ test('the page: models move between the boxes with a tap (or a drag), are saved,
   const sections = boxes.kids.filter((k) => k.className === 'sec');
   assert.strictEqual(sections.length, 2);
   const pair = (sec) => sec.kids.find((k) => k.className === 'pair');
-  const chipIn = (box, text) => box.kids.find((k) => k.tag === 'button' && k.textContent.indexOf(text) >= 0);
+  const chipIn = (box, text) => {
+    for (const k of box.kids || []) {
+      if (k.tag === 'button' && k.textContent.indexOf(text) >= 0) return k;
+      const inner = chipIn(k, text);
+      if (inner) return inner;
+    }
+    return null;
+  };
   const [offT, onT] = pair(sections[0]).kids;
   assert.ok(/Gemini 3\.8 Flash/.test(onT.textContent) && /يقرأ ص 12/.test(onT.textContent), onT.textContent);
   assert.ok(/Grok 4\.7/.test(offT.textContent) && /يستنفد الحدود/.test(offT.textContent));
+  assert.deepStrictEqual(offT.kids.filter((k) => k.className === 'group').map((g) => g.kids[0].textContent),
+    ['Grok Build', 'Antigravity'], 'in rows under the name of their program');
   assert.ok(/فارغ: المواضع تبقى لك/.test(pair(sections[1]).kids[1].textContent));
 
   // A tap on Grok in the right box puts it to work.

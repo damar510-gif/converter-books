@@ -18,7 +18,7 @@ or key there, and the helper never calls a Google or GitHub API.
 | `requests.json` | Apps Script | `{v, at, requests: [{id, action, choices, label, at}], books: [{id, title, stage, unsure}]}` |
 | `helper-status.json` | helper | `{v, at, version, computer, busy, handled: [ids], lines: [{text, kind, path, linkText}], actions: [...]}` |
 | `probe.txt` | helper | Each tool's `--help`/`--version` and a one-word headless answer, rewritten when the helper's version or the set of tools changes: read it to fix the command lines in `helper.ps1`. |
-| `نتائج/<date> <kind> <model>/` | helper | `pNNN.md` per page, `log.txt`, `meta.json`. |
+| `نتائج/<date> <kind> <model>/` | helper (until 2026-10-21) | The trials of the six test pages: `pNNN.md` per page, `log.txt`, `meta.json`, and `مقارنة.md`. The trial button is gone. |
 | `كتب/<fileId>/` | Apps Script makes it; the run and the helper fill it | Transcription by the models in the boxes: see "Boxes" below. |
 | `مراجعة/<fileId>/` | Apps Script (copy of `drive-<fileId>/review/` in the results branch) | `items.json` and the place images; the helper adds `j-<model>-pNNNN.json` (each model's verdicts). |
 | `أحكام/<fileId>.json` | helper | The models' verdicts as answers (the user's answer form), kept and added to; `done` when no model in the box has anything left to judge. |
@@ -66,9 +66,9 @@ the limits) and that Grok 4.7 Fast costs twice as much.
 
 ## Actions
 
-| `action` | `choices` | What it does |
-|---|---|---|
-| `test` | `model` = `tool\|model id`, `effort` = `low\|medium\|high` | Reads the six test pages; Claude compares the results with the checked texts (`crosscheck.compare`). |
+None for now: the trial of the six test pages (`test`) was removed on 2026-10-21, once the
+user had chosen the models. A new kind of request is a function in `Invoke-Request` and a
+button in `actions` (Write-Status).
 
 ## Boxes (docs/helper-boxes-plan.md)
 
