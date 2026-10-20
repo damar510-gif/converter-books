@@ -628,13 +628,14 @@ def upgrade_check(rec):
         rec["text"] = a
 
 
-def tesseract_for(filepath, cache_dir, page_no):
-    """Tesseract's reading of a page, cached; empty when Tesseract is missing."""
+def tesseract_for(filepath, cache_dir, page_no, kind="txt"):
+    """Tesseract's reading of a page ("txt") or its word boxes ("tsv"), cached; empty when
+    Tesseract is missing."""
     if not shutil.which("tesseract"):
         return ""
     tess_dir = os.path.join(cache_dir, "tesseract")
     os.makedirs(tess_dir, exist_ok=True)
-    path = os.path.join(tess_dir, f"{page_no:04d}.txt")
+    path = os.path.join(tess_dir, f"{page_no:04d}.{kind}")
     if os.path.exists(path):
         with open(path, encoding="utf-8") as f:
             return f.read()
@@ -643,7 +644,7 @@ def tesseract_for(filepath, cache_dir, page_no):
         png, _ = page_image(local, local[page_no - 1])
     finally:
         close_pdf(local)
-    tess = tesseract_text(png)
+    tess = tesseract_tsv(png) if kind == "tsv" else tesseract_text(png)
     with open(path, "w", encoding="utf-8") as f:
         f.write(tess)
     return tess
@@ -1068,16 +1069,12 @@ def keep_main_headings(md, ocr, cache_dir):
     return "\n".join(lines)
 
 
-def norm_words(text):
-    text = re.sub(r"[\u064B-\u0652\u0640]", "", text)
-    text = re.sub("[إأآا]", "ا", text)
-    text = text.replace("ى", "ي").replace("ة", "ه").replace("ؤ", "و").replace("ئ", "ي")
-    return [w for w in re.findall(r"[\u0621-\u064A]+", text) if len(w) > 2]
+norm_words = crosscheck.norm_words
 
 
-def tesseract_text(png):
+def tesseract_text(png, *extra):
     try:
-        r = subprocess.run(["tesseract", "stdin", "stdout", "-l", "ara", "--psm", "3"],
+        r = subprocess.run(["tesseract", "stdin", "stdout", "-l", "ara", "--psm", "3", *extra],
                            input=png, capture_output=True, timeout=180,
                            # One thread per process: we already run several in parallel.
                            env={**os.environ, "OMP_THREAD_LIMIT": "1"})
@@ -1087,23 +1084,12 @@ def tesseract_text(png):
         return ""
 
 
-def missing_lines(tess, text, vocab):
-    """Lines Tesseract saw on the page that the model's text does not contain.
-    Tesseract makes many letter mistakes, so only lines made mostly of words that
-    appear elsewhere in the book count, and a line is missing when almost none of
-    its word pairs are in the page text."""
-    w = norm_words(text)
-    pairs = set(zip(w, w[1:]))
-    out = []
-    for line in tess.split("\n"):
-        lw = norm_words(line)
-        if len(lw) < 5:
-            continue
-        known = sum(x in vocab for x in lw) / len(lw)
-        lp = list(zip(lw, lw[1:]))
-        if known >= 0.7 and sum(x in pairs for x in lp) / len(lp) <= 0.15:
-            out.append(line.strip())
-    return out
+def tesseract_tsv(png):
+    """Tesseract's words with their boxes, in the pixels of the same page image (TSV)."""
+    return tesseract_text(png, "tsv")
+
+
+missing_lines = crosscheck.missing_lines
 
 
 def run_pandoc(md_path, output_path, title, cover_path=None, toc=True):
