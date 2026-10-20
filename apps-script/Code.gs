@@ -11,6 +11,9 @@
  *      "results" branch.
  *   4. tick() reads status.json, files the EPUB in "3- جاهز" and the original in
  *      "4- الأصل" (or the original in "5- مشكلة" with a note) and emails the user.
+ *   5. On the status page the user checks the places still unsure (review/items.json in
+ *      the results branch) and sends their answers; a "review round" applies them to
+ *      the saved pages without any model request and replaces the EPUB.
  *
  * One book at a time. All state lives in Script Properties; the job list is the JSON
  * property JOBS, keyed by Drive file id.
@@ -53,7 +56,15 @@ var CONFIG = {
   MAX_SCAN: 500,
   // Gemini's free daily quota resets at midnight Pacific time, not Riyadh time.
   QUOTA_TZ: 'America/Los_Angeles',
-  REPORT_EMAIL_CHARS: 1500
+  REPORT_EMAIL_CHARS: 1500,
+  // Review by hand: answers live in this Drive folder, one file per book.
+  REVIEW_FOLDER: 'بيانات المراجعة',
+  REVIEW_MAX_TRIES: 2,
+  REVIEW_TITLE_CHARS: 60,
+  REVIEW_ANSWER_CHARS: 2000,
+  REVIEW_PAGE_CHARS: 20000,
+  REVIEW_REST_IDS: 25,
+  REVIEW_MAX_ANSWERS: 300
 };
 
 var SUPPORTED_EXT = { pdf: true, docx: true, txt: true };
@@ -63,6 +74,13 @@ var MIME_EXT = {
   'text/plain': 'txt'
 };
 var GH_RAW = 'application/vnd.github.raw';
+// One Script Property per book under review (Arabic titles take 2 bytes a letter, so a
+// single property for all books would overflow): RV_<fileId>, see loadRv_.
+var REVIEW_PREFIX = 'RV_';
+var FILE_ID_RE = /^[A-Za-z0-9_-]{10,100}$/;
+var IMAGE_RE = /^p\d{4}-[0-9a-f]{10}\.jpg$/;
+var PLACE_ID_RE = /^p(\d{1,5})-[0-9a-f]{10}$/;
+var REST_ID_RE = /^p(\d{1,5})-rest-[0-9a-z]{1,20}$/;
 var INCOMPLETE_SUFFIX = ' (فيه صفحات ناقصة)';
 
 // Set by gh_() from the GitHub-Authentication-Token-Expiration response header.
@@ -285,6 +303,8 @@ function getStatus() {
       };
     }
 
+    out.reviews = reviewSummaries_(jobs);
+
     out.recent = finishedJobs_(jobs).slice(0, 10).map(function (j) {
       return {
         title: j.title,
@@ -302,14 +322,149 @@ function getStatus() {
   }
 }
 
-/** The status web page. */
-function doGet() {
+/** The status web page; ?review=<fileId> opens that book's review. */
+function doGet(e) {
+  rememberPageUrl_();
   var template = HtmlService.createTemplateFromFile('Page');
-  template.initialJson = jsonForScript_(getStatus());
+  var initial = parseJson_(getStatus()) || { ok: false, error: 'status' };
+  var asked = e && e.parameter ? String(e.parameter.review || '') : '';
+  initial.openReview = FILE_ID_RE.test(asked) ? asked : '';
+  template.initialJson = jsonForScript_(JSON.stringify(initial));
   return template.evaluate()
     .setTitle('تحويل الكتب')
     .addMetaTag('viewport', 'width=device-width, initial-scale=1')
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.DEFAULT);
+}
+
+/**
+ * The places still open for review in one book, as a JSON string for the page:
+ * {ok, fileId, title, pages: [{page, img, w, h, base, more, items}], saved, sent, running, note}.
+ * A place the user answered after the book's last run is left out until the next run.
+ */
+function getReview(fileId) {
+  try {
+    fileId = String(fileId || '');
+    if (!FILE_ID_RE.test(fileId)) return JSON.stringify({ ok: false, error: 'bad id' });
+    var cfg = config_();
+    var rv = loadRv_(fileId) || {};
+    var r = gh_(cfg, 'get', contentsPath_(cfg, 'drive-' + fileId + '/review/items.json'), null, GH_RAW);
+    if (r.code !== 200 && r.code !== 404) return JSON.stringify({ ok: false, error: describeResponse_(r) });
+    var data = r.code === 200 ? (parseJson_(ghText_(r)) || {}) : {};
+    var answers = readAnswers_(answersFile_(fileId, rv, false));
+    var seen = String(data.answers_seen || '');
+    var hidden = {};
+    Object.keys(answers).forEach(function (id) {
+      var a = answers[id];
+      if (!(String(a.at || '') > seen)) return;
+      hidden[id] = true;
+      if (a.kind === 'rest') (a.ids || []).forEach(function (x) { hidden[x] = true; });
+    });
+    var pages = (Array.isArray(data.pages) ? data.pages : []).map(function (p) {
+      var items = (Array.isArray(p.items) ? p.items : []).filter(function (it) { return !hidden[it.id]; });
+      return { page: p.page, img: p.img || '', w: p.w, h: p.h, base: p.base, more: p.more || 0, items: items };
+    }).filter(function (p) { return p.items.length; });
+    var job = loadJobs_()[fileId];
+    return JSON.stringify({
+      ok: true,
+      fileId: fileId,
+      title: rv.t || data.book || (job && job.title) || '',
+      pages: pages,
+      saved: unsent_(answers, rv),
+      sent: reviewPending_(rv),
+      running: !!(job && job.humanRound && isActive_(job)),
+      note: rv.x || ''
+    });
+  } catch (err) {
+    Logger.log('getReview failed: ' + (err && err.stack ? err.stack : err));
+    return JSON.stringify({ ok: false, error: String(err && err.message ? err.message : err) });
+  }
+}
+
+/** One page image of a book's review, as {ok, src: "data:image/jpeg;base64,…"}. */
+function getReviewImage(fileId, name) {
+  try {
+    fileId = String(fileId || '');
+    name = String(name || '');
+    if (!FILE_ID_RE.test(fileId) || !IMAGE_RE.test(name)) return JSON.stringify({ ok: false, error: 'bad name' });
+    var cfg = config_();
+    var r = gh_(cfg, 'get', contentsPath_(cfg, 'drive-' + fileId + '/review/' + name), null, GH_RAW);
+    if (r.code !== 200) return JSON.stringify({ ok: false, error: describeResponse_(r) });
+    return JSON.stringify({ ok: true, src: 'data:image/jpeg;base64,' + Utilities.base64Encode(r.resp.getContent()) });
+  } catch (err) {
+    Logger.log('getReviewImage failed: ' + err);
+    return JSON.stringify({ ok: false, error: String(err && err.message ? err.message : err) });
+  }
+}
+
+/**
+ * Saves answers from the page: json is {id: answer}. They are merged into the book's
+ * answers file in Drive (a later answer to the same place replaces the earlier one).
+ * Returns {ok, saved, pending} or {ok: false, busy: true} when another check holds the lock.
+ */
+function saveAnswers(fileId, json) {
+  fileId = String(fileId || '');
+  if (!FILE_ID_RE.test(fileId)) return JSON.stringify({ ok: false, error: 'bad id' });
+  var incoming = parseJson_(json);
+  if (!incoming || typeof incoming !== 'object' || Array.isArray(incoming)) {
+    return JSON.stringify({ ok: false, error: 'bad answers' });
+  }
+  var ids = Object.keys(incoming);
+  if (ids.length > CONFIG.REVIEW_MAX_ANSWERS) return JSON.stringify({ ok: false, error: 'too many answers' });
+  var clean = {};
+  for (var i = 0; i < ids.length; i++) {
+    var a = cleanAnswer_(ids[i], incoming[ids[i]]);
+    if (!a) return JSON.stringify({ ok: false, error: 'bad answer ' + shorten_(ids[i], 40) });
+    clean[ids[i]] = a;
+  }
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(20000)) return JSON.stringify({ ok: false, busy: true });
+  try {
+    var rv = loadRv_(fileId) || { t: titleOf_(fileId) };
+    var file = answersFile_(fileId, rv, true);
+    var data = parseJson_(file.getBlob().getDataAsString()) || {};
+    var answers = data.answers && typeof data.answers === 'object' ? data.answers : {};
+    var at = now_().toISOString();
+    ids.forEach(function (id) {
+      clean[id].at = at;
+      answers[id] = clean[id];
+    });
+    file.setContent(JSON.stringify({ v: 1, fileId: fileId, book: rv.t || data.book || '', answers: answers }));
+    rv.a = file.getId();
+    rv.n = unsent_(answers, rv);
+    saveRv_(fileId, rv);
+    return JSON.stringify({ ok: true, saved: ids.length, pending: rv.n });
+  } catch (err) {
+    Logger.log('saveAnswers failed: ' + (err && err.stack ? err.stack : err));
+    return JSON.stringify({ ok: false, error: String(err && err.message ? err.message : err) });
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/**
+ * "أرسل التصحيحات": the book's saved answers are applied in a review round, now when
+ * nothing else is running, otherwise after the current book. Pressing it twice
+ * starts one round.
+ */
+function sendReview(fileId) {
+  fileId = String(fileId || '');
+  if (!FILE_ID_RE.test(fileId)) return JSON.stringify({ ok: false, error: 'bad id' });
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(30000)) return JSON.stringify({ ok: false, busy: true });
+  try {
+    var rv = loadRv_(fileId);
+    if (!rv || !rv.a) return JSON.stringify({ ok: false, error: 'nothing to send' });
+    var unsent = unsent_(readAnswers_(answersFile_(fileId, rv, false)), rv);
+    if (!unsent && !rv.x && !reviewPending_(rv)) return JSON.stringify({ ok: true, started: false, nothing: true });
+    if (unsent || rv.x) rv.sent = now_().toISOString();
+    if (rv.x === 'orig-gone' || rv.x === 'failed') rv.x = '';
+    rv.tries = 0;
+    saveRv_(fileId, rv);
+  } finally {
+    lock.releaseLock();
+  }
+  var result = tick();
+  return JSON.stringify({ ok: true, started: /review [\w-]+: dispatched/.test(result) });
 }
 
 // ============================================================================
@@ -339,13 +494,20 @@ function runTick_() {
   }
   // A finished job frees the slot, so the next book can start in the same check.
   if (!activeJob_(ctx.jobs) && ctx.dispatched === 0) {
-    // Parked books go back to the judges first on a new day (their quota is separate
-    // and small), then new books, then improvement rounds.
-    var judged = judgeNext_(ctx);
+    // The user's answers first (a quick round with no model request), then parked books
+    // back to the judges on a new day (their quota is separate and small), then new
+    // books, then improvement rounds.
+    var applied = applyNext_(ctx);
+    var judged = applied || judgeNext_(ctx);
     var started = judged || startNext_(ctx);
     notes.push(started);
     // Nothing new to convert: use the day's judge quota on a finished book's unsure pages.
-    if (started === 'idle') notes.push(refineNext_(ctx));
+    if (started === 'idle') {
+      var refined = refineNext_(ctx);
+      notes.push(refined);
+      // Still nothing: prepare the review of a finished book delivered before it existed.
+      if (refined === 'idle') notes.push(prepareNext_(ctx));
+    }
   }
   rememberExpiry_();
   return notes.join('; ');
@@ -356,6 +518,9 @@ function advanceJob_(ctx, job) {
   if (job.stage === 'queued') {
     return dispatch_(ctx, job, job.pendingCount !== false);
   }
+
+  // A review round never pauses, waits for the judges or gives the book up.
+  if (job.humanRound) return advanceReview_(ctx, job);
 
   // Paused for the Gemini quota: the run has finished; wait for a new Pacific day.
   if (job.pausedDay) {
@@ -595,7 +760,12 @@ function finalize_(ctx, job, mail) {
   } else {
     lines.push('لم تبقَ فيه صفحات مشكوك فيها.');
   }
-  lines.push('يمكنك الآن حذف ملفه الأصلي من «' + CONFIG.FOLDERS.originals + '» إن احتجت المساحة.');
+  var rv = loadRv_(job.fileId);
+  if (rv && rv.o > 0) {
+    lines = lines.concat(reviewLines_(job, rv));
+  } else {
+    lines.push('يمكنك الآن حذف ملفه الأصلي من «' + CONFIG.FOLDERS.originals + '» إن احتجت المساحة.');
+  }
   sendMail_('مكتمل: ' + job.title, lines);
 }
 
@@ -666,6 +836,11 @@ function dispatch_(ctx, job, countAttempt) {
       title: job.title
     }
   };
+  // The user's answers go with every run of the book (improvement and judge rounds
+  // too), so none is lost; a review round only applies them.
+  var rv = loadRv_(job.fileId);
+  var review = (rv && rv.a ? rv.a : '') + (job.humanRound ? ':only' : '');
+  if (review) body.inputs.review = review;
   var r = gh_(ctx.cfg, 'post', '/repos/' + ctx.cfg.repo + '/actions/workflows/' + CONFIG.WORKFLOW + '/dispatches', body);
 
   if (r.code === 204 || r.code === 200) {
@@ -675,6 +850,14 @@ function dispatch_(ctx, job, countAttempt) {
     job.pausedDay = '';
     job.lastError = '';
     delete job.pendingCount;
+    if (rv && rv.a) {
+      // Answers saved until now travel with this run; the old mark comes back if a
+      // review round fails.
+      if (job.rvDonePrev === undefined) job.rvDonePrev = rv.done || '';
+      rv.done = at.toISOString();
+      rv.n = 0;
+      saveRv_(job.fileId, rv);
+    }
     saveJobs_(ctx.jobs);
     Logger.log('dispatched ' + job.fileId + ' (attempt ' + job.attempts + ', ref ' + ctx.cfg.ref + ')');
     return 'dispatched';
@@ -688,6 +871,405 @@ function dispatch_(ctx, job, countAttempt) {
   saveJobs_(ctx.jobs);
   reportGitHubProblem_(ctx, r, 'dispatch');
   return 'dispatch failed (' + r.code + ')';
+}
+
+// ============================================================================
+// Review by hand (docs/human-review-plan.md)
+// ============================================================================
+
+/**
+ * RV_<fileId>: {t: title, a: answers file id, o: places open after the last run,
+ * e: EPUB id, seen: answers_seen of the last run, n: answers saved and not sent yet,
+ * sent: when the user last pressed send, done: when the last run carrying the answers
+ * started, tries: failed review rounds, x: '' | 'orig-gone' | 'no-data' | 'failed'}.
+ * Always written under the script lock.
+ */
+function loadRv_(fileId) {
+  var v = parseJson_(props_().getProperty(REVIEW_PREFIX + fileId));
+  return v && typeof v === 'object' && !Array.isArray(v) ? v : null;
+}
+
+function saveRv_(fileId, rv) {
+  rv.t = shorten_(rv.t || '', CONFIG.REVIEW_TITLE_CHARS);
+  props_().setProperty(REVIEW_PREFIX + fileId, JSON.stringify(rv));
+}
+
+function reviewIds_() {
+  return props_().getKeys().filter(function (k) { return k.indexOf(REVIEW_PREFIX) === 0; })
+    .map(function (k) { return k.slice(REVIEW_PREFIX.length); });
+}
+
+/** Answers were sent (or a review was asked for) and no run has carried them yet. */
+function reviewPending_(rv) {
+  return !!(rv && rv.sent && String(rv.sent) > String(rv.done || ''));
+}
+
+function titleOf_(fileId) {
+  var j = loadJobs_()[fileId];
+  return j ? j.title : '';
+}
+
+/** The book's answers file in Drive, made on first use when create is true. */
+function answersFile_(fileId, rv, create) {
+  if (rv && rv.a) {
+    try {
+      var known = DriveApp.getFileById(rv.a);
+      if (!known.isTrashed()) return known;
+    } catch (err) { /* deleted: look it up by name */ }
+  }
+  var root = folderFromProp_('FOLDER_ROOT');
+  if (!root) return null;
+  var it = root.getFoldersByName(CONFIG.REVIEW_FOLDER);
+  var folder = null;
+  while (it.hasNext()) {
+    var f = it.next();
+    if (!f.isTrashed()) { folder = f; break; }
+  }
+  var name = 'review-' + fileId + '.json';
+  if (folder) {
+    var files = folder.getFilesByName(name);
+    while (files.hasNext()) {
+      var x = files.next();
+      if (!x.isTrashed()) return x;
+    }
+  }
+  if (!create) return null;
+  folder = folder || root.createFolder(CONFIG.REVIEW_FOLDER);
+  return folder.createFile(name, JSON.stringify({ v: 1, fileId: fileId, book: (rv && rv.t) || '', answers: {} }),
+    'application/json');
+}
+
+function readAnswers_(file) {
+  if (!file) return {};
+  var data = parseJson_(file.getBlob().getDataAsString());
+  return data && data.answers && typeof data.answers === 'object' ? data.answers : {};
+}
+
+/** How many answers were saved after the last run that carried them. */
+function unsent_(answers, rv) {
+  var since = String((rv && rv.done) || '');
+  return Object.keys(answers).filter(function (k) { return String(answers[k].at || '') > since; }).length;
+}
+
+/** An answer from the page with only the expected fields, or null when it is not valid. */
+function cleanAnswer_(id, a) {
+  if (!a || typeof a !== 'object' || Array.isArray(a)) return null;
+  var m = PLACE_ID_RE.exec(id) || REST_ID_RE.exec(id);
+  var page = Number(a.page);
+  if (!m || Number(m[1]) !== page) return null;
+  var str = function (v, max) { return typeof v === 'string' && v.length <= max ? v : null; };
+  if (a.kind === 'rest') {
+    var ids = Array.isArray(a.ids) ? a.ids : null;
+    var fps = Array.isArray(a.fps) ? a.fps : [];
+    if (!REST_ID_RE.test(id) || a.verdict !== 'keep' || !ids || ids.length > CONFIG.REVIEW_REST_IDS ||
+        fps.length > CONFIG.REVIEW_REST_IDS) return null;
+    if (ids.some(function (x) { var k = PLACE_ID_RE.exec(String(x)); return !k || Number(k[1]) !== page; })) return null;
+    if (fps.some(function (x) { return str(x, 2000) === null; })) return null;
+    return { kind: 'rest', page: page, verdict: 'keep', ids: ids.map(String), fps: fps };
+  }
+  if (!PLACE_ID_RE.test(id) || ['diff', 'missing', 'page'].indexOf(a.kind) < 0) return null;
+  if (a.verdict !== 'keep' && a.verdict !== 'fix') return null;
+  var big = a.kind === 'page' ? 60000 : 6000;
+  var out = {
+    kind: a.kind, page: page, verdict: a.verdict, fp: str(a.fp, 4000), before: str(a.before, 6000),
+    core: str(a.core, big), after: str(a.after, 6000), base: str(a.base || '', 40),
+    place: str(a.place || '', 10), pos: Number(a.pos)
+  };
+  if (out.fp === null || out.before === null || out.core === null || out.after === null || out.base === null ||
+      out.place === null || !(out.pos >= 0) || Math.floor(out.pos) !== out.pos) return null;
+  if (a.verdict === 'fix') {
+    out.text = str(a.text, a.kind === 'page' ? CONFIG.REVIEW_PAGE_CHARS : CONFIG.REVIEW_ANSWER_CHARS);
+    if (out.text === null) return null;
+  }
+  return out;
+}
+
+/** The status page's list of books with places to review. */
+function reviewSummaries_(jobs) {
+  return reviewIds_().map(function (id) {
+    var rv = loadRv_(id);
+    if (!rv) return null;
+    var j = jobs[id];
+    var pending = reviewPending_(rv) || !!(j && j.humanRound && isActive_(j));
+    if (!(rv.o > 0 || rv.n > 0 || pending || rv.x)) return null;
+    return { fileId: id, title: rv.t || (j && j.title) || '', open: rv.o || 0, saved: rv.n || 0,
+      pending: pending, note: rv.x || '' };
+  }).filter(function (x) { return x; });
+}
+
+/** After a delivery: what is open for review now (from status.json). */
+function updateRv_(job, s) {
+  var rv = loadRv_(job.fileId);
+  // A workflow older than the review writes no review numbers.
+  if (s.review_items === undefined) return rv;
+  rv = rv || {};
+  rv.t = job.title;
+  rv.o = Number(s.review_items) || 0;
+  rv.e = job.epubId || '';
+  rv.seen = String(s.review_seen || '');
+  rv.tries = 0;
+  if (rv.x !== 'orig-gone') rv.x = '';
+  if (rv.a) rv.n = unsent_(readAnswers_(answersFile_(job.fileId, rv, false)), rv);
+  saveRv_(job.fileId, rv);
+  return rv;
+}
+
+function rememberPageUrl_() {
+  try {
+    var url = ScriptApp.getService().getUrl();
+    // Only the deployed page: the editor's test link (/dev) works for the owner alone.
+    if (url && /\/exec$/.test(url) && props_().getProperty('PAGE_URL') !== url) props_().setProperty('PAGE_URL', url);
+  } catch (err) { /* not deployed as a web app */ }
+}
+
+function reviewUrl_(fileId) {
+  var page = props_().getProperty('PAGE_URL');
+  return page ? page + '?review=' + fileId : '';
+}
+
+/** Lines for a mail about a book with places open for review. */
+function reviewLines_(job, rv) {
+  if (!rv || !(rv.o > 0)) return [];
+  var url = reviewUrl_(job.fileId);
+  return [
+    'جاهز للمراجعة: ' + rv.o + ' موضعاً مشكوكاً فيه، ترى كل واحد منها على صورة الصفحة' +
+      (url ? ': ' + url : ' في صفحة الحالة.'),
+    'لا تحذف الملف الأصلي من «' + CONFIG.FOLDERS.originals + '» قبل أن تنهي المراجعة.'
+  ];
+}
+
+/** The first delivered book whose user sent answers that no run has applied yet. */
+function applyNext_(ctx) {
+  var pick = null;
+  reviewIds_().forEach(function (id) {
+    var rv = loadRv_(id);
+    if (!rv || !rv.a || rv.x || !reviewPending_(rv)) return;
+    var j = ctx.jobs[id];
+    if (j && j.stage !== 'delivered') return;
+    if (!pick || String(rv.sent) < String(pick.rv.sent)) pick = { id: id, rv: rv, job: j };
+  });
+  if (!pick) return '';
+  var job = pick.job;
+  if (!job) {
+    // Dropped from JOBS long after it finished: rebuilt from what the review knows.
+    job = { fileId: pick.id, title: pick.rv.t || 'كتاب', stage: 'delivered', epubId: pick.rv.e || '',
+      refineDone: true, finishedAt: now_().toISOString(), attempts: 0, unsure: pick.rv.o || 0 };
+    ctx.jobs[pick.id] = job;
+  }
+  return startReviewRound_(ctx, job, false);
+}
+
+/**
+ * Books finished before the review existed have no places yet: one run that only
+ * rebuilds the book from its saved pages makes them.
+ */
+function prepareNext_(ctx) {
+  var pick = null;
+  finishedJobs_(ctx.jobs).forEach(function (j) {
+    if (j.stage !== 'delivered' || !j.refineDone || !(j.unsure > 0) || loadRv_(j.fileId)) return;
+    if (!pick || String(j.finishedAt) < String(pick.finishedAt)) pick = j;
+  });
+  if (!pick) return 'idle';
+  return startReviewRound_(ctx, pick, true);
+}
+
+function startReviewRound_(ctx, job, prepare) {
+  var file = null;
+  try {
+    file = DriveApp.getFileById(job.fileId);
+    if (file.isTrashed()) file = null;
+  } catch (err) { /* deleted */ }
+  if (!file) {
+    // The run needs the original. Said once; a new "send" tries again.
+    var rv = loadRv_(job.fileId) || { t: job.title };
+    rv.x = 'orig-gone';
+    saveRv_(job.fileId, rv);
+    saveJobs_(ctx.jobs);
+    if (!prepare) {
+      sendMail_('المراجعة تنتظر الأصل: ' + job.title, [
+        'لم أستطع تطبيق مراجعتك على «' + job.title + '» لأن ملفه الأصلي لم يعد في «' + CONFIG.FOLDERS.originals + '».',
+        'أعِد الملف الأصلي إلى «' + CONFIG.FOLDERS.originals + '»، ثم اضغط «أرسل التصحيحات» في صفحة المراجعة مرة أخرى.',
+        'إجاباتك محفوظة ولن تضيع.'
+      ]);
+    }
+    return 'review: original gone (' + job.fileId + ')';
+  }
+  // Finished jobs are stored without these fields (see pruneJobs_); rebuild them.
+  var again = newJob_(file);
+  job.resultDir = 'drive-' + job.fileId;
+  job.name = again.name;
+  if (again.driveName) job.driveName = again.driveName;
+  job.humanRound = true;
+  if (prepare) job.prepareRound = true;
+  // The new EPUB goes where the old one is ("3- جاهز" or "6- مكتمل").
+  job.humanFolderId = parentId_(job.epubId) || ctx.folders.ready.getId();
+  job.oldEpubId = job.epubId || '';
+  job.oldReportId = job.reportId || '';
+  job.epubId = '';
+  job.reportId = '';
+  job.downloadFails = 0;
+  job.stage = 'queued';
+  job.pendingCount = false;
+  saveJobs_(ctx.jobs);
+  return (prepare ? 'preparing ' : 'review ') + job.fileId + ': ' + dispatch_(ctx, job, false);
+}
+
+function parentId_(fileId) {
+  if (!fileId) return '';
+  try {
+    var parents = DriveApp.getFileById(fileId).getParents();
+    return parents.hasNext() ? parents.next().getId() : '';
+  } catch (err) {
+    return '';
+  }
+}
+
+function advanceReview_(ctx, job) {
+  var s = readStatus_(ctx, job);
+  if (s === 'error') return 'waiting (could not read status)';
+  if (s) {
+    if (s.state === 'done' || s.state === 'incomplete') return deliver_(ctx, job, s, false);
+    return reviewFailed_(ctx, job, s.state + (s.waiting_for ? '/' + s.waiting_for : ''));
+  }
+  var age = now_().getTime() - Date.parse(job.dispatchedAt);
+  if (age <= CONFIG.GIVE_UP_MS) {
+    var running = runInProgress_(ctx, job);
+    if (running === null) return 'waiting (could not list runs)';
+    if (running) return 'running';
+    if (age < CONFIG.LOST_AFTER_MS) return 'waiting for the run to start';
+  }
+  return reviewFailed_(ctx, job, 'lost');
+}
+
+function clearReviewRound_(job) {
+  ['humanRound', 'prepareRound', 'humanFolderId', 'oldEpubId', 'oldReportId', 'rvDonePrev', 'downloadFails']
+    .forEach(function (k) { delete job[k]; });
+}
+
+/**
+ * A review round that did not end well leaves the delivered book exactly as it was
+ * (never "5- مشكلة"): the answers count as unsent and are tried once more, then the
+ * user is told once.
+ */
+function reviewFailed_(ctx, job, why) {
+  Logger.log('review round of ' + job.fileId + ' did not finish: ' + why);
+  var prepare = !!job.prepareRound;
+  var donePrev = job.rvDonePrev;
+  job.stage = 'delivered';
+  job.epubId = job.oldEpubId || job.epubId || '';
+  job.reportId = job.oldReportId || job.reportId || '';
+  job.pausedDay = '';
+  clearReviewRound_(job);
+  var rv = loadRv_(job.fileId) || { t: job.title };
+  var mail = false;
+  if (prepare) {
+    // Pages saved before the review existed are gone: nothing to review, nothing to say.
+    rv.x = 'no-data';
+  } else {
+    if (donePrev !== undefined) rv.done = donePrev;
+    rv.tries = (rv.tries || 0) + 1;
+    if (rv.tries >= CONFIG.REVIEW_MAX_TRIES) {
+      rv.x = 'failed';
+      mail = true;
+    }
+  }
+  saveRv_(job.fileId, rv);
+  saveJobs_(ctx.jobs);
+  if (mail) {
+    sendMail_('تعذّر تطبيق المراجعة: ' + job.title, [
+      'حاولت مرتين تطبيق مراجعتك على «' + job.title + '» ولم تنجح المحاولة، فبقي الكتاب كما كان.',
+      'إجاباتك محفوظة، وتُطبَّق أيضاً مع أي جولة تحسين قادمة للكتاب.',
+      'للمحاولة مرة أخرى: اضغط «أرسل التصحيحات» في صفحة المراجعة.'
+    ]);
+  }
+  return 'review round failed (' + why + ')';
+}
+
+/** Delivery of a review round: the book stays in its folder, its old files are replaced. */
+function deliverReview_(ctx, job, s) {
+  var prepare = !!job.prepareRound;
+  var used = (Number(s.review_applied) || 0) + (Number(s.review_kept) || 0);
+  // A preparation round that applied no answer keeps the book the user already has.
+  var keepOld = prepare && !used;
+  var folder = null;
+  try { folder = DriveApp.getFolderById(job.humanFolderId); } catch (err) { /* gone */ }
+  if (!folder || folder.isTrashed()) folder = ctx.folders.ready;
+  if (!keepOld && !job.epubId) {
+    var epubName = String(s.epub || '').trim();
+    if (!epubName) return reviewFailed_(ctx, job, 'no EPUB');
+    var r = gh_(ctx.cfg, 'get', contentsPath_(ctx.cfg, job.resultDir + '/' + epubName), null, GH_RAW);
+    if (r.code !== 200) {
+      job.downloadFails = (job.downloadFails || 0) + 1;
+      if (r.code === 404 || job.downloadFails >= 6) return reviewFailed_(ctx, job, 'download ' + r.code);
+      saveJobs_(ctx.jobs);
+      reportGitHubProblem_(ctx, r, 'download');
+      return 'waiting (download failed)';
+    }
+    var blob = r.resp.getBlob();
+    blob.setName(job.title + (s.state === 'incomplete' ? INCOMPLETE_SUFFIX : '') + '.epub');
+    blob.setContentType('application/epub+zip');
+    job.epubId = folder.createFile(blob).getId();
+    saveJobs_(ctx.jobs);
+  }
+  if (!keepOld && !job.reportId) {
+    var rr = gh_(ctx.cfg, 'get', contentsPath_(ctx.cfg, job.resultDir + '/report.md'), null, GH_RAW);
+    if (rr.code === 200) {
+      try {
+        job.reportId = folder.createFile(job.title + ' - تقرير.txt', ghText_(rr), 'text/plain').getId();
+      } catch (err) {
+        Logger.log('could not save the report of ' + job.fileId + ': ' + err);
+      }
+    }
+  }
+  if (keepOld) {
+    job.epubId = job.oldEpubId || '';
+    job.reportId = job.oldReportId || '';
+  } else {
+    [job.oldEpubId, job.oldReportId].forEach(function (id) {
+      if (!id || id === job.epubId || id === job.reportId) return;
+      try { DriveApp.getFileById(id).setTrashed(true); } catch (err) { Logger.log('trash ' + id + ': ' + err); }
+    });
+  }
+  var before = job.unsure || 0;
+  var unsure = pageList_(s.pages_unsure);
+  job.stage = 'delivered';
+  job.lastState = s.state;
+  job.lastError = '';
+  job.unsure = unsure.length;
+  if (unsure.length) job.unsureList = shorten_(compressPages_(unsure), 300);
+  clearReviewRound_(job);
+  var rv = updateRv_(job, s);
+  if (!rv) {
+    // The workflow on GitHub does not know the review yet: do not prepare again.
+    rv = { t: job.title, x: 'no-data' };
+    saveRv_(job.fileId, rv);
+  }
+  var finalNow = !unsure.length && !job.refineDone;
+  if (finalNow) finalize_(ctx, job, false);
+  saveJobs_(ctx.jobs);
+
+  var url = 'https://drive.google.com/file/d/' + job.epubId + '/view';
+  if (prepare) {
+    if (rv.o > 0) sendMail_('جاهز للمراجعة: ' + job.title, ['في «' + job.title + '» مواضع لم تقدر النماذج على حسمها.'].concat(reviewLines_(job, rv)));
+    return 'prepared (' + (rv.o || 0) + ' places)';
+  }
+  var lines = [
+    'طُبّقت مراجعتك على «' + job.title + '»: ' + (Number(s.review_applied) || 0) + ' تصحيحاً و' +
+      (Number(s.review_kept) || 0) + ' تأكيداً.',
+    'الصفحات المشكوك فيها: ' + before + ' ← ' + unsure.length + '.'
+  ];
+  if (Number(s.review_conflicts_new) > 0) {
+    lines.push(s.review_conflicts_new + ' إجابة لم تُطبَّق لأن صفحتها تغيّرت منذ أن رأيتها؛ ستجد مواضعها من جديد في صفحة المراجعة.');
+  }
+  lines.push('النسخة الجديدة حلّت محل القديمة: ' + url);
+  if (rv.o > 0) {
+    lines = lines.concat(reviewLines_(job, rv));
+  } else if (!unsure.length) {
+    lines.push('لم تبقَ صفحات مشكوك فيها' + (finalNow ? '، ونقلت الكتاب إلى «' + CONFIG.FOLDERS.final + '».' : '.'));
+    lines.push('يمكنك الآن حذف ملفه الأصلي من «' + CONFIG.FOLDERS.originals + '» إن احتجت المساحة.');
+  }
+  sendMail_('طُبّقت مراجعتك: ' + job.title, lines);
+  return 'review delivered (' + before + ' -> ' + unsure.length + ')';
 }
 
 // ============================================================================
@@ -726,6 +1308,7 @@ function runInProgress_(ctx, job) {
 }
 
 function deliver_(ctx, job, s, incomplete) {
+  if (job.humanRound) return deliverReview_(ctx, job, s);
   var epubName = String(s.epub || '').trim();
   if (!epubName) return failedOrGiveUp_(ctx, job, 'انتهى التحويل دون أن يُنتج ملف الكتاب.');
 
@@ -775,6 +1358,8 @@ function deliver_(ctx, job, s, incomplete) {
   job.lastState = s.state;
   job.lastError = '';
   job.unsure = unsure.length;
+  delete job.rvDonePrev;
+  var rv = updateRv_(job, s);
 
   if (job.refining) {
     // A refinement round: the new files replace the old ones.
@@ -810,7 +1395,7 @@ function deliver_(ctx, job, s, incomplete) {
         'الصفحات المشكوك فيها نزلت من ' + before + ' إلى ' + unsure.length + '.',
         'النسخة الجديدة حلّت محل القديمة: ' + url,
         unsure.length ? 'ستستمر المراجعة في الأيام القادمة إن بقي ما يمكن تحسينه.' : 'لم تبقَ صفحات مشكوك فيها.'
-      ]);
+      ].concat(reviewLines_(job, rv)));
     }
     return 'refined (' + before + ' -> ' + unsure.length + ')';
   }
@@ -838,6 +1423,7 @@ function deliver_(ctx, job, s, incomplete) {
   if (unsure.length) {
     lines.push('صفحات تستحق المراجعة (اختلفت قراءتان لها، وهي موجودة في الكتاب): ' + compressPages_(unsure) + '.');
   }
+  lines = lines.concat(reviewLines_(job, rv));
   lines.push('نقلت الملف الأصلي إلى مجلد «' + CONFIG.FOLDERS.originals + '».');
   var short = shortReport_(report);
   if (short) {
@@ -1213,7 +1799,7 @@ function pruneJobs_(jobs) {
   finished.forEach(function (j) {
     ['name', 'driveName', 'resultDir', 'dispatchedAt', 'createdAt', 'pausedDay', 'pausedAt',
       'pendingCount', 'noteId', 'pauseMailed', 'pagesDone', 'pagesTotal', 'pauses',
-      'judgeDay', 'judgeRounds', 'judgeMailed']
+      'judgeDay', 'judgeRounds', 'judgeMailed', 'rvDonePrev', 'downloadFails']
       .forEach(function (k) { delete j[k]; });
     if (j.lastError) j.lastError = shorten_(j.lastError, 120);
   });
