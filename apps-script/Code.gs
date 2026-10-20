@@ -1206,10 +1206,8 @@ function reviewSummaries_(jobs) {
     var j = jobs[id];
     var pending = reviewPending_(rv) || !!(j && j.humanRound && isActive_(j));
     if (!(rv.o > 0 || rv.n > 0 || pending || rv.x)) return null;
-    // A book the user deleted (its original, or its EPUB) is not listed any more,
-    // unless answers the user saved still wait for its original.
-    var gone = !fileAlive_(id) || (rv.e && !fileAlive_(rv.e));
-    if (gone && !(rv.n > 0 || rv.x === 'orig-gone')) return null;
+    // A book the user deleted (its original, or its EPUB) is not listed any more.
+    if (!fileAlive_(id) || (rv.e && !fileAlive_(rv.e))) return null;
     return { fileId: id, title: rv.t || (j && j.title) || '', open: rv.o || 0, saved: rv.n || 0,
       pending: pending, note: rv.x || '' };
   }).filter(function (x) { return x; });
