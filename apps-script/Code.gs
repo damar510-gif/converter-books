@@ -576,6 +576,8 @@ function setHelperBoxes(json) {
       boxes[k] = list.filter(function (id, i) { return list.indexOf(id) === i; });
     });
     if (bad) return JSON.stringify({ ok: false, error: 'نموذج غير معروف' });
+    // When each model may work: {id: {start, stop}} (times; '' = now / never).
+    boxes.times = cleanTimes_(r.times, boxes.transcribe.concat(boxes.review));
     var lock = LockService.getUserLock();
     if (!lock.tryLock(20000)) return JSON.stringify({ ok: false, error: 'مشغول، أعد المحاولة بعد دقيقة.' });
     try {
@@ -1946,7 +1948,23 @@ function helperBoxes_() {
     return list.filter(function (id, i) { return CHIP_RE.test(id) && list.indexOf(id) === i; })
       .slice(0, CONFIG.HELPER_MAX_CHIPS);
   };
-  return { transcribe: clean(v.transcribe), review: clean(v.review) };
+  var out = { transcribe: clean(v.transcribe), review: clean(v.review) };
+  out.times = cleanTimes_(v.times, out.transcribe.concat(out.review));
+  return out;
+}
+
+/** {id: {start, stop}} for the models in the boxes: start = not before, stop = not after ('' = none). */
+function cleanTimes_(times, ids) {
+  var out = {};
+  var iso = function (v) { return typeof v === 'string' && isFinite(Date.parse(v)) ? new Date(Date.parse(v)).toISOString() : ''; };
+  if (!times || typeof times !== 'object') return out;
+  ids.forEach(function (id) {
+    var t = times[id];
+    if (!t || typeof t !== 'object') return;
+    var w = { start: iso(t.start), stop: iso(t.stop) };
+    if (w.start || w.stop) out[id] = w;
+  });
+  return out;
 }
 
 /** The helper's status file, read once per check. */
@@ -1962,11 +1980,16 @@ function helperStatusOf_(ctx) {
  * are on the computer, and the helper was seen within the hour.
  */
 function helperTranscribes_(status) {
-  var boxes = helperBoxes_().transcribe;
+  var all = helperBoxes_();
+  var boxes = all.transcribe;
   var at = status ? Date.parse(status.at) : NaN;
   if (!boxes.length || !isFinite(at) || now_().getTime() - at > CONFIG.HELPER_GONE_MS) return false;
   var found = (Array.isArray(status.models) ? status.models : []).map(function (m) { return m && String(m.id); });
-  return boxes.some(function (id) { return found.indexOf(id) >= 0; });
+  // A model whose stop time has passed does no more work; one that starts later will.
+  return boxes.some(function (id) {
+    var stop = Date.parse((all.times[id] || {}).stop || '');
+    return found.indexOf(id) >= 0 && !(stop <= now_().getTime());
+  });
 }
 
 /** The helper's work on a book's pages: {need, finished, bookAt} (bookAt: when the run that listed them wrote book.json). */

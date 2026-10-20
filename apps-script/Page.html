@@ -144,6 +144,12 @@
   .books .links-row { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; margin-top: 4px; }
   .books .links-row button { width: auto; }
   .retry { display: block; width: 100%; margin: -4px 0 10px; }
+  .times { margin: -4px 0 12px; font-size: .85rem; }
+  .times .trow { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-top: 4px; }
+  .times input, .times select { font: inherit; padding: 4px 6px; border-radius: 8px; border: 1px solid var(--line);
+    background: var(--card); color: var(--text); }
+  .times input { width: 4.5em; }
+  .times button { width: auto; padding: 4px 10px; }
   #boxes h2 { font-size: 1.15rem; }
   .sec { border-top: 1px solid var(--line); padding-top: 14px; margin-top: 14px; }
   .sec > .title { font-size: 1.1rem; }
@@ -1108,7 +1114,8 @@
     // While a change is being saved, the page keeps showing it.
     if (!BOXES_SAVING || !BOXES) {
       var b = h.boxes || {};
-      BOXES = { transcribe: (b.transcribe || []).slice(), review: (b.review || []).slice() };
+      BOXES = { transcribe: (b.transcribe || []).slice(), review: (b.review || []).slice(),
+        times: JSON.parse(JSON.stringify(b.times || {})) };
     }
     box.appendChild(el('h2', '', 'نماذجك على الجهاز'));
     if (!h.connected) {
@@ -1154,6 +1161,7 @@
       onBox.appendChild(chip(sec.key, m, true, h));
       var c = (h.chips || {})[id];
       if (c && /^(exhausted|failing)$/.test(c.state) && !m.gone) onBox.appendChild(retryButton(m));
+      if (!m.gone) onBox.appendChild(timeRows(m));
     });
     if (!on.length) onBox.appendChild(el('div', 'muted', sec.empty));
     pair.appendChild(offBox);
@@ -1223,12 +1231,70 @@
     return d;
   }
 
+  // When a model may work: "يبدأ بعد" and "يتوقف بعد" a number of minutes, hours or days.
+  var UNITS = [{ v: 1, t: 'دقيقة' }, { v: 60, t: 'ساعة' }, { v: 1440, t: 'يوم' }];
+
+  function timeRows(m) {
+    var t = BOXES.times[m.id] || {};
+    var box = el('div', 'times');
+    box.appendChild(timeRow(m.id, 'start', 'يبدأ', t.start, 'الآن'));
+    box.appendChild(timeRow(m.id, 'stop', 'يتوقف', t.stop, 'لا يتوقف'));
+    return box;
+  }
+
+  function timeRow(id, key, label, iso, none) {
+    var row = el('div', 'trow');
+    var at = Date.parse(iso || '');
+    var later = isFinite(at) && at > Date.now();
+    row.appendChild(el('span', '', label + ': ' + (later ? 'نحو ' + when(iso) : key === 'stop' && isFinite(at) ? 'توقّف' : none) + '، أو بعد'));
+    var num = el('input');
+    num.type = 'number';
+    num.min = '0';
+    num.inputMode = 'numeric';
+    row.appendChild(num);
+    var unit = el('select');
+    UNITS.forEach(function (u) { var o = el('option', '', u.t); o.value = String(u.v); unit.appendChild(o); });
+    unit.value = '60';
+    row.appendChild(unit);
+    var set = el('button', 'small plain', 'حدّد');
+    set.type = 'button';
+    set.addEventListener('click', function () {
+      var n = Number(num.value);
+      if (!(n > 0)) return setMsg('اكتب عدداً أكبر من صفر.');
+      setTime(id, key, new Date(Date.now() + n * Number(unit.value) * 60000).toISOString());
+    });
+    row.appendChild(set);
+    if (isFinite(at)) {
+      var clear = el('button', 'small plain', key === 'start' ? 'ابدأ الآن' : 'بلا توقف');
+      clear.type = 'button';
+      clear.addEventListener('click', function () { setTime(id, key, ''); });
+      row.appendChild(clear);
+    }
+    return row;
+  }
+
+  function setTime(id, key, iso) {
+    var next = copyBoxes(BOXES);
+    var t = next.times[id] || {};
+    t[key] = iso;
+    if (t.start || t.stop) next.times[id] = t; else delete next.times[id];
+    saveBoxes(next, key === 'start' ? (iso ? 'يبدأ نحو ' + when(iso) + '.' : 'يبدأ الآن.') : (iso ? 'يتوقف نحو ' + when(iso) + '.' : 'لا يتوقف.'));
+  }
+
+  function copyBoxes(b) {
+    return { transcribe: b.transcribe.slice(), review: b.review.slice(), times: JSON.parse(JSON.stringify(b.times || {})) };
+  }
+
   function moveChip(sec, id, toOn) {
-    var prev = BOXES;
-    var next = { transcribe: prev.transcribe.slice(), review: prev.review.slice() };
+    var next = copyBoxes(BOXES);
     next[sec] = next[sec].filter(function (x) { return x !== id; });
     if (toOn) next[sec].push(id);
-    if (JSON.stringify(next) === JSON.stringify(prev)) return;
+    if (JSON.stringify(next) === JSON.stringify(BOXES)) return;
+    saveBoxes(next, toOn ? 'يبدأ خلال دقيقة أو دقيقتين إن كان جهازك مفتوحاً.' : 'يكمل ما بين يديه ثم يتوقف.');
+  }
+
+  function saveBoxes(next, done) {
+    var prev = BOXES;
     BOXES = next;
     BOXES_SAVING++;
     renderBoxes(LAST);
@@ -1244,7 +1310,7 @@
         var r = parse(text);
         if (!r.ok) return undo(r.error || '');
         BOXES_SAVING--;
-        setMsg(toOn ? 'يبدأ خلال دقيقة أو دقيقتين إن كان جهازك مفتوحاً.' : 'يكمل ما بين يديه ثم يتوقف.');
+        setMsg(done);
       })
       .withFailureHandler(function (err) { undo(errText(err)); })
       .setHelperBoxes(JSON.stringify(next));

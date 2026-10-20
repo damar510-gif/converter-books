@@ -2241,14 +2241,14 @@ test('boxes: the page saves the models of each box; requests.json carries them; 
   const bad = JSON.parse(env.ctx.setHelperBoxes(JSON.stringify({ transcribe: ['rm|-rf'], review: [] })));
   assert.strictEqual(bad.ok, false);
   const r = JSON.parse(env.ctx.setHelperBoxes(JSON.stringify({ transcribe: [GEMINI, GROK, GEMINI], review: [GROK] })));
-  assert.deepStrictEqual(r.boxes, { transcribe: [GEMINI, GROK], review: [GROK] });
-  assert.deepStrictEqual(requestsFile(env).boxes, { transcribe: [GEMINI, GROK], review: [GROK] });
+  assert.deepStrictEqual(r.boxes, { transcribe: [GEMINI, GROK], review: [GROK], times: {} });
+  assert.deepStrictEqual(requestsFile(env).boxes, { transcribe: [GEMINI, GROK], review: [GROK], times: {} });
   assert.strictEqual(env.userLockHeld, false);
   writeHelperStatus(env, { models: MODELS.concat([{ id: 'bad id', label: 'x' }]),
     chips: { [GEMINI]: { state: 'working', text: 'يقرأ ص 3' }, [GROK]: { state: 'odd', text: 'x' } } });
   const h = status(env).helper;
   assert.deepStrictEqual(h.models.map((m) => m.id), [GEMINI, GROK]);
-  assert.deepStrictEqual(h.boxes, { transcribe: [GEMINI, GROK], review: [GROK] });
+  assert.deepStrictEqual(h.boxes, { transcribe: [GEMINI, GROK], review: [GROK], times: {} });
   assert.deepStrictEqual(h.chips[GEMINI], { state: 'working', text: 'يقرأ ص 3' });
   assert.strictEqual(h.chips[GROK].state, 'idle');
 });
@@ -2469,11 +2469,25 @@ test('the page: models move between the boxes with a tap (or a drag), are saved,
   // A tap on Grok in the right box puts it to work.
   page.click(chipIn(offT, 'Grok 4.7'));
   const call = page.pending('setHelperBoxes')[0];
-  assert.deepStrictEqual(JSON.parse(call.args[0]), { transcribe: [GEMINI, GROK], review: [] });
+  assert.deepStrictEqual(JSON.parse(call.args[0]), { transcribe: [GEMINI, GROK], review: [], times: {} });
   let now = pair(boxes.kids.filter((k) => k.className === 'sec')[0]).kids[1];
   assert.ok(/Grok 4\.7/.test(now.textContent), 'shown in the left box at once');
   page.answer(call, env.ctx.setHelperBoxes(call.args[0]));
   assert.deepStrictEqual(JSON.parse(env.props.get('HELPER_BOXES')).transcribe, [GEMINI, GROK]);
+
+  // A start time: Grok begins in 90 minutes.
+  const find = (node, pred) => { if (pred(node)) return node; for (const k of node.kids || []) { const f = find(k, pred); if (f) return f; } return null; };
+  let onBox = pair(boxes.kids.filter((k) => k.className === 'sec')[0]).kids[1];
+  const times = onBox.kids.filter((k) => k.className === 'times')[1];
+  const startRow = times.kids[0];
+  startRow.kids.find((k) => k.tag === 'input').value = '90';
+  startRow.kids.find((k) => k.tag === 'select').value = '1';
+  page.click(find(startRow, (k) => k.tag === 'button' && k.own === 'حدّد'));
+  const timed = JSON.parse(page.pending('setHelperBoxes')[0].args[0]);
+  const wait = (Date.parse(timed.times[GROK].start) - Date.now()) / 60000;
+  assert.ok(wait > 88 && wait < 92, 'starts in 90 minutes: ' + wait);
+  page.answer(page.pending('setHelperBoxes')[0], env.ctx.setHelperBoxes(JSON.stringify(timed)));
+  assert.strictEqual(JSON.parse(env.props.get('HELPER_BOXES')).times[GROK].start, timed.times[GROK].start);
 
   // Saving fails: it goes back.
   now = pair(boxes.kids.filter((k) => k.className === 'sec')[0]).kids[1];
