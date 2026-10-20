@@ -56,7 +56,7 @@ function iterator(list) {
 
 class MockBlob {
   constructor(data, type, name) {
-    this.bytes = Buffer.isBuffer(data) ? Buffer.from(data) : Buffer.from(data === undefined || data === null ? '' : String(data), 'utf8');
+    this.bytes = Buffer.isBuffer(data) || Array.isArray(data) ? Buffer.from(data) : Buffer.from(data === undefined || data === null ? '' : String(data), 'utf8');
     this.type = type || null;
     this.name = name || null;
   }
@@ -98,7 +98,9 @@ function makeGitHub(env) {
     files: {},             // results branch: path -> string | Buffer
     runs: [],              // convert.yml runs, newest first
     dispatches: [],
-    unknown: []
+    unknown: [],
+    // Files in the default branch (the helper's program).
+    repoFiles: {}
   };
   const base = '/repos/' + REPO;
 
@@ -135,11 +137,21 @@ function makeGitHub(env) {
       return json(200, { total_count: gh.runs.length, workflow_runs: gh.runs.slice(0, n) });
     }
     if (req.method === 'GET' && p.indexOf(base + '/contents/') === 0) {
-      if (u.searchParams.get('ref') !== 'results') return json(404, { message: 'No commit found for the ref' });
-      if (req.headers.Accept !== 'application/vnd.github.raw') return json(415, { message: 'tests expect the raw media type' });
+      const ref = u.searchParams.get('ref');
+      const store = ref === 'results' ? gh.files : ref === gh.defaultBranch ? gh.repoFiles : null;
+      if (!store) return json(404, { message: 'No commit found for the ref' });
       const filePath = p.slice((base + '/contents/').length).split('/').map(decodeURIComponent).join('/');
-      if (!Object.prototype.hasOwnProperty.call(gh.files, filePath)) return json(404, { message: 'Not Found' });
-      const v = gh.files[filePath];
+      if (req.headers.Accept === 'application/vnd.github+json') {
+        // A directory listing.
+        const prefix = filePath + '/';
+        const list = Object.keys(store).filter((k) => k.indexOf(prefix) === 0 && k.slice(prefix.length).indexOf('/') < 0)
+          .map((k) => ({ type: 'file', name: k.slice(prefix.length), path: k,
+            sha: require('crypto').createHash('sha1').update(store[k]).digest('hex') }));
+        return list.length ? json(200, list) : json(404, { message: 'Not Found' });
+      }
+      if (req.headers.Accept !== 'application/vnd.github.raw') return json(415, { message: 'tests expect the raw media type' });
+      if (!Object.prototype.hasOwnProperty.call(store, filePath)) return json(404, { message: 'Not Found' });
+      const v = store[filePath];
       return { code: 200, body: Buffer.isBuffer(v) ? v : Buffer.from(v, 'utf8'), headers: Object.assign({ 'Content-Type': 'application/vnd.github.raw' }, headers) };
     }
     gh.unknown.push(req.method + ' ' + p);
@@ -221,6 +233,7 @@ function makeEnv(options) {
     setTrashed(v) { this.trashed = !!v; return this; }
     getBlob() { return new MockBlob(this.content, this.mime, this.name); }
     setContent(text) { this.content = Buffer.from(String(text), 'utf8'); this.updated = env.clock; return this; }
+    setSharing(access, permission) { this.sharing = access + '/' + permission; return this; }
     getParents() { return iterator([items.get(this.parentId)]); }
     moveTo(folder) {
       if (!(folder instanceof MockFolder)) throw new Error('moveTo expects a folder');
@@ -242,7 +255,9 @@ function makeEnv(options) {
       const x = items.get(id);
       if (!(x instanceof MockFile)) throw new Error('No item with the given ID could be found.');
       return x;
-    }
+    },
+    Access: { ANYONE_WITH_LINK: 'ANYONE_WITH_LINK' },
+    Permission: { VIEW: 'VIEW' }
   };
   env.drive = { items, myDrive, MockFile, MockFolder, children, DriveApp };
 
@@ -348,6 +363,14 @@ function makeEnv(options) {
   };
 
   const LockService = {
+    getUserLock: () => ({
+      tryLock: () => {
+        if (env.userLockHeld) return false;
+        env.userLockHeld = true;
+        return true;
+      },
+      releaseLock: () => { env.userLockHeld = false; }
+    }),
     getScriptLock: () => ({
       tryLock: () => {
         if (env.lockBusy || env.lockHeld) return false;
@@ -1992,6 +2015,129 @@ test('appsscript.json has the expected manifest', () => {
     'https://www.googleapis.com/auth/userinfo.email'
   ]);
   assert.deepStrictEqual(m.webapp, { executeAs: 'USER_DEPLOYING', access: 'MYSELF' });
+});
+
+// ---------------------------------------------------------------------------
+// The helper on the user's computer
+// ---------------------------------------------------------------------------
+
+function helperEnv() {
+  const env = readyEnv();
+  env.gh.repoFiles['helper/install.ps1'] = "# install\n$x = 'تحويل الكتب'\n";
+  env.gh.repoFiles['helper/launcher.ps1'] = '# launcher\n';
+  env.gh.repoFiles['helper/helper.ps1'] = '# helper\n';
+  env.gh.files['compare/pages/p011.png'] = Buffer.from([0x89, 0x50, 0x4e, 0x47, 1]);
+  env.gh.files['compare/pages/p032.png'] = Buffer.from([0x89, 0x50, 0x4e, 0x47, 2]);
+  return env;
+}
+
+function helperFolder(env) {
+  return env.drive.DriveApp.getFolderById(env.props.get('HELPER_FOLDER'));
+}
+
+function liveIn(env, folder) {
+  return env.drive.children(folder.getId()).filter((x) => !x.trashed);
+}
+
+function sub(env, folder, name) {
+  return liveIn(env, folder).find((x) => x instanceof env.drive.MockFolder && x.name === name);
+}
+
+function writeHelperStatus(env, extra) {
+  const s = Object.assign({ v: 1, at: new Date(env.clock).toISOString(), handled: [], lines: [], actions: [] }, extra || {});
+  const old = liveIn(env, helperFolder(env)).find((x) => x.name === 'helper-status.json');
+  if (old) old.setContent(JSON.stringify(s));
+  else helperFolder(env).createFile('helper-status.json', JSON.stringify(s), 'text/plain');
+}
+
+test('helper: the page gives one install line; its file is public, the program and test pages are copied', () => {
+  const env = helperEnv();
+  const h = status(env).helper;
+  assert.strictEqual(h.connected, false);
+  assert.strictEqual(h.seen, '');
+  const install = env.drive.DriveApp.getFileById(env.props.get('HELPER_INSTALL_ID'));
+  assert.strictEqual(install.sharing, 'ANYONE_WITH_LINK/VIEW');
+  assert.strictEqual(install.content.toString('utf8'), env.gh.repoFiles['helper/install.ps1']);
+  assert.ok(h.line.indexOf("DownloadData('https://drive.google.com/uc?export=download&id=" + install.id + "')") > 0, h.line);
+  assert.ok(/UTF8\.GetString/.test(h.line), 'decodes the file as UTF-8');
+  const folder = helperFolder(env);
+  assert.strictEqual(folder.name, 'بيانات المساعد');
+  assert.deepStrictEqual(liveIn(env, sub(env, folder, 'البرنامج')).map((f) => f.name).sort(), ['helper.ps1', 'launcher.ps1']);
+  const pages = liveIn(env, sub(env, folder, 'صفحات الاختبار'));
+  assert.deepStrictEqual(pages.map((f) => f.name).sort(), ['p011.png', 'p032.png']);
+  assert.strictEqual(pages[0].mime, 'image/png');
+  assert.ok(pages.find((f) => f.name === 'p032.png').content.equals(env.gh.files['compare/pages/p032.png']));
+  const req = JSON.parse(liveIn(env, folder).find((x) => x.name === 'requests.json').content.toString('utf8'));
+  assert.deepStrictEqual(req.requests, []);
+  // Only the install file is public, and no token is in any Drive file.
+  for (const x of env.drive.items.values()) {
+    if (x instanceof env.drive.MockFile) {
+      if (x.id !== install.id) assert.strictEqual(x.sharing, undefined, x.name + ' is shared');
+      const text = x.content.toString('utf8');
+      assert.ok(text.indexOf(TOKEN) < 0 && text.indexOf('ya29.') < 0, x.name + ' holds a token');
+    }
+  }
+  assert.deepStrictEqual(env.gh.unknown, []);
+});
+
+test('helper: a request from the page reaches requests.json, and leaves once the helper has handled it', () => {
+  const env = helperEnv();
+  status(env);
+  const bad = JSON.parse(env.ctx.helperRequest(JSON.stringify({ action: 'rm -rf', choices: {} })));
+  assert.strictEqual(bad.ok, false);
+  const r = JSON.parse(env.ctx.helperRequest(JSON.stringify({
+    action: 'test', choices: { model: 'grok|grok-4.7', effort: 'low', 'bad key!': 'x' }, label: 'تجربة Grok'
+  })));
+  assert.strictEqual(r.ok, true);
+  assert.strictEqual(env.userLockHeld, false);
+  const file = () => JSON.parse(liveIn(env, helperFolder(env)).find((x) => x.name === 'requests.json').content.toString('utf8'));
+  assert.deepStrictEqual(file().requests.map((q) => [q.id, q.action, q.choices, q.label]),
+    [[r.id, 'test', { model: 'grok|grok-4.7', effort: 'low' }, 'تجربة Grok']]);
+  let h = status(env).helper;
+  assert.deepStrictEqual(h.pending.map((q) => q.id), [r.id]);
+
+  // The helper is working on it: connected, busy.
+  writeHelperStatus(env, { busy: r.id, lines: [{ text: 'يعمل الآن' }] });
+  h = status(env).helper;
+  assert.strictEqual(h.connected, true);
+  assert.strictEqual(h.busy, r.id);
+  tick(env);
+  assert.strictEqual(file().requests.length, 1);
+
+  // Done: the next check drops it.
+  writeHelperStatus(env, { handled: [r.id], lines: [{ text: 'تمت التجربة', path: 'نتائج/تجربة 1', linkText: 'النتائج', kind: 'warn' }] });
+  const results = helperFolder(env).createFolder('نتائج').createFolder('تجربة 1');
+  h = status(env).helper;
+  assert.deepStrictEqual(h.pending, []);
+  assert.deepStrictEqual(h.lines, [{ text: 'تمت التجربة', kind: 'warn', link: results.getUrl(), linkText: 'النتائج' }]);
+  tick(env);
+  assert.deepStrictEqual(file().requests, []);
+  assert.deepStrictEqual(JSON.parse(env.props.get('HELPER_REQS')), []);
+
+  // A status from 20 minutes ago: not connected any more.
+  minutes(env, 20);
+  h = status(env).helper;
+  assert.strictEqual(h.connected, false);
+  assert.strictEqual(h.minutes, 20);
+});
+
+test('helper: files are copied again only when they change on GitHub (hourly), the install link stays', () => {
+  const env = helperEnv();
+  const line = status(env).helper.line;
+  const program = sub(env, helperFolder(env), 'البرنامج');
+  const before = liveIn(env, program).find((f) => f.name === 'helper.ps1').id;
+  env.gh.repoFiles['helper/helper.ps1'] = '# helper v2\n';
+  env.gh.repoFiles['helper/install.ps1'] = '# install v2\n';
+  tick(env);
+  assert.strictEqual(liveIn(env, program).find((f) => f.name === 'helper.ps1').id, before, 'not before an hour');
+  minutes(env, 61);
+  tick(env);
+  const files = liveIn(env, program);
+  assert.strictEqual(files.filter((f) => f.name === 'helper.ps1').length, 1);
+  assert.strictEqual(files.find((f) => f.name === 'helper.ps1').content.toString('utf8'), '# helper v2\n');
+  assert.strictEqual(files.find((f) => f.name === 'launcher.ps1').created, env.clock - 61 * 60000, 'unchanged file kept');
+  assert.strictEqual(env.drive.DriveApp.getFileById(env.props.get('HELPER_INSTALL_ID')).content.toString('utf8'), '# install v2\n');
+  assert.strictEqual(status(env).helper.line, line);
 });
 
 test('the fake GitHub saw only known endpoints', () => {

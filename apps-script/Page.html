@@ -115,6 +115,14 @@
   .sendbar { position: fixed; left: 0; right: 0; bottom: 0; background: var(--card); border-top: 1px solid var(--line);
     padding: 10px 16px; }
   .sendbar > div { max-width: 640px; margin: 0 auto; }
+  .helper-line { width: 100%; font: inherit; font-size: .8rem; direction: ltr; padding: 8px; margin: 6px 0;
+    border-radius: 10px; border: 1px solid var(--line); background: var(--bg); color: var(--text); }
+  .act { border-top: 1px solid var(--line); padding-top: 10px; margin-top: 10px; }
+  .act label { display: block; margin-top: 6px; }
+  .act select { width: 100%; font: inherit; padding: 8px; border-radius: 10px; border: 1px solid var(--line);
+    background: var(--card); color: var(--text); }
+  .act button { margin-top: 10px; }
+  details { margin-top: 10px; }
   .tag { display: inline-block; font-size: .8rem; padding: 0 8px; border-radius: 999px; background: var(--ok-bg);
     color: var(--ok); margin-inline-start: 6px; }
 </style>
@@ -128,6 +136,8 @@
   <section class="card" id="queue"></section>
 
   <section class="card" id="reviews" hidden></section>
+
+  <section class="card" id="helper" hidden></section>
 
   <button id="check" type="button">افحص الآن</button>
   <button id="judge" type="button">اعرض على الحكّام الآن</button>
@@ -295,6 +305,7 @@
     });
 
     renderReviews(s);
+    renderHelper(s);
 
     // Folders and token.
     var links = el('div', 'links');
@@ -832,6 +843,121 @@
   // Keep the page current while it is open (not during a review), and when the user comes back to it.
   setInterval(function () { if (!document.hidden && !RV) refresh(); }, 120000);
   document.addEventListener('visibilitychange', function () { if (!document.hidden && !RV) refresh(); });
+
+  // ------------------------------------------------------------------------
+  // The helper on the user's computer: its install line, its own lines and
+  // buttons (from its status file), and the requests it has not finished.
+  // ------------------------------------------------------------------------
+  var PICKS = {};
+
+  function renderHelper(s) {
+    var box = document.getElementById('helper');
+    box.textContent = '';
+    var h = s.helper;
+    box.hidden = !h;
+    if (!h) return;
+    box.appendChild(el('h2', '', 'المساعد على جهازك'));
+    if (h.error) box.appendChild(el('div', 'note warn', h.error));
+    if (h.connected) {
+      box.appendChild(el('div', '', 'متصل (آخر اتصال قبل ' + duration(h.minutes) + ').'));
+    } else if (h.seen) {
+      box.appendChild(el('div', '', 'غير متصل منذ ' + duration(h.minutes) + '. يعمل حين يكون جهازك مفتوحاً.'));
+    } else {
+      box.appendChild(el('div', '', 'لم يُثبَّت بعد على جهازك.'));
+    }
+    (h.lines || []).forEach(function (l) {
+      var d = el('div', l.kind ? 'note ' + l.kind : '', l.text);
+      if (l.link && /^https:\/\/(drive|docs)\.google\.com\//.test(l.link)) {
+        d.appendChild(document.createTextNode(' '));
+        d.appendChild(link(l.link, l.linkText || 'افتح'));
+      }
+      box.appendChild(d);
+    });
+    (h.pending || []).forEach(function (p) {
+      box.appendChild(el('div', 'note warn', (p.id === h.busy ? 'يعمل الآن: ' : 'ينتظر المساعد: ') +
+        (p.label || p.action) + ' (طُلب ' + when(p.at) + ')'));
+    });
+    (h.actions || []).forEach(function (a) { box.appendChild(helperAction(a)); });
+
+    if (h.line) {
+      var holder = box;
+      if (h.seen) {
+        holder = el('details');
+        holder.appendChild(el('summary', 'muted', 'إعادة التثبيت'));
+        box.appendChild(holder);
+      }
+      holder.appendChild(el('div', 'muted', 'على جهازك: افتح PowerShell، والصق هذا السطر، ثم اضغط Enter (مرة واحدة فقط):'));
+      var input = el('input', 'helper-line');
+      input.readOnly = true;
+      input.value = h.line;
+      input.addEventListener('focus', function () { input.select(); });
+      holder.appendChild(input);
+      var copy = el('button', 'small', 'انسخ السطر');
+      copy.type = 'button';
+      copy.addEventListener('click', function () {
+        input.focus();
+        input.select();
+        var done = function () { copy.textContent = 'نُسخ ✓'; };
+        try {
+          if (document.execCommand('copy')) return done();
+        } catch (e) { /* try the other way */ }
+        if (navigator.clipboard) navigator.clipboard.writeText(h.line).then(done, function () {
+          copy.textContent = 'انسخه يدوياً (Ctrl+C)';
+        });
+      });
+      holder.appendChild(copy);
+    }
+  }
+
+  // One button of the helper's, with its choices: {id, label, button, options: [{name, label, choices: [{value, label}]}]}.
+  function helperAction(a) {
+    var box = el('div', 'act');
+    box.appendChild(el('div', 'title', String(a.label || '')));
+    if (a.note) box.appendChild(el('div', 'muted', String(a.note)));
+    var selects = [];
+    (Array.isArray(a.options) ? a.options : []).forEach(function (o) {
+      var lab = el('label', '', String(o.label || ''));
+      var sel = el('select');
+      (Array.isArray(o.choices) ? o.choices : []).forEach(function (c) {
+        var opt = el('option', '', String(c.label || c.value));
+        opt.value = String(c.value);
+        sel.appendChild(opt);
+      });
+      var key = a.id + '/' + o.name;
+      if (PICKS[key] !== undefined) sel.value = PICKS[key];
+      sel.addEventListener('change', function () { PICKS[key] = sel.value; });
+      lab.appendChild(sel);
+      box.appendChild(lab);
+      selects.push({ name: String(o.name), sel: sel });
+    });
+    var btn = el('button', '', String(a.button || 'ابدأ'));
+    btn.type = 'button';
+    btn.addEventListener('click', function () {
+      var choices = {};
+      var words = [String(a.label || '')];
+      selects.forEach(function (x) {
+        choices[x.name] = x.sel.value;
+        var opt = x.sel.options[x.sel.selectedIndex];
+        if (opt) words.push(opt.textContent);
+      });
+      btn.disabled = true;
+      setMsg('جارٍ إرسال الطلب…');
+      google.script.run
+        .withSuccessHandler(function (text) {
+          var r = parse(text);
+          btn.disabled = false;
+          setMsg(r.ok ? 'أُرسل الطلب. يبدأ المساعد خلال دقائق إن كان جهازك مفتوحاً.' : 'تعذّر الطلب: ' + (r.error || ''));
+          refresh();
+        })
+        .withFailureHandler(function (err) {
+          btn.disabled = false;
+          setMsg('تعذّر الطلب: ' + errText(err));
+        })
+        .helperRequest(JSON.stringify({ action: String(a.id), choices: choices, label: words.join(' — ') }));
+    });
+    box.appendChild(btn);
+    return box;
+  }
 
   render(INITIAL);
   if (INITIAL && INITIAL.openReview) openReview(INITIAL.openReview);
