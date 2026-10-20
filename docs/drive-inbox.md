@@ -15,6 +15,10 @@ Created by `setup()` under one root folder `تحويل الكتب`:
 | `3- جاهز` | Finished EPUBs, with their reports. |
 | `4- الأصل` | Original files of finished books. |
 | `5- مشكلة` | Books that failed, each with a short note. |
+| `6- مكتمل` | Delivered books whose refinement is over (no unsure page left, or the judges stopped improving them), with their reports. |
+
+The answers the user gives on the status page (see "Results" below) are kept in
+`تحويل الكتب/بيانات المراجعة/review-<fileId>.json`, created on first use.
 
 ## Starting a conversion
 
@@ -28,6 +32,7 @@ Created by `setup()` under one root folder `تحويل الكتب`:
 | `drive_file_name` | Original file name (keeps the extension). |
 | `result_dir` | `drive-<fileId>`. |
 | `title` | Book title (the file name without its extension). |
+| `review` | Optional. The Drive ID of the book's answers file, so the run applies the user's answers; with `:only` appended (or `:only` alone) the run only applies the answers and rebuilds the book from saved pages, with no reading, settling or judging request. |
 
 Only one conversion runs at a time. The workflow also declares
 `concurrency: convert`, so a second dispatch waits.
@@ -38,6 +43,32 @@ The workflow writes to branch `results`, folder `<result_dir>/`:
 
 - `status.json`: see below. It is always written, even when the conversion crashed.
 - the EPUB (its name is in `status.json`), `report.md` and `text.md`.
+- `human.json`: the pages the user answered about, with their text. The next run
+  restores it from here, and those pages never change again.
+- `review/items.json`: the places on unsure pages still open for the user to check,
+  with one JPEG per page (`review/pNNNN-<hash>.jpg`, the places framed and numbered;
+  boxes are in the JPEG's pixels). `answers_seen` is the time of the latest answer the
+  run used: an answer saved later hides its place until the next run.
+- `review/review-applied.json` (what the run did with each answer: `kept`, `applied`,
+  `already` or `conflict`) and `review/answers.json` (the answers file it used).
+
+`items.json`:
+
+```json
+{"v": 1, "book": "title", "book_hash": "<16 hex>", "generated_at": "…Z", "answers_seen": "…Z",
+ "pages": [{"page": 19, "base": "<12 hex>", "img": "p0019-<10 hex>.jpg", "w": 1182, "h": 1482, "more": 0,
+   "items": [{"id": "p19-<10 hex>", "fp": "…", "kind": "diff | missing | page", "n": 1,
+     "before": "…", "core": "…", "after": "…", "pos": 1234, "place": "after",
+     "options": [{"label": "other | ocr", "text": "…"}],
+     "boxes": [[0, 0, 10, 10]], "col": [0, 600], "located": true, "hint": "likely-ok | header | heading"}]}]}
+```
+
+An answer (in the answers file, under `answers`, keyed by the place's `id`) copies the
+place's `page`, `kind`, `fp`, `before`, `core`, `after`, `pos`, `place` and the page's
+`base`, and adds `verdict` (`keep`: the reading is right, or `fix`: the right text is
+`text`) and `at`. "The rest of this page is right" is
+`{"kind": "rest", "page": 19, "ids": [...], "fps": [...], "verdict": "keep", "at": "…"}`
+under its own id (`p19-rest-<time>`).
 
 Read the files with `GET /repos/{repo}/contents/<path>?ref=results` and the header
 `Accept: application/vnd.github.raw`. A missing file returns 404.
@@ -55,6 +86,12 @@ Read the files with `GET /repos/{repo}/contents/<path>?ref=results` and the head
   "pages_missing": [],
   "pages_waiting": [],
   "pages_retry": [],
+  "pages_human": [19],
+  "review_items": 74,
+  "review_applied": 3,
+  "review_kept": 5,
+  "review_conflicts_new": 0,
+  "review_seen": "2026-10-19T09:00:00Z",
   "quota_day": "2026-10-19",
   "run_id": 123,
   "run_number": 9,
@@ -72,3 +109,8 @@ Read the files with `GET /repos/{repo}/contents/<path>?ref=results` and the head
 
 A `status.json` whose `updated_at` is older than the dispatch belongs to an earlier
 attempt and must be ignored.
+
+`pages_human` lists the pages the user answered about; `review_items` counts the places
+still open, and `review_applied` / `review_kept` the corrections and confirmations this
+run applied. `review_conflicts_new` counts answers saved after the previous run that
+could not be applied because their page changed; their places come back as new ones.
