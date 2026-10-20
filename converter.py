@@ -1215,10 +1215,30 @@ def pacific_day():
         return datetime.fromtimestamp(time.time() - 8 * 3600, timezone.utc).strftime("%Y-%m-%d")
 
 
-def summarize(records, dual, review_pages=None, applied=None, helper_wait=()):
+def waiting_for_reader(pool, records, dual):
+    """When one free reader's daily quota is used up and the other still has some: the
+    pages whose only missing piece is a second reading owed by the reader that is out (a
+    page's two readings never come from one model). Returns (pages, readers with quota
+    left); no pages when both readers are out, or neither is."""
+    readers = [m for m in (pool.model, pool.second) if m] if pool and dual else []
+    left = [m for m in readers if m not in pool.exhausted]
+    if not left or len(left) == len(readers):
+        return set(), left
+    pages = set()
+    for r in records:
+        if r.get("status") != "ok" or review.pin_of(r) or (r.get("b") or {}).get("status") == "ok":
+            continue
+        owed = [m for m in readers if m != (r.get("a") or {}).get("model")]
+        if owed and all(m in pool.exhausted for m in owed):
+            pages.add(r["page"])
+    return pages, left
+
+
+def summarize(records, dual, review_pages=None, applied=None, helper_wait=(), reader_wait=(), readers_left=()):
     """Book state for status.json and the report. review_pages and applied (from
     review.build and review.overlay) add the review's numbers; helper_wait are the pages
-    waiting for the helper's models (check_pages)."""
+    waiting for the helper's models (check_pages), reader_wait those waiting for a reader
+    whose quota ran out while readers_left still have some (waiting_for_reader)."""
     missing = [r["page"] for r in records if r["status"] in ("failed", "suspicious")]
     retry = [r["page"] for r in records if (r.get("check") or {}).get("state") == "retry"]
     judging = [r["page"] for r in records if r.get("judge_waiting")]
@@ -1241,6 +1261,11 @@ def summarize(records, dual, review_pages=None, applied=None, helper_wait=()):
     # "helper": the same for pages waiting for the helper's models on the user's computer.
     state = ("paused" if waiting else "helper" if helper else "incomplete" if missing or retry
              else "judging" if judging else "done")
+    # "reader": paused only for second readings owed by the reader that is out today, while
+    # the other reader still has quota: the Drive inbox parks the book and starts the next
+    # one with the reader that is left. With both readers out it stays "paused".
+    if state == "paused" and readers_left and set(waiting) <= set(reader_wait):
+        state = "reader"
     samples = {r["page"]: r["check"].get("sample", []) for r in records
                if (r.get("check") or {}).get("state") == "unsure"}
     # Why each unsure page stayed unsure (for tuning the check).
@@ -1259,6 +1284,8 @@ def summarize(records, dual, review_pages=None, applied=None, helper_wait=()):
            "pages_human": [r["page"] for r in records if review.pin_of(r)],
            # Pages checked against a second reading from the helper's models.
            "helper_checked": sum(1 for r in records if from_helper(r) and (r.get("check") or {}).get("v") == CHECK_VERSION)}
+    if state == "reader":
+        out["readers_left"] = list(readers_left)
     if review_pages is not None:
         results = list((applied or {}).get("results", {}).values())
         out.update(review_items=sum(len(p["items"]) + p.get("more", 0) for p in review_pages),
@@ -1294,6 +1321,9 @@ def write_report(path, summary, pool, notes=()):
     if summary["state"] == "helper":
         lines += ["", f"**القراءة الأولى اكتملت، و{len(summary['pages_helper'])} صفحة تنتظر نماذجك على الجهاز** "
                   "(القراءة الثانية وحسم الخلاف). يكمل الكتاب حين تنتهي منها."]
+    if summary["state"] == "reader":
+        lines += ["", f"**نفد اليوم رصيد أحد القارئين، فتنتظر {len(summary['pages_waiting'])} صفحة قراءتها الثانية منه** "
+                  "بعد تجدد رصيده. يبدأ الكتاب التالي الآن بالقارئ الآخر، ثم يكمل هذا الكتاب."]
     if summary["state"] == "judging":
         lines += ["", f"**القراءة اكتملت، و{len(summary['pages_judging'])} صفحة تنتظر الحكّام** "
                   "(انتهى رصيدهم اليومي). تُعرض عليهم بعد تجدده، ثم يُسلَّم الكتاب."]
@@ -1326,13 +1356,13 @@ def write_status(path, summary, title, epub_name, quota_day=""):
     data = {k: v for k, v in summary.items() if k not in ("counts", "samples", "reasons")}
     data.update(book=title, epub=epub_name or "",
                 updated_at=datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"))
-    if summary["state"] in ("paused", "judging", "helper"):
+    if summary["state"] in ("paused", "judging", "helper", "reader"):
         # The Pacific date the quota ran out on; the inbox starts again the day after.
         data["quota_day"] = quota_day or pacific_day()
-    if summary["state"] in ("judging", "helper"):
-        # Written as "paused" so an older inbox script (which knows neither) still waits
-        # for the next day; the current one parks the book on waiting_for.
-        data.update(state="paused", waiting_for="judges" if summary["state"] == "judging" else "helper")
+    if summary["state"] in ("judging", "helper", "reader"):
+        # Written as "paused" so an older inbox script (which knows none of them) still
+        # waits for the next day; the current one parks the book on waiting_for.
+        data.update(state="paused", waiting_for={"judging": "judges", "helper": "helper", "reader": "reader"}[summary["state"]])
     with open(path, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=1)
 
@@ -1404,7 +1434,7 @@ def extract_cover_from_pdf(doc, cover_path, index=0):
     return False
 
 
-EXIT_CODES = {"done": 0, "incomplete": 2, "paused": 3, "judging": 4, "helper": 5}
+EXIT_CODES = {"done": 0, "incomplete": 2, "paused": 3, "judging": 4, "helper": 5, "reader": 6}
 
 
 def load_pins(path, book_hash):
@@ -1649,7 +1679,8 @@ def generate_epub_from_pdf(filepath, output_path, args):
                 save_record(cache_dir, r)
         print(f"Review: {sum(len(p['items']) for p in review_pages)} places on {len(review_pages)} pages")
 
-    summary = summarize(records, dual, review_pages, applied, helper_wait)
+    reader_wait, readers_left = waiting_for_reader(None if args.review_only else pool, records, dual)
+    summary = summarize(records, dual, review_pages, applied, helper_wait, reader_wait, readers_left)
     md = assemble(records, review_pages)
     if not args.pages:
         md = keep_main_headings(md, pool, cache_dir)
