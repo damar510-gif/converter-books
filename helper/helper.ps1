@@ -4,7 +4,7 @@
 # results under «نتائج», and reports in helper-status.json, which the status page shows.
 # Windows PowerShell 5.1: no ?? or ?: operators.
 
-$HelperVersion = '2026-10-20.3'
+$HelperVersion = '2026-10-20.4'
 $ResultsName = 'نتائج'
 $TestPagesName = 'صفحات الاختبار'
 $PageTimeoutSec = 20 * 60
@@ -24,8 +24,15 @@ $Tools = [ordered]@{
       @{ id = 'claude-sonnet-5.5'; label = 'Claude Sonnet 5.5' },
       @{ id = 'claude-opus-5.5'; label = 'Claude Opus 5.5' },
       @{ id = 'gpt-oss-120b'; label = 'GPT-OSS 120B' }) }
+  # Codex's /model list on the user's free ChatGPT account (2026-10-20).
   codex = @{ label = 'Codex'; models = @(
-      @{ id = ''; label = 'Codex (النموذج الافتراضي)' }) }
+      @{ id = 'gpt-6.1-sol'; label = 'GPT-6.1 Sol' },
+      @{ id = 'gpt-6-astra'; label = 'GPT-6 Astra' },
+      @{ id = 'gpt-6-sol'; label = 'GPT-6 Sol' },
+      @{ id = 'gpt-6-luna'; label = 'GPT-6 Luna' },
+      @{ id = 'gpt-5.6-sol'; label = 'GPT-5.6 Sol' },
+      @{ id = 'gpt-5.6-terra'; label = 'GPT-5.6 Terra' },
+      @{ id = 'gpt-5.6-luna'; label = 'GPT-5.6 Luna' }) }
 }
 $Efforts = [ordered]@{ low = 'جهد منخفض'; medium = 'جهد متوسط'; high = 'جهد عالٍ' }
 
