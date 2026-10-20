@@ -1,18 +1,18 @@
 # تقرير التحويل
 
 - عدد الصفحات: 263
-- صُححت بمقارنة القراءتين على الصورة: 205
-- لم تُحسم (مشكوك فيها): 58
-- طلبات gemini-3.8-flash في هذا التشغيل: 2
-- طلبات gemini-3.7-flash في هذا التشغيل: 2
-- طلبات gemini-3.6-flash في هذا التشغيل: 3
-- طلبات gemini-3-flash-preview في هذا التشغيل: 22
-- طلبات gemini-2.5-flash في هذا التشغيل: 1
+- صُححت بمقارنة القراءتين على الصورة: 215
+- لم تُحسم (مشكوك فيها): 48
+- طلبات gemini-3.8-flash في هذا التشغيل: 22
+- طلبات gemini-3.7-flash في هذا التشغيل: 1
+- طلبات gemini-3.6-flash في هذا التشغيل: 23
+- طلبات gemini-3.5-flash في هذا التشغيل: 1
+- طلبات gemini-3.1-pro-preview في هذا التشغيل: 1
+- طلبات gemini-3-flash-preview في هذا التشغيل: 4
 - طلبات gemini-3.5-flash-lite في هذا التشغيل: 1
+- حكّام جدد أُضيفوا تلقائياً: gemini-3.5-flash، gemini-3.1-pro-preview
 
-**القراءة اكتملت، و30 صفحة تنتظر الحكّام** (انتهى رصيدهم اليومي). تُعرض عليهم بعد تجدده، ثم يُسلَّم الكتاب.
-
-صفحات مشكوك فيها (اختلفت القراءتان ولم يُحسم الخلاف، أو يبدو أن فيها سطراً ساقطاً): 6، 14، 16، 18-19، 29، 32-33، 36-37، 47، 71، 89، 93-95، 101، 104، 110، 113، 123، 129، 131، 133-135، 139، 141، 143، 145، 149-151، 153، 155، 158، 170، 172، 176، 182-185، 188، 190-191، 211-212، 216، 218، 222، 225، 236، 241-242، 244، 246-247
+صفحات مشكوك فيها (اختلفت القراءتان ولم يُحسم الخلاف، أو يبدو أن فيها سطراً ساقطاً): 6، 14، 16، 18-19، 29، 32-33، 36-37، 47، 71، 89، 93-95، 101، 104، 110، 113، 123، 129، 131، 133-135، 139، 143، 145، 149-151، 153، 155، 172، 176، 183-185، 188، 191، 211، 218، 222، 225، 236، 242، 246
 - ص 6:   [gemini-3.8-flash: used, 2 lines may be missing]
 - ص 14:   [gemini-3.7-flash: used, 1 lines may be missing]
 - ص 16:   [gemini-3.6-flash: used, 2 lines may be missing]
@@ -34,12 +34,14 @@
 - ص 110:   [gemini-3-flash-preview: used, 1 lines may be missing]
 - ص 113:   [gemini-3-flash-preview: used, 1 lines may be missing]
 - ص 123:   [gemini-3-flash-preview: used, 1 lines may be missing]
-- ص 129: «في الندوات الأدبية الصالونات التي كانت سيدات» / «—»؛ «المجتمع يعقدنها في قصورهن حيث يتبارى المجتمعون» / «—»؛ «بالنكتة اللاذعة واللمحة الظريفة واللفظة الممتعة» / «—»  [gemini-3.5-flash-lite: chars=2961 finish=FinishReason.STOP؛ gemini-3-flash-preview: rejected: drops text the readings agree on]
-- ص 131: «هنری» / «هنري»؛ «رغم» / «ورغم»؛ «تجارية» / «—»  [gemini-3.1-flash-lite: chars=2845 finish=FinishReason.STOP؛ gemini-3-flash-preview: rejected: 1 lines missing]
+- ص 129: «في الندوات الأدبية الصالونات التي كانت سيدات» / «—»؛ «المجتمع يعقدنها في قصورهن حيث يتبارى المجتمعون» / «—»؛ «بالنكتة اللاذعة واللمحة الظريفة واللفظة الممتعة» / «—»  [gemini-3.5-flash-lite: chars=2961 finish=FinishReason.STOP؛ gemini-3.8-flash: rejected: drops text the readings agree on]
+- ص 131: «هنری» / «هنري»؛ «رغم» / «ورغم»؛ «تجارية» / «—»  [gemini-3.1-flash-lite: chars=2845 finish=FinishReason.STOP؛ gemini-3.8-flash: rejected: 1 lines missing]
 - ص 133:   [gemini-3-flash-preview: used, 3 lines may be missing]
 - ص 134:   [gemini-3-flash-preview: used, 2 lines may be missing]
 - ص 135:   [gemini-3-flash-preview: used, 1 lines may be missing]
-- ص 139: «وتعاستها وتدعى أن الله هو الذي أراد لها الشقاء» / «—»؛ «بححب» / «بحب»؛ «وتواسيتها مرجريت قائلة ما حاجتنا إلى أقاربك» / «—»  [gemini-3.1-flash-lite: chars=3248 finish=FinishReason.STOP؛ gemini-3-flash-preview: rejected: drops text the readings agree on]
-- ص 141: «تختلط بفتیات» / «تخالط فتيات»؛ «شحb» / «شحب»؛ «تجنبت» / «وتجنبت»  [gemini-3.5-flash-lite: chars=0 finish=؛ gemini-3-flash-preview: no answer: ]
+- ص 139: «وتعاستها وتدعى أن الله هو الذي أراد لها الشقاء» / «—»؛ «بححب» / «بحب»؛ «وتواسيتها مرجريت قائلة ما حاجتنا إلى أقاربك» / «—»  [gemini-3.1-flash-lite: chars=3248 finish=FinishReason.STOP؛ gemini-3.8-flash: rejected: drops text the readings agree on]
 - ص 143: «ارتسوا» / «ارتدوا»؛ «فلا نحس» / «فنحس»؛ «فتنبئنا» / «فتنبهنا»  [gemini-3.5-flash-lite: chars=2790 finish=FinishReason.STOP؛ gemini-3-flash-preview: used, 1 lines may be missing]
 - ص 145:   [gemini-3-flash-preview: used, 1 lines may be missing]
+- ص 149:   [gemini-3-flash-preview: used, 3 lines may be missing]
+
+**كل الصفحات اكتملت.**
