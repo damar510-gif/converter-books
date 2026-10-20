@@ -2525,6 +2525,17 @@ test('the page: the waiting books by name in their order, and how each finished 
   assert.ok(/صفحتان مشكوك فيهما/.test(page2.byId.recent.textContent), page2.byId.recent.textContent);
 });
 
+test('review: a book the user deleted leaves the review list', () => {
+  const env = readyEnv();
+  const { f } = deliverWithPlaces(env, 'محذوف.pdf', 2);
+  assert.strictEqual(status(env).reviews.length, 1);
+  env.drive.DriveApp.getFileById(f.id).setTrashed(true);
+  assert.strictEqual(status(env).reviews.length, 0, 'original in the trash');
+  const { f: g } = deliverWithPlaces(env, 'آخر.pdf', 2);
+  env.drive.DriveApp.getFileById(rv(env, g.id).e).setTrashed(true);
+  assert.strictEqual(status(env).reviews.length, 0, 'EPUB in the trash');
+});
+
 test('the fake GitHub saw only known endpoints', () => {
   // Re-run a full happy path and make sure every request matched a route.
   const env = readyEnv();
