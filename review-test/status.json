@@ -1,0 +1,28 @@
+{
+  "state": "paused",
+  "pages_total": 12,
+  "pages_done": 12,
+  "pages_judging": [
+    24
+  ],
+  "pages_unsure": [
+    23,
+    24
+  ],
+  "pages_missing": [],
+  "pages_waiting": [],
+  "pages_retry": [],
+  "pages_human": [],
+  "review_items": 12,
+  "review_applied": 0,
+  "review_kept": 0,
+  "review_conflicts_new": 0,
+  "review_seen": "",
+  "book": "تراث الانسانية 3-1-246",
+  "epub": "تراث الانسانية 3-1-246.epub",
+  "updated_at": "2026-10-20T13:53:48Z",
+  "quota_day": "2026-10-20",
+  "waiting_for": "judges",
+  "run_id": 39432999214,
+  "run_number": 21
+}
