@@ -60,13 +60,13 @@
     71
   ],
   "review_items": 181,
-  "review_applied": 12,
-  "review_kept": 17,
+  "review_applied": 0,
+  "review_kept": 0,
   "review_conflicts_new": 0,
   "review_seen": "2026-10-20T14:39:23.628Z",
   "book": "تراث الانسانية 3 (2-2)",
   "epub": "تراث الانسانية 3 (2-2).epub",
-  "updated_at": "2026-10-20T14:41:49Z",
-  "run_id": 39440884658,
-  "run_number": 24
+  "updated_at": "2026-10-20T14:46:28Z",
+  "run_id": 39441875884,
+  "run_number": 25
 }
