@@ -304,6 +304,24 @@ Test '"try again now" on the page: a resting model works again at once' {
   Same (Work 'agy').kind 'readB' 'and takes work'
 }
 
+Test 'times set on the page: a model waits for its start, and stops after its stop' {
+  Make-Book 'book1' @(1) @() $false @{ 1 = $RIGHT } | Out-Null
+  $script:Answer = { param($tool, $model, $kind, $task) @{ text = $RIGHT } }
+  $later = (Get-Date).ToUniversalTime().AddMinutes(90).ToString('yyyy-MM-ddTHH:mm:ssZ')
+  $past = (Get-Date).ToUniversalTime().AddMinutes(-5).ToString('yyyy-MM-ddTHH:mm:ssZ')
+  $write = { param($times)
+    Write-Utf8 (Join-Path $Folder 'requests.json') (@{ v = 1; requests = @(); books = @()
+        boxes = @{ transcribe = @($GEMINI); review = @(); times = $times } } | ConvertTo-Json -Depth 6) }
+  & $write @{ $GEMINI = @{ start = $later; stop = '' } }
+  Same (Work 'agy') '' 'not before its start'
+  Write-Status (Get-Tools) (Load-State) @() (Get-Boxes (Read-Json (Join-Path $Folder 'requests.json')))
+  Check ((Read-Json (Join-Path $Folder 'helper-status.json')).chips.$GEMINI.text -like 'ينتظر وقت البدء*') 'the page says when it starts'
+  & $write @{ $GEMINI = @{ start = ''; stop = $past } }
+  Same (Work 'agy') '' 'not after its stop'
+  & $write @{ $GEMINI = @{ start = $past; stop = $later } }
+  Same (Work 'agy').kind 'readB' 'works between the two'
+}
+
 Remove-Item -LiteralPath $Tmp -Recurse -Force -ErrorAction SilentlyContinue
 Write-Host ''
 Write-Host "$($script:Count - $script:Failed) of $($script:Count) tests passed$(if ($script:Failed) { ", $($script:Failed) FAILED" })"

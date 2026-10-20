@@ -6,7 +6,7 @@
 # places through the folders «كتب», «مراجعة» and «أحكام» (docs/helper-boxes-plan.md).
 # Windows PowerShell 5.1: no ?? or ?: operators.
 
-$HelperVersion = '2026-10-21.4'
+$HelperVersion = '2026-10-21.5'
 $BooksName = 'كتب'
 $ReviewsName = 'مراجعة'
 $VerdictsName = 'أحكام'
@@ -317,13 +317,30 @@ $RefusalPattern = '(?i)(copyright|can.?t (help|assist|transcribe|reproduce|provi
 $Claims = Join-Path $Local 'claims'
 
 function Get-Boxes($reqs) {
-  $out = @{ transcribe = @(); review = @() }
+  $out = @{ transcribe = @(); review = @(); times = @{} }
   if ($reqs -and $reqs.boxes) {
     foreach ($k in 'transcribe', 'review') {
       $out[$k] = @(@($reqs.boxes.$k) | Where-Object { $_ -and ([string]$_) -match $ChipPattern } | ForEach-Object { [string]$_ })
     }
+    # When each model may work, set on the page: {start, stop} ('' = now / never).
+    if ($reqs.boxes.times) {
+      foreach ($p in $reqs.boxes.times.PSObject.Properties) {
+        $out.times[$p.Name] = @{ start = (Iso-Of $p.Value.start); stop = (Iso-Of $p.Value.stop) }
+      }
+    }
   }
   return $out
+}
+
+# '' when the model may work now, else why not: 'later' (before its start) or 'over' (after its stop).
+function Chip-Window($boxes, [string]$chip) {
+  $t = $null
+  if ($boxes -and $boxes.times) { $t = $boxes.times[$chip] }
+  if (-not $t) { return '' }
+  $now = (Get-Date).ToUniversalTime()
+  try { if ($t.start -and ([DateTime]::Parse($t.start)).ToUniversalTime() -gt $now) { return 'later' } } catch { }
+  try { if ($t.stop -and ([DateTime]::Parse($t.stop)).ToUniversalTime() -le $now) { return 'over' } } catch { }
+  return ''
 }
 
 function Chip-Tool([string]$chip) { return ($chip -split '\|', 2)[0] }
@@ -386,8 +403,8 @@ function Chip-Ready($c) {
   try { return ([DateTime]::Parse($c.until)).ToUniversalTime() -le (Get-Date).ToUniversalTime() } catch { return $true }
 }
 
-function Ready-Chips($list, $found, $states) {
-  return @(@($list) | Where-Object { $_ -and $found[(Chip-Tool $_)] -and (Chip-Ready $states[$_]) })
+function Ready-Chips($list, $found, $states, $boxes) {
+  return @(@($list) | Where-Object { $_ -and $found[(Chip-Tool $_)] -and (Chip-Ready $states[$_]) -and -not (Chip-Window $boxes $_) })
 }
 
 # --- Claims: one job, one worker (local files: all workers are on this computer) ---
@@ -920,7 +937,7 @@ function Update-Verdicts($boxes, $found, $states) {
   if (-not $books.Count) { return }
   $dir = Join-Path $Folder $VerdictsName
   New-Item -ItemType Directory -Force -Path $dir | Out-Null
-  $ready = @(Ready-Chips $boxes.review $found $states)
+  $ready = @(Ready-Chips $boxes.review $found $states $boxes)
   foreach ($book in $books) {
     $verdicts = Get-Verdicts $book
     $file = Join-Path $dir "$($book.id).json"
@@ -984,10 +1001,10 @@ function Find-BoxJob([string]$tool, $boxes, $found, [int]$turn) {
   $rbooks = $null
   for ($i = 0; $i -lt $mine.Count; $i++) {
     $chip = $mine[($turn + $i) % $mine.Count]
-    if (-not (Chip-Ready $states[$chip])) { continue }
+    if (-not (Chip-Ready $states[$chip]) -or (Chip-Window $boxes $chip)) { continue }
     if ($boxes.transcribe -contains $chip) {
       if ($null -eq $books) { $books = @(Get-TranscribeBooks) }
-      $job = Find-TranscribeJob $chip $books (@(Ready-Chips $boxes.transcribe $found $states).Count)
+      $job = Find-TranscribeJob $chip $books (@(Ready-Chips $boxes.transcribe $found $states $boxes).Count)
       if ($job) { return $job }
     }
     if ($boxes.review -contains $chip) {
@@ -1022,7 +1039,9 @@ function Invoke-BoxWorker([string]$tool) {
       }
     } else {
       $states = All-Chips
-      foreach ($c in $mine) { if (Chip-Ready $states[$c]) { Set-Chip $c @{ state = 'idle'; text = 'لا عمل له الآن'; until = '' } | Out-Null } }
+      foreach ($c in $mine) {
+        if ((Chip-Ready $states[$c]) -and -not (Chip-Window $boxes $c)) { Set-Chip $c @{ state = 'idle'; text = 'لا عمل له الآن'; until = '' } | Out-Null }
+      }
     }
     if (((Get-Date) - $begin).TotalMinutes -ge $WorkerMinutes) { break }
     if (-not $job) { Start-Sleep -Seconds 60 }
@@ -1107,7 +1126,10 @@ function Write-Status($found, $state, $running, $boxes) {
     $states = All-Chips
     foreach ($c in @(@($boxes.transcribe) + @($boxes.review) | Select-Object -Unique)) {
       $st = $states[$c]
+      $window = Chip-Window $boxes $c
       if (-not $found[(Chip-Tool $c)]) { $chips[$c] = @{ state = 'failing'; text = 'برنامجه غير موجود على الجهاز' } }
+      elseif ($window -eq 'later') { $chips[$c] = @{ state = 'idle'; text = "ينتظر وقت البدء: نحو $(Local-Time $boxes.times[$c].start)" } }
+      elseif ($window -eq 'over') { $chips[$c] = @{ state = 'idle'; text = 'توقّف في الوقت الذي حددته' } }
       elseif ($st -and -not (Chip-Ready $st)) { $chips[$c] = @{ state = $st.state; text = $st.text } }
       elseif ($st -and $st.state -eq 'working') { $chips[$c] = @{ state = 'working'; text = $st.text } }
       elseif ($st) { $chips[$c] = @{ state = 'idle'; text = $(if ($st.text) { $st.text } else { 'لا عمل له الآن' }) } }
