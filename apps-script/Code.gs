@@ -64,7 +64,20 @@ var CONFIG = {
   REVIEW_ANSWER_CHARS: 2000,
   REVIEW_PAGE_CHARS: 20000,
   REVIEW_REST_IDS: 25,
-  REVIEW_MAX_ANSWERS: 300
+  REVIEW_MAX_ANSWERS: 300,
+  // The helper on the user's computer (helper/ in the repository) works through this
+  // Drive folder, which Google Drive for desktop keeps in sync there: see docs/helper.md.
+  // No token or key ever leaves this script.
+  HELPER_FOLDER: 'بيانات المساعد',
+  HELPER_PROGRAM: 'البرنامج',
+  HELPER_TEST_PAGES: 'صفحات الاختبار',
+  HELPER_REQUESTS: 'requests.json',
+  HELPER_INSTALL: 'install.ps1',
+  HELPER_STATUS: 'helper-status.json',
+  // The helper writes its status every minute or so while the computer is on.
+  HELPER_STALE_MS: 15 * 60 * 1000,
+  HELPER_MAX_REQUESTS: 10,
+  HELPER_SYNC_MS: 60 * 60 * 1000
 };
 
 var SUPPORTED_EXT = { pdf: true, docx: true, txt: true };
@@ -195,6 +208,11 @@ function tick() {
       result = 'error: ' + (err && err.message ? err.message : err);
     }
     try {
+      helperTick_();
+    } catch (err) {
+      Logger.log('helper bridge failed: ' + (err && err.stack ? err.stack : err));
+    }
+    try {
       props_().setProperties({ LAST_TICK: now_().toISOString(), LAST_RESULT: String(result).slice(0, 300) });
     } catch (e) {
       Logger.log('could not save LAST_TICK: ' + e);
@@ -304,6 +322,7 @@ function getStatus() {
     }
 
     out.reviews = reviewSummaries_(jobs);
+    if (out.setUp && cfg.token) out.helper = helperInfo_(now);
 
     out.recent = finishedJobs_(jobs).slice(0, 10).map(function (j) {
       return {
@@ -465,6 +484,48 @@ function sendReview(fileId) {
   }
   var result = tick();
   return JSON.stringify({ ok: true, started: /review [\w-]+: dispatched/.test(result) });
+}
+
+/**
+ * A request from the status page for the helper on the user's computer: json is
+ * {action, choices: {name: value}, label}. It goes into requests.json in the helper's
+ * Drive folder, where the helper finds it within a minute or two. Returns {ok, id} or
+ * {ok: false, error}.
+ */
+function helperRequest(json) {
+  try {
+    var r = parseJson_(json) || {};
+    var action = String(r.action || '');
+    if (!/^[a-z0-9-]{1,40}$/.test(action)) return JSON.stringify({ ok: false, error: 'طلب غير مفهوم' });
+    var choices = {};
+    var given = r.choices && typeof r.choices === 'object' ? r.choices : {};
+    Object.keys(given).slice(0, 10).forEach(function (k) {
+      if (/^[a-z0-9_-]{1,30}$/.test(k)) choices[k] = shorten_(String(given[k]), 200);
+    });
+    var req = {
+      id: 'r' + now_().getTime().toString(36) + Math.floor(Math.random() * 1296).toString(36),
+      action: action,
+      choices: choices,
+      label: shorten_(String(r.label || ''), 120),
+      at: now_().toISOString()
+    };
+    // The user lock, not the script lock: a check can hold that one for minutes.
+    var lock = LockService.getUserLock();
+    if (!lock.tryLock(20000)) return JSON.stringify({ ok: false, error: 'مشغول، أعد المحاولة بعد دقيقة.' });
+    try {
+      var reqs = helperRequests_();
+      reqs.push(req);
+      while (reqs.length > CONFIG.HELPER_MAX_REQUESTS) reqs.shift();
+      props_().setProperty('HELPER_REQS', JSON.stringify(reqs));
+      writeRequests_();
+    } finally {
+      lock.releaseLock();
+    }
+    return JSON.stringify({ ok: true, id: req.id });
+  } catch (err) {
+    Logger.log('helperRequest failed: ' + (err && err.stack ? err.stack : err));
+    return JSON.stringify({ ok: false, error: String(err && err.message ? err.message : err) });
+  }
 }
 
 // ============================================================================
@@ -1638,6 +1699,226 @@ function rememberExpiry_() {
     '2. script.google.com ← مشروع «تحويل الكتب» ← إعدادات المشروع (⚙) ← Script properties، ' +
       'وضع الرمز الجديد مكان قيمة GITHUB_TOKEN ثم احفظ.'
   ]);
+}
+
+// ============================================================================
+// The helper on the user's computer (docs/helper.md)
+// ============================================================================
+
+/**
+ * For the page: the install line, whether the helper was seen lately, what it shows
+ * (its own lines and buttons, from helper-status.json) and the requests it has not
+ * finished. The first call creates the folder and copies the helper's files.
+ */
+function helperInfo_(now) {
+  try {
+    var props = props_();
+    if (!props.getProperty('HELPER_INSTALL_ID')) {
+      var lock = LockService.getUserLock();
+      if (!lock.tryLock(20000)) return { error: 'مشغول، حدّث الصفحة بعد دقيقة.' };
+      try {
+        writeRequests_();
+        syncHelperFiles_(true);
+      } finally {
+        lock.releaseLock();
+      }
+    }
+    var status = readHelperStatus_();
+    var at = status ? Date.parse(status.at) : NaN;
+    var handled = status && Array.isArray(status.handled) ? status.handled : [];
+    var info = {
+      line: installLine_(),
+      seen: isFinite(at) ? status.at : '',
+      minutes: isFinite(at) ? Math.max(0, Math.floor((now.getTime() - at) / 60000)) : 0,
+      connected: isFinite(at) && now.getTime() - at < CONFIG.HELPER_STALE_MS,
+      busy: status ? String(status.busy || '') : '',
+      lines: (status && Array.isArray(status.lines) ? status.lines.slice(0, 20) : []).map(function (l) {
+        l = l && typeof l === 'object' ? l : { text: String(l) };
+        return { text: shorten_(String(l.text || ''), 500), kind: /^(warn|bad)$/.test(l.kind) ? l.kind : '',
+          link: l.path ? helperPathUrl_(String(l.path)) : '', linkText: shorten_(String(l.linkText || ''), 40) };
+      }),
+      actions: status && Array.isArray(status.actions) ? status.actions.slice(0, 10) : [],
+      pending: helperRequests_().filter(function (r) { return handled.indexOf(r.id) < 0; })
+    };
+    if (!info.line) info.error = 'لم أستطع تجهيز ملف التثبيت بعد، أعد فتح الصفحة بعد دقائق.';
+    return info;
+  } catch (err) {
+    Logger.log('helperInfo_ failed: ' + (err && err.stack ? err.stack : err));
+    return { error: String(err && err.message ? err.message : err) };
+  }
+}
+
+/** Every check: drop the requests the helper finished, and refresh its files hourly. */
+function helperTick_() {
+  var props = props_();
+  if (!props.getProperty('HELPER_INSTALL_ID')) return;
+  var lock = LockService.getUserLock();
+  if (!lock.tryLock(20000)) return;
+  try {
+    var status = readHelperStatus_();
+    var handled = status && Array.isArray(status.handled) ? status.handled : [];
+    var reqs = helperRequests_();
+    var left = reqs.filter(function (r) { return handled.indexOf(r.id) < 0; });
+    if (left.length !== reqs.length) {
+      props.setProperty('HELPER_REQS', JSON.stringify(left));
+      writeRequests_();
+    }
+    syncHelperFiles_(false);
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function helperRequests_() {
+  var v = parseJson_(props_().getProperty('HELPER_REQS'));
+  return Array.isArray(v) ? v : [];
+}
+
+function helperFolder_() {
+  var f = folderFromProp_('HELPER_FOLDER');
+  if (!f) {
+    f = findOrCreateFolder_(getFolders_().root, CONFIG.HELPER_FOLDER);
+    props_().setProperty('HELPER_FOLDER', f.getId());
+  }
+  return f;
+}
+
+/** A file stored by id in `prop`; null when missing. */
+function fileFromProp_(prop) {
+  var id = props_().getProperty(prop);
+  if (!id) return null;
+  try {
+    var f = DriveApp.getFileById(id);
+    return f.isTrashed() ? null : f;
+  } catch (err) {
+    return null;
+  }
+}
+
+/** The helper's to-do list, with the books it may be asked about. */
+function writeRequests_() {
+  var jobs = loadJobs_();
+  var text = JSON.stringify({
+    v: 1,
+    at: now_().toISOString(),
+    requests: helperRequests_(),
+    books: Object.keys(jobs).map(function (id) {
+      var j = jobs[id];
+      return j ? { id: id, title: j.title || '', stage: j.stage || '', unsure: j.unsure || 0 } : null;
+    }).filter(function (b) { return b; }).slice(0, 50)
+  });
+  var f = fileFromProp_('HELPER_REQUESTS_ID');
+  if (f) {
+    f.setContent(text);
+  } else {
+    f = helperFolder_().createFile(CONFIG.HELPER_REQUESTS, text, 'text/plain');
+    props_().setProperty('HELPER_REQUESTS_ID', f.getId());
+  }
+}
+
+/**
+ * Copies the helper's program (helper/ in the repository) and the test pages
+ * (compare/pages in the results branch) into the helper folder, where Drive for desktop
+ * brings them to the computer; only files whose GitHub sha changed are copied.
+ * install.ps1 also goes to a file anyone with its link can download: it is the program's
+ * first step and holds no secret.
+ */
+function syncHelperFiles_(force) {
+  var props = props_();
+  var last = Date.parse(props.getProperty('HELPER_SYNC_AT') || '');
+  if (!force && isFinite(last) && now_().getTime() - last < CONFIG.HELPER_SYNC_MS) return;
+  var cfg = config_();
+  var shas = parseJson_(props.getProperty('HELPER_SHAS')) || {};
+  var folder = helperFolder_();
+  var ok = syncDir_(cfg, 'helper', cfg.ref, findOrCreateFolder_(folder, CONFIG.HELPER_PROGRAM), shas);
+  ok = syncDir_(cfg, 'compare/pages', CONFIG.RESULTS_BRANCH, findOrCreateFolder_(folder, CONFIG.HELPER_TEST_PAGES), shas) && ok;
+  props.setProperty('HELPER_SHAS', JSON.stringify(shas));
+  if (ok) props.setProperty('HELPER_SYNC_AT', now_().toISOString());
+}
+
+function syncDir_(cfg, dir, ref, folder, shas) {
+  var r = gh_(cfg, 'get', '/repos/' + cfg.repo + '/contents/' + dir + '?ref=' + encodeURIComponent(ref));
+  var list = r.code === 200 ? parseJson_(ghText_(r)) : null;
+  if (!Array.isArray(list)) {
+    Logger.log('helper files ' + dir + ': ' + describeResponse_(r));
+    return false;
+  }
+  var ok = true;
+  list.forEach(function (item) {
+    if (!item || item.type !== 'file' || !/^[\w.-]{1,80}$/.test(String(item.name))) return;
+    var key = ref + ':' + item.path;
+    var install = dir === 'helper' && item.name === CONFIG.HELPER_INSTALL;
+    var existing = install ? [fileFromProp_('HELPER_INSTALL_ID')].filter(function (f) { return f; })
+      : liveFiles_(folder, item.name);
+    if (shas[key] === item.sha && existing.length) return;
+    var f = gh_(cfg, 'get', '/repos/' + cfg.repo + '/contents/' + item.path + '?ref=' + encodeURIComponent(ref), null, GH_RAW);
+    if (f.code !== 200) {
+      Logger.log('helper file ' + item.path + ': ' + describeResponse_(f));
+      ok = false;
+      return;
+    }
+    if (install) {
+      if (existing.length) {
+        existing[0].setContent(ghText_(f));
+      } else {
+        var pub = helperFolder_().createFile(item.name, ghText_(f), 'text/plain');
+        pub.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+        props_().setProperty('HELPER_INSTALL_ID', pub.getId());
+      }
+    } else {
+      existing.forEach(function (old) { old.setTrashed(true); });
+      var mime = /\.png$/i.test(item.name) ? 'image/png' : /\.jpe?g$/i.test(item.name) ? 'image/jpeg' : 'text/plain';
+      folder.createFile(Utilities.newBlob(f.resp.getContent(), mime, item.name));
+    }
+    shas[key] = item.sha;
+  });
+  return ok;
+}
+
+function liveFiles_(folder, name) {
+  var out = [];
+  var it = folder.getFilesByName(name);
+  while (it.hasNext()) {
+    var f = it.next();
+    if (!f.isTrashed()) out.push(f);
+  }
+  return out;
+}
+
+/** The one line the user pastes into PowerShell, or '' before the install file exists. */
+function installLine_() {
+  var id = props_().getProperty('HELPER_INSTALL_ID');
+  if (!id) return '';
+  return "[Net.ServicePointManager]::SecurityProtocol='Tls12';iex ([Text.Encoding]::UTF8.GetString(" +
+    "(New-Object Net.WebClient).DownloadData('https://drive.google.com/uc?export=download&id=" + id + "')))";
+}
+
+/** The helper's own status file (the newest, if Drive for desktop left two). */
+function readHelperStatus_() {
+  var f = folderFromProp_('HELPER_FOLDER');
+  if (!f) return null;
+  var files = liveFiles_(f, CONFIG.HELPER_STATUS).sort(function (a, b) {
+    return b.getLastUpdated().getTime() - a.getLastUpdated().getTime();
+  });
+  return files.length ? parseJson_(files[0].getBlob().getDataAsString('UTF-8')) : null;
+}
+
+/** A link to a folder or file inside the helper folder, from its path ("نتائج/…"). */
+function helperPathUrl_(path) {
+  try {
+    var item = folderFromProp_('HELPER_FOLDER');
+    var parts = path.split('/').filter(function (p) { return p; }).slice(0, 5);
+    for (var i = 0; item && i < parts.length; i++) {
+      var sub = item.getFoldersByName(parts[i]);
+      var next = null;
+      while (sub.hasNext() && !next) { var x = sub.next(); if (!x.isTrashed()) next = x; }
+      if (!next && i === parts.length - 1) next = liveFiles_(item, parts[i])[0] || null;
+      item = next;
+    }
+    return item ? item.getUrl() : '';
+  } catch (err) {
+    return '';
+  }
 }
 
 // ============================================================================
