@@ -4,7 +4,7 @@
 # results under «نتائج», and reports in helper-status.json, which the status page shows.
 # Windows PowerShell 5.1: no ?? or ?: operators.
 
-$HelperVersion = '2026-10-20.8'
+$HelperVersion = '2026-10-20.9'
 $ResultsName = 'نتائج'
 $TestPagesName = 'صفحات الاختبار'
 $PageTimeoutSec = 20 * 60
@@ -369,6 +369,140 @@ function Write-Status($found, $state, $running) {
 # Entry points (called by launcher.ps1)
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# Comparing the trials (نتائج/مقارنة.md)
+# ---------------------------------------------------------------------------
+
+# There is no checked text of the six pages, so each reading is compared with all the
+# others: one that agrees with the rest is probably right, an outlier probably wrong.
+# Words are compared as crosscheck.py does (no diacritics, one form of alef, ya, ta
+# marbuta, hamza seats, Arabic digits), with the ratio 2 x matching words / all words.
+
+function Norm-Words([string]$text) {
+  $out = New-Object 'Collections.Generic.List[string]'
+  foreach ($raw in ($text -split '\s+')) {
+    $w = $raw -replace '[ً-ْٰـ]', ''
+    for ($d = 0; $d -le 9; $d++) {
+      $w = $w.Replace([string][char](0x660 + $d), [string]$d).Replace([string][char](0x6F0 + $d), [string]$d)
+    }
+    $w = $w -replace '[إأآٱ]', [string][char]0x627
+    $w = $w.Replace([char]0x649, [char]0x64A).Replace([char]0x629, [char]0x647).Replace([char]0x624, [char]0x648).Replace([char]0x626, [char]0x64A)
+    $w = $w -replace '[^ء-ي0-9A-Za-z]', ''
+    if ($w) { $out.Add($w) }
+  }
+  return ,$out.ToArray()
+}
+
+function Match-Ratio([string[]]$a, [string[]]$b) {
+  if (-not ('HelperLcs' -as [type])) {
+    Add-Type -TypeDefinition @'
+public static class HelperLcs {
+  public static int Length(string[] a, string[] b) {
+    int[] prev = new int[b.Length + 1], cur = new int[b.Length + 1];
+    for (int i = 1; i <= a.Length; i++) {
+      for (int j = 1; j <= b.Length; j++)
+        cur[j] = a[i - 1] == b[j - 1] ? prev[j - 1] + 1 : System.Math.Max(prev[j], cur[j - 1]);
+      int[] t = prev; prev = cur; cur = t;
+    }
+    return prev[b.Length];
+  }
+}
+'@
+  }
+  if ($a.Length + $b.Length -eq 0) { return 1.0 }
+  return 2.0 * [HelperLcs]::Length($a, $b) / ($a.Length + $b.Length)
+}
+
+# The latest trial of each label, and the converter's earlier reading (pNNN.lite.md in the
+# test pages folder): [{label, minutes, pages: {stem: text}}].
+function Get-Trials {
+  $out = @()
+  $lite = @{}
+  foreach ($f in @(Get-ChildItem -LiteralPath (Join-Path $Folder $TestPagesName) -Filter '*.lite.md' -ErrorAction SilentlyContinue)) {
+    $lite[($f.Name -replace '\.lite\.md$', '')] = Read-Utf8 $f.FullName
+  }
+  if ($lite.Count) { $out += @{ label = 'Gemini 3.5 Flash-Lite (القارئ الحالي، تجربة سابقة)'; minutes = ''; pages = $lite } }
+  $seen = @{}
+  $dirs = @(Get-ChildItem -LiteralPath (Join-Path $Folder $ResultsName) -Directory -ErrorAction SilentlyContinue |
+    Where-Object { $_.Name -like '* تجربة *' } | Sort-Object Name -Descending)
+  foreach ($d in $dirs) {
+    $label = ($d.Name -replace '^.*? تجربة ', '')
+    if ($seen[$label]) { continue }
+    $meta = Read-Json (Join-Path $d.FullName 'meta.json')
+    if (-not $meta) { continue }
+    $seen[$label] = $true
+    $pages = @{}
+    foreach ($f in @(Get-ChildItem -LiteralPath $d.FullName -Filter 'p*.md')) {
+      $pages[[IO.Path]::GetFileNameWithoutExtension($f.Name)] = Read-Utf8 $f.FullName
+    }
+    $out += @{ label = $label; minutes = [string]$meta.minutes; pages = $pages }
+  }
+  return $out
+}
+
+function Update-Comparison {
+  $file = Join-Path (Join-Path $Folder $ResultsName) 'مقارنة.md'
+  $metas = @(Get-ChildItem -LiteralPath (Join-Path $Folder $ResultsName) -Recurse -Filter 'meta.json' -ErrorAction SilentlyContinue)
+  if (-not $metas.Count) { return }
+  $newest = ($metas | Measure-Object -Property LastWriteTimeUtc -Maximum).Maximum
+  if ((Test-Path -LiteralPath $file) -and (Get-Item -LiteralPath $file).LastWriteTimeUtc -gt $newest) { return }
+  $trials = @(Get-Trials)
+  if ($trials.Count -lt 2) { return }
+  $stems = @($trials | ForEach-Object { $_.pages.Keys } | Sort-Object -Unique)
+  $words = @{}
+  for ($t = 0; $t -lt $trials.Count; $t++) {
+    foreach ($s in $stems) {
+      $text = [string]$trials[$t].pages[$s]
+      # A refusal or an empty answer is not a reading of the page.
+      $words["$t|$s"] = if ($text.Length -ge 500) { Norm-Words $text } else { $null }
+    }
+  }
+  $sb = New-Object Text.StringBuilder
+  [void]$sb.AppendLine("# مقارنة التجارب ($(Now-Iso))")
+  [void]$sb.AppendLine('')
+  [void]$sb.AppendLine('لا يوجد نص مدقق لهذه الصفحات، فكل قراءة تُقارن بالقراءات الأخرى: الرقم متوسط تطابقها معها (100 = تطابق تام). «—» = رفض أو لم يقرأ.')
+  [void]$sb.AppendLine('')
+  [void]$sb.AppendLine('| القراءة | المتوسط | ' + ($stems -join ' | ') + ' | الدقائق |')
+  [void]$sb.AppendLine('|---|---|' + ('---|' * $stems.Count) + '---|')
+  $pair = @{}
+  for ($t = 0; $t -lt $trials.Count; $t++) {
+    $cells = @()
+    $all = @()
+    foreach ($s in $stems) {
+      $mine = $words["$t|$s"]
+      $r = @()
+      if ($mine) {
+        for ($o = 0; $o -lt $trials.Count; $o++) {
+          if ($o -eq $t -or -not $words["$o|$s"]) { continue }
+          $v = Match-Ratio $mine $words["$o|$s"]
+          $r += $v
+          $pair["$t|$o"] = @($pair["$t|$o"]) + $v
+        }
+      }
+      if ($r.Count) {
+        $m = ($r | Measure-Object -Average).Average
+        $all += $m
+        $cells += ('{0:N1}' -f (100 * $m))
+      } else { $cells += '—' }
+    }
+    $avg = if ($all.Count) { '{0:N1}' -f (100 * ($all | Measure-Object -Average).Average) } else { '—' }
+    [void]$sb.AppendLine("| $($trials[$t].label) | $avg | " + ($cells -join ' | ') + " | $($trials[$t].minutes) |")
+  }
+  [void]$sb.AppendLine('')
+  [void]$sb.AppendLine('## كل اثنين معاً (متوسط الصفحات التي قرأها الاثنان)')
+  [void]$sb.AppendLine('')
+  for ($t = 0; $t -lt $trials.Count; $t++) {
+    for ($o = $t + 1; $o -lt $trials.Count; $o++) {
+      $v = @($pair["$t|$o"] | Where-Object { $_ -ne $null })
+      if ($v.Count) {
+        [void]$sb.AppendLine("- $($trials[$t].label) ↔ $($trials[$o].label): " + ('{0:N1}' -f (100 * ($v | Measure-Object -Average).Average)))
+      }
+    }
+  }
+  Write-Utf8 $file $sb.ToString()
+  Write-Log 'comparison written'
+}
+
 function Request-Tool($req) {
   if ([string]$req.action -eq 'test') { return ((([string]$req.choices.model) -split '\|', 2)[0]) }
   return ''
@@ -466,6 +600,9 @@ function Invoke-HelperCycle {
         Write-Log "request $($r.id) could not start: $_"
       }
     }
+  }
+  if (-not $running.Count) {
+    try { Update-Comparison } catch { Write-Log "comparison failed: $_" }
   }
   Save-State $state
   Write-Status $found $state $running
