@@ -17,6 +17,7 @@ from google import genai
 from google.genai import types
 
 import crosscheck
+import review
 
 # Bump when the OCR prompt or page format changes, so cached pages are redone.
 CACHE_VERSION = "v1"
@@ -651,10 +652,12 @@ def tesseract_for(filepath, cache_dir, page_no, kind="txt"):
 
 
 def check_pages(pool, filepath, records, cache_dir, dual, workers):
-    """Runs check_page on every read page whose check is missing or out of date."""
+    """Runs check_page on every read page whose check is missing or out of date.
+    Pages the user answered about are theirs and never checked again."""
     for r in records:
-        upgrade_check(r)
-    todo = [r for r in records if r.get("status") == "ok" and r.get("a")
+        if not review.pin_of(r):
+            upgrade_check(r)
+    todo = [r for r in records if r.get("status") == "ok" and r.get("a") and not review.pin_of(r)
             and (r.get("check") or {}).get("v") != CHECK_VERSION and (not dual or "b" in r)]
     if not todo:
         return
@@ -758,7 +761,7 @@ def arbitrate(pool, filepath, records, cache_dir, models, limit):
     """Shows pages still unsure to stronger models with small daily quotas, one
     after another as each quota runs out. A page a judge could not settle may be
     shown to one more judge. Quota errors leave pages for the next run."""
-    todo = [r for r in records if (r.get("check") or {}).get("state") == "unsure"
+    todo = [r for r in records if (r.get("check") or {}).get("state") == "unsure" and not review.pin_of(r)
             and len(r["check"].get("judges", [])) < MAX_JUDGES][:limit]
     models = [m for m in models if m]
     if not todo or not any(pool.available(m) for m in models):
@@ -913,9 +916,26 @@ def is_paragraph(block):
     return not re.match(r"^(#|\||>|[-*+]\s|\d+\.\s)", block)
 
 
-def assemble(records):
+def notice_words(check, places):
+    """Up to three (read, other) word pairs for a page's notice: from the places still
+    open for review when there are any, otherwise from the check's sample."""
+    if places is None:
+        return [tuple(x) for x in check.get("sample", [])[:3]]
+    out = []
+    for it in places:
+        if it.get("hint") == "likely-ok" or it["kind"] == "page":
+            continue
+        other = next((o["text"] for o in it.get("options", [])), "")
+        out.append((it["core"].strip(), other.strip()))
+    return out[:3]
+
+
+def assemble(records, review_pages=None):
+    """The book's Markdown. review_pages (from review.build) gives the places still open
+    on each unsure page, for its notice; pages the user finished have none."""
     # Each block is [text, kind]; notes sit between pages without breaking a
     # sentence that continues on the next page.
+    open_places = None if review_pages is None else {p["page"]: p["items"] for p in review_pages}
     blocks, defs, last_heading = [], [], None
     marker = ""
     for rec in records:
@@ -964,7 +984,8 @@ def assemble(records):
         if check.get("state") == "unsure":
             # Tell the reader right in the book which page to compare with the original.
             short = lambda t: (t[:40] + "…") if len(t) > 40 else (t or "—")
-            words = "، ".join(f"«{short(x)}» أو «{short(y)}»" for x, y in check.get("sample", [])[:3])
+            places = None if open_places is None else open_places.get(rec["page"], [])
+            words = "، ".join(f"«{short(x)}» أو «{short(y)}»" for x, y in notice_words(check, places))
             text = f"⚠ تنبيه: قراءة الصفحة {rec['page']} من الأصل غير مؤكدة؛ يُنصح بمطابقتها بالأصل."
             if words:
                 text += f" مواضع الشك: {words}."
@@ -1034,12 +1055,15 @@ def keep_main_headings(md, ocr, cache_dir):
         after = " ".join(plain(l) for l in lines[i + 1:i + 6] if l.strip() and not l.startswith("["))[:160]
         items.append(f"{k}. {plain(lines[i])}\n   ← {after}")
     key = hashlib.sha256("\n".join(items).encode("utf-8")).hexdigest()[:16]
+    titles = [plain(lines[i]) for i in heads]
     path = os.path.join(cache_dir, "articles.json")
     main = None
     if os.path.exists(path):
         with open(path, encoding="utf-8") as f:
             saved = json.load(f)
-        if saved.get("key") == key:
+        # The same headings with other text after them (a correction near a heading)
+        # keep the choice made for them.
+        if saved.get("key") == key or saved.get("titles") == titles:
             main = set(saved["main"])
     if main is None:
         if not ocr:
@@ -1059,7 +1083,7 @@ def keep_main_headings(md, ocr, cache_dir):
             print(f"Could not pick the main articles, keeping all headings: {e}")
             return md
         with open(path, "w", encoding="utf-8") as f:
-            json.dump({"key": key, "main": sorted(main)}, f)
+            json.dump({"key": key, "main": sorted(main), "titles": titles}, f, ensure_ascii=False)
     if not main:
         return md
     for k, i in enumerate(heads, 1):
@@ -1122,13 +1146,16 @@ def pacific_day():
         return datetime.fromtimestamp(time.time() - 8 * 3600, timezone.utc).strftime("%Y-%m-%d")
 
 
-def summarize(records, dual):
-    """Book state for status.json and the report."""
+def summarize(records, dual, review_pages=None, applied=None):
+    """Book state for status.json and the report. review_pages and applied (from
+    review.build and review.overlay) add the review's numbers."""
     missing = [r["page"] for r in records if r["status"] in ("failed", "suspicious")]
     retry = [r["page"] for r in records if (r.get("check") or {}).get("state") == "retry"]
     judging = [r["page"] for r in records if r.get("judge_waiting")]
+    # Pages the user answered about are finished, whatever the checks would say.
     waiting = [r["page"] for r in records if r["status"] == "pending"
                or (r["status"] == "ok" and r["page"] not in retry and r["page"] not in judging
+                   and not review.pin_of(r)
                    and ((r.get("check") or {}).get("v") != CHECK_VERSION or (dual and "b" not in r)))]
     unsure = [r["page"] for r in records if (r.get("check") or {}).get("state") == "unsure"]
     states = {}
@@ -1151,17 +1178,26 @@ def summarize(records, dual):
             reasons[r["page"]] = "؛ ".join(x for x in (c.get("rejected"), c.get("error"), c.get("arbiter"),
                                                       "قراءة واحدة" if r.get("a", {}).get("refused") else "")
                                          if x)
-    return {"state": state, "pages_total": len(records),
-            "pages_done": len(records) - len(missing) - len(waiting) - len(retry),
-            "pages_judging": judging,
-            "pages_unsure": unsure, "pages_missing": missing, "pages_waiting": waiting,
-            "pages_retry": retry, "counts": states, "samples": samples, "reasons": reasons}
+    out = {"state": state, "pages_total": len(records),
+           "pages_done": len(records) - len(missing) - len(waiting) - len(retry),
+           "pages_judging": judging,
+           "pages_unsure": unsure, "pages_missing": missing, "pages_waiting": waiting,
+           "pages_retry": retry, "counts": states, "samples": samples, "reasons": reasons,
+           "pages_human": [r["page"] for r in records if review.pin_of(r)]}
+    if review_pages is not None:
+        results = list((applied or {}).get("results", {}).values())
+        out.update(review_items=sum(len(p["items"]) + p.get("more", 0) for p in review_pages),
+                   review_applied=results.count("applied"), review_kept=results.count("kept"),
+                   review_conflicts_new=(applied or {}).get("conflicts_new", 0),
+                   review_seen=(applied or {}).get("seen", ""))
+    return out
 
 
-def write_report(path, summary, pool):
+def write_report(path, summary, pool, notes=()):
     names = [("agreed", "القراءتان متطابقتان"), ("reconciled", "صُححت بمقارنة القراءتين على الصورة"),
              ("single", "قراءة واحدة فقط"), ("retry", "تعذّر حسمها بسبب خطأ مؤقت (تُعاد في التشغيل القادم)"),
-             ("unsure", "لم تُحسم (مشكوك فيها)"), ("text-layer", "نص جاهز في الملف"), ("empty", "فارغة/صور"),
+             ("unsure", "لم تُحسم (مشكوك فيها)"), ("human", "روجعت يدوياً"),
+             ("text-layer", "نص جاهز في الملف"), ("empty", "فارغة/صور"),
              ("ok", "قُرئت ولم تُراجع بعد"), ("suspicious", "قراءة ناقصة"), ("failed", "فشلت"),
              ("pending", "لم تُقرأ بعد")]
     counts = summary["counts"]
@@ -1171,6 +1207,13 @@ def write_report(path, summary, pool):
         lines += [f"- طلبات {model} في هذا التشغيل: {n}" for model, n in pool.requests.items()]
         if getattr(pool, "added_judges", None):
             lines.append(f"- حكّام جدد أُضيفوا تلقائياً: {'، '.join(pool.added_judges)}")
+    if summary.get("review_applied") or summary.get("review_kept"):
+        lines.append(f"- طُبّقت من مراجعتك: {summary['review_applied']} تصحيحاً و{summary['review_kept']} تأكيداً")
+    if summary.get("review_conflicts_new"):
+        lines.append(f"- إجابات لم تُطبَّق لأن الصفحة تغيّرت (تظهر من جديد): {summary['review_conflicts_new']}")
+    if summary.get("review_items"):
+        lines.append(f"- مواضع تنتظر مراجعتك: {summary['review_items']}")
+    lines += [f"- {n}" for n in notes]
     if summary["state"] == "judging":
         lines += ["", f"**القراءة اكتملت، و{len(summary['pages_judging'])} صفحة تنتظر الحكّام** "
                   "(انتهى رصيدهم اليومي). تُعرض عليهم بعد تجدده، ثم يُسلَّم الكتاب."]
@@ -1284,12 +1327,81 @@ def extract_cover_from_pdf(doc, cover_path, index=0):
 EXIT_CODES = {"done": 0, "incomplete": 2, "paused": 3, "judging": 4}
 
 
+def load_pins(path, book_hash):
+    """The pages the user answered about, from human.json: ({page: pin}, human.json, notes)."""
+    data = review.load(path) if path else None
+    if not data:
+        return {}, {}, []
+    if data.get("book_hash") != book_hash:
+        return {}, {}, ["ملف المراجعة السابق لكتاب آخر، فلم يُستعمل"]
+    pins = {}
+    for page, pin in (data.get("pages") or {}).items():
+        if isinstance(pin, dict) and isinstance(pin.get("text"), str) and page.isdigit():
+            pins[int(page)] = pin
+    return pins, data, []
+
+
+def review_pages_data(filepath, cache_dir, pages):
+    """For the pages under review: their images ({page: PNG}) and, for review.build, their
+    size, the gutter between their columns and Tesseract's word boxes (cached)."""
+    data, images = {}, {}
+    local = open_pdf(filepath)
+    try:
+        for p in pages:
+            page = local[p - 1]
+            png, pix = page_image(local, page)
+            right = split_rects(page, pix)[0]
+            # The first clip is the right column when the page has two.
+            gutter = right.x0 * pix.width / page.rect.width if right.x0 > 0 else None
+            images[p] = png
+            data[p] = {"w": pix.width, "h": pix.height, "gutter": gutter}
+    finally:
+        close_pdf(local)
+    if not shutil.which("tesseract"):
+        return data, images
+    tess_dir = os.path.join(cache_dir, "tesseract")
+    os.makedirs(tess_dir, exist_ok=True)
+
+    def boxes(p):
+        path = os.path.join(tess_dir, f"{p:04d}.tsv")
+        if os.path.exists(path):
+            with open(path, encoding="utf-8") as f:
+                return f.read()
+        tsv = tesseract_tsv(images[p])
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(tsv)
+        return tsv
+
+    with ThreadPoolExecutor(max_workers=os.cpu_count() or 2) as tp:
+        for p, tsv in zip(pages, tp.map(boxes, pages)):
+            data[p]["tsv"] = tsv
+    return data, images
+
+
+def page_heads(cache_dir, pages):
+    """The first lines Tesseract saw on each page ({page: [words of each line]}), to tell
+    running headers."""
+    heads = {}
+    for p in pages:
+        path = os.path.join(cache_dir, "tesseract", f"{p:04d}.txt")
+        if os.path.exists(path):
+            with open(path, encoding="utf-8") as f:
+                lines = [review.norms(l) for l in f.read().split("\n")]
+            heads[p] = [l for l in lines if len(l) >= 2][:3]
+    return heads
+
+
 def generate_epub_from_pdf(filepath, output_path, args):
     doc = pymupdf.open(filepath)
     selected = parse_pages(args.pages, len(doc))
-    cache_dir = os.path.join(args.work_dir, f"{file_sha(filepath)}-{CACHE_VERSION}")
+    book_hash = file_sha(filepath)
+    cache_dir = os.path.join(args.work_dir, f"{book_hash}-{CACHE_VERSION}")
     os.makedirs(cache_dir, exist_ok=True)
     print(f"{len(doc)} pages, processing {len(selected)}; progress saved in {cache_dir}")
+    pins, human, notes = load_pins(args.human, book_hash)
+    answers = (review.load(args.answers) or {}).get("answers") if args.answers else None
+    if not isinstance(answers, dict):
+        answers = {}
 
     pool = None
     needs_ocr = any(len(doc[i].get_text().strip()) < MIN_TEXT_LAYER_CHARS for i in selected)
@@ -1298,6 +1410,16 @@ def generate_epub_from_pdf(filepath, output_path, args):
     dual = bool(pool and args.dual and args.second_model)
 
     def work(i):
+        rec = load_record(cache_dir, i + 1, args.rescue_model)
+        if (i + 1) in pins or (rec and review.pin_of(rec)):
+            # A page the user answered about is theirs: it is never read again.
+            if (i + 1) in pins:
+                rec = review.pin_record(rec, i + 1, pins[i + 1], CHECK_VERSION)
+                save_record(cache_dir, rec)
+            return rec
+        if args.review_only:
+            # Only what is saved: a page never read keeps the book paused.
+            return rec
         # Each worker opens its own document: PyMuPDF objects are not thread safe.
         local = open_pdf(filepath)
         try:
@@ -1308,10 +1430,17 @@ def generate_epub_from_pdf(filepath, output_path, args):
     # Stage 1: two readings of every page. Stage 2: compare them and settle differences.
     with ThreadPoolExecutor(max_workers=args.workers) as tp:
         records = [rec or {"page": i + 1, "status": "pending"} for i, rec in zip(selected, tp.map(work, selected))]
-    if pool:
+    # The user's answers go first: the pages they touch are pinned before any check.
+    applied = review.overlay(records, answers, CHECK_VERSION, (human or {}).get("answers_seen", ""))
+    for r in records:
+        if r["page"] in applied["touched"]:
+            save_record(cache_dir, r)
+    if applied["results"]:
+        print(f"Answers: {len(applied['results'])}, pages pinned: {compress(sorted(applied['touched']))}")
+    if pool and not args.review_only:
         check_pages(pool, filepath, records, cache_dir, dual, args.workers)
         judges = [m for m in args.arbiter_models.split(",") if m]
-        if any((r.get("check") or {}).get("state") == "unsure" for r in records):
+        if any((r.get("check") or {}).get("state") == "unsure" and not review.pin_of(r) for r in records):
             judges = resolve_models(pool, judges)
         # One pass per judge a page may see, so a page the first judge could not settle
         # reaches the next one in the same run while quota is left.
@@ -1321,22 +1450,39 @@ def generate_epub_from_pdf(filepath, output_path, args):
         # still see; pages left for tomorrow's judge quota keep the book paused.
         for r in records:
             c = r.get("check") or {}
-            if c.get("state") == "unsure" and len(c.get("judges", [])) < MAX_JUDGES \
+            if c.get("state") == "unsure" and len(c.get("judges", [])) < MAX_JUDGES and not review.pin_of(r) \
                     and any(m not in pool.missing and m not in c.get("judges", []) for m in judges):
                 r["judge_waiting"] = True
 
-    summary = summarize(records, dual)
-    md = assemble(records)
+    review_pages = images = None
+    if args.review_out:
+        unsure = [r["page"] for r in records if (r.get("check") or {}).get("state") == "unsure" and r.get("text")]
+        data, images = review_pages_data(filepath, cache_dir, unsure)
+        vocab = set()
+        for r in records:
+            vocab.update(norm_words(r.get("text") or ""))
+            vocab.update(norm_words((r.get("b") or {}).get("text") or ""))
+        review_pages, became_human = review.build(records, data, answers, applied["results"], vocab,
+                                                  page_heads(cache_dir, [r["page"] for r in records]))
+        for r in records:
+            if r["page"] in became_human:
+                save_record(cache_dir, r)
+        print(f"Review: {sum(len(p['items']) for p in review_pages)} places on {len(review_pages)} pages")
+
+    summary = summarize(records, dual, review_pages, applied)
+    md = assemble(records, review_pages)
     if not args.pages:
         md = keep_main_headings(md, pool, cache_dir)
-    write_report(args.report, summary, pool)
+    write_report(args.report, summary, pool, notes)
 
     md_path = output_path + ".md"
     with open(md_path, "w", encoding="utf-8") as f:
         f.write(md)
 
     cover_path = output_path + ".cover.png"
-    has_cover = extract_cover_from_pdf(doc, cover_path, pick_cover_page(doc, pool, cache_dir))
+    # A review round asks no model to pick the cover: the one picked before, or the first page.
+    has_cover = extract_cover_from_pdf(doc, cover_path,
+                                       pick_cover_page(doc, None if args.review_only else pool, cache_dir))
     try:
         run_pandoc(md_path, output_path, args.title, cover_path if has_cover else None)
         print(f"Page list: {add_page_list(output_path)} pages")
@@ -1345,6 +1491,9 @@ def generate_epub_from_pdf(filepath, output_path, args):
             os.remove(cover_path)
         if not args.keep_markdown and os.path.exists(md_path):
             os.remove(md_path)
+    if args.review_out:
+        review.write(args.review_out, review_pages, images, args.title, book_hash, records, applied["seen"],
+                     applied["results"])
     write_status(args.status, summary, args.title, os.path.basename(output_path), pool.quota_day if pool else "")
     return EXIT_CODES[summary["state"]]
 
@@ -1424,6 +1573,12 @@ def main():
     parser.add_argument("--workers", type=int, default=6)
     parser.add_argument("--status", default="", help="Where to write status.json (for the Drive inbox)")
     parser.add_argument("--keep-markdown", action="store_true")
+    parser.add_argument("--review-out", default="", help="Where to write the places for the user to check")
+    parser.add_argument("--answers", default="", help="The user's answers (JSON from the Drive inbox)")
+    parser.add_argument("--human", default="", help="human.json of the previous run: the pages the user answered")
+    parser.add_argument("--review-only", action="store_true",
+                        help="Apply the answers and rebuild the book from saved pages only: no reading, "
+                             "settling or judging requests")
     args = parser.parse_args()
 
     input_path = args.input

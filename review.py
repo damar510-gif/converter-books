@@ -650,7 +650,8 @@ def build(records, pages, answers=None, results=None, vocab=None, heads=None):
         if not items:
             whole = make_item(page, "page", text, 0, len(text), "page", options=[], boxes=[], located=False)
             done = whole["id"] in ids or (page, "page") in fps
-            if human and (done or data.get("tsv") is not None):
+            # Without Tesseract's boxes, lines the check counted as missing cannot be shown.
+            if human and (done or data.get("tsv") is not None or not lines_flagged(check)):
                 rec["check"] = {**check, "state": "human"}
                 became_human.append(page)
                 continue
@@ -668,6 +669,13 @@ def build(records, pages, answers=None, results=None, vocab=None, heads=None):
         out.append({"page": page, "base": base_of(text), "w": size[0], "h": size[1], "more": len(items) - len(keep),
                     "items": keep})
     return out, became_human
+
+
+def lines_flagged(check):
+    """How many lines the check counted as missing from the page text."""
+    if "model" in check:
+        return check.get("missing_final", 0)
+    return check.get("missing_" + check.get("kept", "a"), 0)
 
 
 def weight(item):

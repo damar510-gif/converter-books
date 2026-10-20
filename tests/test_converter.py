@@ -38,7 +38,8 @@ class FakeModels:
 
     def generate_content(self, model, contents, config):
         prompt = contents[-1]
-        self.calls.append((model, "reconcile" if "النسخة (أ)" in prompt else "read"))
+        self.calls.append((model, "reconcile" if "النسخة (أ)" in prompt else "cover" if "غلاف الكتاب" in prompt
+                           else "read"))
         n = sum(1 for m, _ in self.calls if m == model)
         return self.behaviour[model](prompt, n)
 
@@ -291,6 +292,93 @@ class Pipeline(unittest.TestCase):
         work = os.path.join(self.tmp, "work")
         with open(os.path.join(work, os.listdir(work)[0], "cover.json")) as f:
             self.assertEqual(json.load(f)["index"], 2)
+
+    def review_round(self):
+        """Page 30 left unsure with its two readings' difference, and the places written."""
+        out = os.path.join(self.tmp, "rv1")
+        code, st, md, fake = self.run_book({
+            "gemini-3.5-flash-lite": lambda p, n: answer("قصير" if "النسخة (أ)" in p else WRONG),
+            "gemini-3.1-flash-lite": lambda p, n: answer("قصير" if "النسخة (أ)" in p else TRUE),
+        }, pages="30", extra=("--arbiter-models", "", "--review-out", out))
+        with open(os.path.join(out, "items.json"), encoding="utf-8") as f:
+            return code, st, md, json.load(f)
+
+    def test_answers_are_applied_without_any_request(self):
+        code, st, md, items = self.review_round()
+        self.assertEqual(st["pages_unsure"], [30])
+        self.assertEqual(st["review_items"], 1)
+        self.assertIn("قراءة الصفحة 30 من الأصل غير مؤكدة", md)
+        self.assertIn("«كاقية» أو «كافية»", md)
+        page = items["pages"][0]
+        item = page["items"][0]
+        self.assertEqual((page["page"], item["kind"], item["core"]), (30, "diff", "كاقية"))
+        self.assertTrue(os.path.exists(os.path.join(self.tmp, "rv1", page["img"])))
+        answers = {"v": 1, "answers": {item["id"]: {
+            **{k: item[k] for k in ("kind", "fp", "before", "core", "after", "pos")},
+            "page": 30, "base": page["base"], "verdict": "fix", "text": "كافية", "at": "2026-10-20T10:00:00Z"}}}
+        path = os.path.join(self.tmp, "answers.json")
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(answers, f, ensure_ascii=False)
+        refuse = lambda p, n: (_ for _ in ()).throw(AssertionError("no request expected"))
+        out = os.path.join(self.tmp, "rv2")
+        code, st, md, fake = self.run_book({"gemini-3.5-flash-lite": refuse, "gemini-3.1-flash-lite": refuse},
+                                           pages="30", extra=("--review-only", "--answers", path, "--human",
+                                                              os.path.join(self.tmp, "rv1", "human.json"),
+                                                              "--review-out", out))
+        self.assertEqual(fake.calls, [])
+        self.assertEqual(code, 0)
+        self.assertEqual((st["pages_unsure"], st["pages_human"]), ([], [30]))
+        self.assertEqual((st["review_applied"], st["review_items"], st["review_seen"]),
+                         (1, 0, "2026-10-20T10:00:00Z"))
+        self.assertNotIn("كاقية", md)
+        self.assertNotIn("غير مؤكدة", md)
+        self.assertEqual(self.records()[30]["check"]["state"], "human")
+        with open(os.path.join(out, "human.json"), encoding="utf-8") as f:
+            human = json.load(f)
+        self.assertEqual(list(human["pages"]), ["30"])
+        self.assertNotIn("كاقية", human["pages"]["30"]["text"])
+        # A later run with judges and fresh readings leaves the page as the user made it.
+        shutil.rmtree(os.path.join(self.tmp, "work"))
+        code, st, md, fake = self.run_book({
+            "gemini-3.5-flash-lite": lambda p, n: answer("قصير" if "النسخة (أ)" in p else WRONG),
+            "gemini-3.1-flash-lite": lambda p, n: answer("قصير" if "النسخة (أ)" in p else TRUE),
+            "gemini-3.8-flash": refuse,
+        }, pages="30", extra=("--human", os.path.join(out, "human.json"), "--answers", path))
+        self.assertEqual([k for _, k in fake.calls if k != "cover"], [])
+        self.assertNotIn("كاقية", md)
+        self.assertEqual(st["pages_human"], [30])
+
+    def test_review_only_needs_saved_pages(self):
+        refuse = lambda p, n: (_ for _ in ()).throw(AssertionError("no request expected"))
+        code, st, md, fake = self.run_book({"gemini-3.5-flash-lite": refuse, "gemini-3.1-flash-lite": refuse},
+                                           pages="30", extra=("--review-only",))
+        self.assertEqual((code, st["state"], st["pages_waiting"], fake.calls), (3, "paused", [30], []))
+
+    def test_answers_of_another_book_are_ignored(self):
+        human = os.path.join(self.tmp, "human.json")
+        with open(human, "w", encoding="utf-8") as f:
+            json.dump({"v": 1, "book_hash": "0" * 16, "pages": {"30": {"text": "نص آخر", "ids": [], "at": "x"}}}, f)
+        code, st, md, fake = self.run_book({
+            "gemini-3.5-flash-lite": lambda p, n: answer(TRUE),
+            "gemini-3.1-flash-lite": lambda p, n: answer(TRUE),
+        }, pages="30", extra=("--human", human))
+        self.assertNotIn("نص آخر", md)
+        self.assertEqual(st["pages_human"], [])
+        with open(os.path.join(self.tmp, "report.md"), encoding="utf-8") as f:
+            self.assertIn("لكتاب آخر", f.read())
+
+    def test_table_of_contents_survives_a_correction_near_a_heading(self):
+        md = "# مقدمة الكتاب\n\nنص أول\n\n# المقال الأول\n\nنص المقال\n\n# قسم داخلي\n\nنص القسم\n"
+        pool = pytypes.SimpleNamespace(model="m", second="", available=lambda m: True,
+                                       read=lambda png, prompt, model: ('{"main": [2]}', "STOP"))
+        first = c.keep_main_headings(md, pool, self.tmp)
+        self.assertIn("\n# المقال الأول", first)
+        self.assertIn("\n## قسم داخلي", first)
+        # The text after a heading changed: the same choice, without asking again.
+        refuse = pytypes.SimpleNamespace(model="m", second="", available=lambda m: True,
+                                         read=lambda *a: (_ for _ in ()).throw(AssertionError("asked")))
+        again = c.keep_main_headings(md.replace("نص المقال", "نص المقال مصححاً"), refuse, self.tmp)
+        self.assertEqual(again, first.replace("نص المقال", "نص المقال مصححاً"))
 
     def test_single_mode(self):
         code, st, md, fake = self.run_book({
