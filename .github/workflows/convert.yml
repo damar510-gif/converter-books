@@ -143,8 +143,13 @@ jobs:
           # Checkout fetched only this branch.
           if git fetch -q --depth 1 origin +refs/heads/results:refs/remotes/origin/results 2>/dev/null; then
             git show "origin/results:$RESULT_DIR/human.json" > review-in/human.json 2>/dev/null || true
+            # Answers a judge model gave when the user asked for one.
+            git show "origin/results:$RESULT_DIR/review/judge-answers.json" > review-in/judge.json 2>/dev/null || true
           fi
           [ -s review-in/human.json ] || rm -f review-in/human.json
+          if [ ! -s review-in/judge.json ] || ! jq -e .answers review-in/judge.json >/dev/null 2>&1; then
+            rm -f review-in/judge.json
+          fi
           ANSWERS_ID="${REVIEW%%:*}"
           if [[ "$ANSWERS_ID" =~ ^[A-Za-z0-9_-]+$ ]]; then
             # Read from the event file like the book's own download, never printed.
@@ -251,6 +256,7 @@ jobs:
           [ -n "$BOOK_TITLE" ] && ARGS+=(--title "$BOOK_TITLE")
           [ -n "$BOOK_PAGES" ] && ARGS+=(--pages "$BOOK_PAGES")
           [ -f review-in/answers.json ] && ARGS+=(--answers review-in/answers.json)
+          [ -f review-in/judge.json ] && ARGS+=(--judge-answers review-in/judge.json)
           [ -f review-in/human.json ] && ARGS+=(--human review-in/human.json)
           [ -n "$REVIEW_ONLY" ] && ARGS+=(--review-only)
           python converter.py "$TARGET_FILE" "${ARGS[@]}"

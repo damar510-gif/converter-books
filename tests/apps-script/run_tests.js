@@ -1530,7 +1530,7 @@ test('review: places listed, answers saved in Drive, sent once and applied in a 
   assert.deepStrictEqual(r.pages[0].items.map((x) => x.core), ['كلمة2']);
 });
 
-test('review round: a finished book stays in 6- مكتمل; a ready one with nothing left moves there', () => {
+test('a book reaches 6- مكتمل only when nothing is unsure: judges done leaves it in جاهز until the review', () => {
   const env = readyEnv();
   const { f, items } = deliverWithPlaces(env, 'منتهٍ.pdf', 1);
   // An improvement round that changes nothing ends the book's improvement.
@@ -1540,9 +1540,15 @@ test('review round: a finished book stays in 6- مكتمل; a ready one with not
   writeStatus(env, f.id, 'done', { epub: 'b.epub', pages_unsure: [3], review_items: 1 });
   writeEpub(env, f.id, 'b.epub', Buffer.from('PK same'));
   tick(env);
-  assert.strictEqual(jobs(env)[f.id].refineDone, true);
-  assert.strictEqual(epubsIn(env, 'final').length, 1);
-  assert.ok(/لا تحذف الملف الأصلي/.test(env.mails[env.mails.length - 1].body), 'not yet: places are open');
+  assert.strictEqual(jobs(env)[f.id].refineDone, true, 'no more improvement rounds');
+  assert.strictEqual(epubsIn(env, 'final').length, 0, 'still unsure: stays in جاهز');
+  assert.strictEqual(epubsIn(env, 'ready').length, 1);
+  const stop = env.mails[env.mails.length - 1];
+  assert.ok(/انتهت مراجعة النماذج/.test(stop.subject) && /لا تحذف الملف الأصلي/.test(stop.body), stop.body);
+  env.clock += 24 * 3600000;
+  const rounds = env.gh.dispatches.length;
+  tick(env);
+  assert.strictEqual(env.gh.dispatches.length, rounds, 'no more rounds by itself');
 
   env.ctx.saveAnswers(f.id, JSON.stringify({ [items.pages[0].items[0].id]: answerFor(items.pages[0].items[0], 'fix', 'كلمه') }));
   env.ctx.sendReview(f.id);
@@ -1669,7 +1675,7 @@ test('finished books from before the review get their places once; without saved
   tick(env);
   assert.strictEqual(rv(env, f.id).x, 'no-data');
   assert.strictEqual(env.mails.length, mails, 'no message');
-  assert.ok(epubsIn(env, 'final')[0].content.equals(Buffer.from('PK old 2')), 'the book is unchanged');
+  assert.ok(epubsIn(env, 'ready')[0].content.equals(Buffer.from('PK old 2')), 'the book is unchanged');
   env.clock += 24 * 3600000;
   const n = env.gh.dispatches.length;
   tick(env);
@@ -1694,8 +1700,8 @@ test('finished books from before the review get their places once; without saved
   writeStatus(env, g.id, 'done', { epub: 'g.epub', pages_unsure: [2], review_items: 3, review_applied: 0, review_kept: 0 });
   writeEpub(env, g.id, 'g.epub', Buffer.from('PK g3'));
   tick(env);
-  assert.ok(epubsIn(env, 'final').some((x) => x.content.equals(Buffer.from('PK g2'))), 'old EPUB kept');
-  assert.ok(!epubsIn(env, 'final').some((x) => x.content.equals(Buffer.from('PK g3'))));
+  assert.ok(epubsIn(env, 'ready').some((x) => x.content.equals(Buffer.from('PK g2'))), 'old EPUB kept');
+  assert.ok(!epubsIn(env, 'ready').some((x) => x.content.equals(Buffer.from('PK g3'))));
   assert.ok(/جاهز للمراجعة/.test(env.mails[env.mails.length - 1].subject));
   assert.strictEqual(rv(env, g.id).o, 3);
 });
