@@ -2472,6 +2472,35 @@ test('a book the user deleted: off the page, not reviewed by the models, not imp
   assert.strictEqual(jobs(env)[f.id].refineDone, true);
 });
 
+test('a deleted book: its review folder goes even while the review box is empty, and before a model is put in it', () => {
+  const env = boxesEnv({ transcribe: [], review: [GEMINI] });
+  const { f } = deliverWithPlaces(env, 'قديم.pdf', 2);
+  env.gh.files['drive-' + f.id + '/review/p0003-0123456789.jpg'] = Buffer.from([0xff, 0xd8, 1]);
+  minutes(env, 10);
+  tick(env);
+  const reviews = () => sub(env, helperFolder(env), 'مراجعة');
+  assert.ok(sub(env, reviews(), f.id), 'copied for the models');
+
+  // The box is emptied, then the book is deleted: the next check removes its folder anyway.
+  env.ctx.setHelperBoxes(JSON.stringify({ transcribe: [], review: [] }));
+  env.drive.DriveApp.getFileById(f.id).setTrashed(true);
+  minutes(env, 10);
+  tick(env);
+  assert.strictEqual(sub(env, reviews(), f.id), undefined, 'gone with the box empty');
+
+  // Deleted between two checks: putting a model in the box removes it at once.
+  const { f: g } = deliverWithPlaces(env, 'ثان.pdf', 2);
+  env.gh.files['drive-' + g.id + '/review/p0003-0123456789.jpg'] = Buffer.from([0xff, 0xd8, 1]);
+  env.ctx.setHelperBoxes(JSON.stringify({ transcribe: [], review: [GEMINI] }));
+  minutes(env, 10);
+  tick(env);
+  assert.ok(sub(env, reviews(), g.id));
+  env.ctx.setHelperBoxes(JSON.stringify({ transcribe: [], review: [] }));
+  env.drive.DriveApp.getFileById(g.id).setTrashed(true);
+  env.ctx.setHelperBoxes(JSON.stringify({ transcribe: [], review: [GEMINI] }));
+  assert.strictEqual(sub(env, reviews(), g.id), undefined, 'gone before the model starts');
+});
+
 test('the page: models move between the boxes with a tap (or a drag), are saved, and come back if saving fails', () => {
   const env = boxesEnv({ transcribe: [GEMINI], review: [] });
   writeHelperStatus(env, { models: MODELS.concat([{ id: 'agy|gemini-4-argon', label: 'Gemini 4 Argon', tool: 'Antigravity',
