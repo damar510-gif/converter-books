@@ -6,7 +6,7 @@
 # places through the folders «كتب», «مراجعة» and «أحكام» (docs/helper-boxes-plan.md).
 # Windows PowerShell 5.1: no ?? or ?: operators.
 
-$HelperVersion = '2026-10-21.8'
+$HelperVersion = '2026-10-21.9'
 $BooksName = 'كتب'
 $ReviewsName = 'مراجعة'
 $VerdictsName = 'أحكام'
@@ -1292,6 +1292,24 @@ function Invoke-HelperWorker([string]$id) {
   Write-Utf8 $resultFile ($result | ConvertTo-Json -Depth 5)
 }
 
+# The Chrome extension «حفظ صوت Grok» (grok-audio.js): kept in %LOCALAPPDATA%\GrokAudio,
+# the folder the user loads once in chrome://extensions; Chrome reads it again at each start.
+function Update-GrokAudio {
+  $src = Join-Path $Folder 'البرنامج'
+  $dest = Join-Path $env:LOCALAPPDATA 'GrokAudio'
+  $files = @{ 'grok-audio-manifest.json' = 'manifest.json'; 'grok-audio.js' = 'grok-audio.js' }
+  foreach ($name in $files.Keys) {
+    $from = Join-Path $src $name
+    if (-not (Test-Path $from)) { continue }
+    $to = Join-Path $dest $files[$name]
+    $bytes = [IO.File]::ReadAllBytes($from)
+    if ((Test-Path $to) -and ([Convert]::ToBase64String([IO.File]::ReadAllBytes($to)) -eq [Convert]::ToBase64String($bytes))) { continue }
+    New-Item -ItemType Directory -Force -Path $dest | Out-Null
+    [IO.File]::WriteAllBytes($to, $bytes)
+    Write-Log "grok audio extension: $($files[$name]) updated"
+  }
+}
+
 function Invoke-HelperCycle {
   Update-Path
   $found = Get-Tools
@@ -1332,6 +1350,7 @@ function Invoke-HelperCycle {
   $boxes = Get-Boxes $reqs
   try { Start-BoxWorkers $boxes $found } catch { Write-Log "box workers: $_" }
   try { Update-Verdicts $boxes $found (All-Chips) } catch { Write-Log "verdicts failed: $_" }
+  try { Update-GrokAudio } catch { Write-Log "grok audio extension: $_" }
   Clear-StaleClaims
   Save-State $state
   Write-Status $found $state $running $boxes

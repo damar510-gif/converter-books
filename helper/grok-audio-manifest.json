@@ -1,0 +1,15 @@
+{
+  "manifest_version": 3,
+  "name": "حفظ صوت Grok",
+  "version": "1.0",
+  "description": "يحفظ قراءة Grok الصوتية لأي رد ملفاً على الجهاز.",
+  "content_scripts": [
+    {
+      "matches": ["https://grok.com/*", "https://*.grok.com/*"],
+      "js": ["grok-audio.js"],
+      "run_at": "document_start",
+      "world": "MAIN",
+      "all_frames": false
+    }
+  ]
+}
