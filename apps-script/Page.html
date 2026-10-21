@@ -3,235 +3,605 @@
 <head>
 <meta charset="utf-8">
 <style>
+  /* ═══════════════════════════════════════════════════════════════
+     The office identity, as in the portal (bawaba) and the account statements (maleah):
+     black #0a0a0a · gold #c9a55c · ivory #f5f1e8; Amiri for titles, Tajawal for text,
+     Cormorant Garamond for big numbers. Nothing is loaded from outside: those fonts are
+     used when the device has them, the device's own Arabic fonts otherwise.
+     ═══════════════════════════════════════════════════════════════ */
   :root {
-    --bg: #f5f6f8;
-    --card: #ffffff;
-    --text: #1d2433;
-    --muted: #5d6678;
-    --line: #e2e5eb;
-    --accent: #1a66d6;
-    --accent-text: #ffffff;
-    --ok: #1e7e34;
-    --ok-bg: #e6f4ea;
-    --warn: #8a5300;
-    --warn-bg: #fef3e0;
-    --bad: #b3261e;
-    --bad-bg: #fce8e6;
+    --ink: #efe8da; --desk: #f7f3eb; --panel: #fffdf9; --panel-2: #faf6ee; --field: #ffffff; --field-2: #fbf8f2;
+    --gold: #8a6d2a; --gold-soft: #9e8550; --gold-light: #6e5420; --cream: #2a1f0f; --dim: #5f5444; --mute: #8a7f6e;
+    --line: rgba(138,109,42,.34); --line-soft: rgba(138,109,42,.2); --line-faint: rgba(138,109,42,.1);
+    --alert: #a8402f; --alert-bg: rgba(168,64,47,.08); --ok: #4d7a3b; --ok-bg: rgba(77,122,59,.1);
+    --hover: rgba(138,109,42,.07); --scrim: rgba(42,31,15,.42); --scheme: light; --on-gold: #fffdf8; --placeholder: #a2988a;
+    --shadow: 0 12px 30px rgba(60,45,20,.14); --shadow-lg: 0 30px 80px rgba(60,45,20,.22);
+    --f-ui: 'Tajawal', 'Noto Sans Arabic', 'Segoe UI', Tahoma, system-ui, -apple-system, sans-serif;
+    --f-display: 'Amiri', 'Noto Naskh Arabic', 'Sakkal Majalla', 'Traditional Arabic', 'Times New Roman', serif;
+    --f-num: 'Cormorant Garamond', 'Palatino Linotype', 'Book Antiqua', 'Noto Serif', Georgia, serif;
+    --side-w: 268px;
   }
+  /* The dark themes share the gold and the text; each has its own background. */
+  html[data-ui=gold], html[data-ui=navy], html[data-ui=green], html[data-ui=burgundy],
+  html[data-ui=charcoal], html[data-ui=slate], html[data-ui=espresso] {
+    --gold: #c9a55c; --gold-soft: #a8893f; --gold-light: #e4c989; --cream: #f5f1e8; --dim: #b9b3a3; --mute: #878174;
+    --line: rgba(201,165,92,.3); --line-soft: rgba(201,165,92,.16); --line-faint: rgba(201,165,92,.08);
+    --alert: #e0937f; --alert-bg: rgba(224,147,127,.1); --ok: #a9c79a; --ok-bg: rgba(169,199,154,.1);
+    --hover: rgba(255,255,255,.04); --scrim: rgba(0,0,0,.72); --scheme: dark; --on-gold: #17110a; --placeholder: #6f6a5f;
+    --shadow: 0 12px 30px rgba(0,0,0,.5); --shadow-lg: 0 30px 90px rgba(0,0,0,.7);
+  }
+  /* "Automatic" follows the device: black and gold at night, ivory by day. */
   @media (prefers-color-scheme: dark) {
-    :root {
-      --bg: #121418;
-      --card: #1c1f26;
-      --text: #e8eaed;
-      --muted: #a0a8b6;
-      --line: #2e333d;
-      --accent: #8ab4f8;
-      --accent-text: #0b1a33;
-      --ok: #81c995;
-      --ok-bg: #1d3325;
-      --warn: #fdd663;
-      --warn-bg: #3a3020;
-      --bad: #f28b82;
-      --bad-bg: #3b2322;
+    html:not([data-ui]), html[data-ui=auto] {
+      --ink: #0a0a0a; --desk: #18181a; --panel: #111112; --panel-2: #151516; --field: #0e0e0f; --field-2: #0f0f10;
+      --gold: #c9a55c; --gold-soft: #a8893f; --gold-light: #e4c989; --cream: #f5f1e8; --dim: #b9b3a3; --mute: #878174;
+      --line: rgba(201,165,92,.3); --line-soft: rgba(201,165,92,.16); --line-faint: rgba(201,165,92,.08);
+      --alert: #e0937f; --alert-bg: rgba(224,147,127,.1); --ok: #a9c79a; --ok-bg: rgba(169,199,154,.1);
+      --hover: rgba(255,255,255,.04); --scrim: rgba(0,0,0,.72); --scheme: dark; --on-gold: #17110a; --placeholder: #6f6a5f;
+      --shadow: 0 12px 30px rgba(0,0,0,.5); --shadow-lg: 0 30px 90px rgba(0,0,0,.7);
     }
   }
-  * { box-sizing: border-box; }
-  html, body {
-    margin: 0;
-    background: var(--bg);
-    color: var(--text);
-    font-family: system-ui, -apple-system, "Segoe UI", Tahoma, Arial, sans-serif;
-    font-size: 16px;
-    line-height: 1.7;
+  html[data-ui=gold] { --ink: #0a0a0a; --desk: #18181a; --panel: #111112; --panel-2: #151516; --field: #0e0e0f; --field-2: #0f0f10; }
+  html[data-ui=navy] { --ink: #0b1a2e; --desk: #10223a; --panel: #0d1e34; --panel-2: #12263f; --field: #0a1729; --field-2: #0c1b30; }
+  html[data-ui=green] { --ink: #0d1f1a; --desk: #112720; --panel: #0f221c; --panel-2: #142b23; --field: #0b1b16; --field-2: #0d1e18; }
+  html[data-ui=burgundy] { --ink: #1a0a0f; --desk: #221016; --panel: #1d0d12; --panel-2: #26131a; --field: #16090d; --field-2: #190b10; }
+  html[data-ui=charcoal] { --ink: #1c1c1c; --desk: #292929; --panel: #222222; --panel-2: #262626; --field: #1e1e1e; --field-2: #202020;
+    --gold: #b89968; --gold-soft: #9c8359; --gold-light: #d1bd9d; --cream: #f2efe9; --dim: #b5b1a9; --mute: #8a8782;
+    --line: rgba(184,153,104,.3); --line-soft: rgba(184,153,104,.16); --line-faint: rgba(184,153,104,.08); --on-gold: #121212; --placeholder: #706e6a; }
+  html[data-ui=slate] { --ink: #1e2830; --desk: #283540; --panel: #222e37; --panel-2: #26323d; --field: #202a33; --field-2: #212c34;
+    --gold: #cdb887; --gold-soft: #a99a74; --gold-light: #ded1b1; --cream: #eef1f3; --dim: #a8b3bc; --mute: #818c95;
+    --line: rgba(205,184,135,.3); --line-soft: rgba(205,184,135,.16); --line-faint: rgba(205,184,135,.08); --on-gold: #141a1f; --placeholder: #6a747d; }
+  html[data-ui=espresso] { --ink: #1f1611; --desk: #2f221a; --panel: #261b15; --panel-2: #2c1f18; --field: #221812; --field-2: #241914;
+    --gold: #c9935b; --gold-soft: #a37c4f; --gold-light: #dcb994; --cream: #f4ece1; --dim: #bea996; --mute: #918071;
+    --line: rgba(201,147,91,.3); --line-soft: rgba(201,147,91,.16); --line-faint: rgba(201,147,91,.08); --on-gold: #140e0b; --placeholder: #76675a; }
+  html[data-ui=white] { --ink: #ffffff; --desk: #f4f4f2; --panel: #ffffff; --panel-2: #f8f8f6; --field: #ffffff; --field-2: #f6f6f4;
+    --gold: #9a7a35; --gold-soft: #a98c52; --gold-light: #7a5d22; --cream: #1d1d1f; --dim: #5b5b60; --mute: #8d8d92;
+    --line: rgba(29,29,31,.16); --line-soft: rgba(29,29,31,.1); --line-faint: rgba(29,29,31,.06);
+    --alert: #b23b2b; --alert-bg: rgba(178,59,43,.07); --ok: #3f7a3a; --ok-bg: rgba(63,122,58,.09);
+    --hover: rgba(29,29,31,.045); --scrim: rgba(20,20,22,.38); --on-gold: #ffffff; --placeholder: #a3a3a8;
+    --shadow: 0 12px 30px rgba(0,0,0,.1); --shadow-lg: 0 30px 80px rgba(0,0,0,.18); }
+  html[data-ui=parchment] { --ink: #e7dbc1; --desk: #f2e9d6; --panel: #fdfbf7; --panel-2: #f5edde; --field: #fefefc; --field-2: #f7f2e6;
+    --gold: #7a5424; --gold-soft: #947449; --gold-light: #694822; --cream: #36261a; --dim: #64503a; --mute: #8d7b63;
+    --line: rgba(122,84,36,.34); --line-soft: rgba(122,84,36,.2); --line-faint: rgba(122,84,36,.1);
+    --hover: rgba(122,84,36,.07); --scrim: rgba(54,38,26,.42); --on-gold: #fcfaf5; --placeholder: #a3937b; }
+  html[data-ui=linen] { --ink: #e6e5e1; --desk: #f5f3ed; --panel: #fdfdfc; --panel-2: #f7f5f1; --field: #fefefe; --field-2: #f9f8f4;
+    --gold: #2f4b6e; --gold-soft: #5a6f89; --gold-light: #2b415d; --cream: #1f242b; --dim: #4f555d; --mute: #7f8287;
+    --line: rgba(47,75,110,.34); --line-soft: rgba(47,75,110,.2); --line-faint: rgba(47,75,110,.1);
+    --hover: rgba(47,75,110,.07); --scrim: rgba(31,36,43,.42); --on-gold: #fdfcfb; --placeholder: #999b9d; }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { background: var(--desk); color: var(--cream); font-family: var(--f-ui); font-size: 15px; line-height: 1.65;
+    -webkit-font-smoothing: antialiased; }
+  html { color-scheme: var(--scheme); -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+  @media (max-width: 640px) { html, body { font-size: 15.5px; } }
+  button, input, select, textarea { font: inherit; color: inherit; }
+  button { cursor: pointer; background: none; border: 0; text-align: inherit; }
+  a { color: var(--gold-light); text-decoration: none; }
+  [hidden] { display: none !important; }
+  ::selection { background: rgba(201,165,92,.35); }
+  :focus-visible { outline: 2px solid var(--gold-light); outline-offset: 2px; }
+  * { scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-thumb { background: var(--line); border-radius: 8px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  .ic { display: inline-flex; width: 18px; height: 18px; flex-shrink: 0; vertical-align: middle; }
+  .ic svg { width: 100%; height: 100%; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+  kbd { display: inline-block; min-width: 22px; text-align: center; font-family: var(--f-ui); font-size: 11px; font-weight: 500;
+    line-height: 1.6; border: 1px solid var(--line-soft); border-bottom-width: 2px; border-radius: 3px; padding: 0 6px;
+    color: var(--dim); background: var(--field); direction: ltr; }
+  /* Keyboard hints only where there is a keyboard. */
+  @media (hover: none) { kbd, .k-only { display: none !important; } }
+  @keyframes pulse { 50% { opacity: .35; } }
+  @keyframes pop { from { opacity: 0; transform: translateY(8px) scale(.985); } to { opacity: 1; transform: none; } }
+  @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+
+  /* ───────── Frame: the side bar on a computer, the page beside it ───────── */
+  .app { display: flex; min-height: 100vh; }
+  .main { flex: 1; min-width: 0; }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 20px 16px 90px; }
+  .side { display: none; }
+  @media (min-width: 1024px) {
+    .side { display: flex; flex-direction: column; width: var(--side-w); flex-shrink: 0; background: var(--ink);
+      border-left: 1px solid var(--line-soft); height: 100vh; position: sticky; top: 0; z-index: 40; }
+    .wrap { padding: 30px 40px 90px; }
+    .jump, .vh-tools, .vh .mark { display: none !important; }
   }
-  main { max-width: 640px; margin: 0 auto; padding: 16px; }
-  h1 { font-size: 1.5rem; margin: 4px 0 2px; }
-  h2 { font-size: 1.05rem; margin: 0 0 8px; color: var(--muted); font-weight: 600; }
-  .muted { color: var(--muted); font-size: .9rem; }
-  .card {
-    background: var(--card);
-    border: 1px solid var(--line);
-    border-radius: 14px;
-    padding: 14px 16px;
-    margin: 12px 0;
+  .app.is-review .side { display: none; }
+  .side-brand { display: flex; align-items: center; gap: 12px; padding: 22px 20px 18px; border-bottom: 1px solid var(--line-faint); }
+  .side-brand b { display: block; font-family: var(--f-display); font-weight: 700; font-size: 19px; line-height: 1.3; color: var(--cream); }
+  .side-brand span { display: block; font-size: 12px; color: var(--gold-soft); }
+  .mark { width: 46px; height: 46px; border: 1px solid var(--line); border-radius: 4px; display: grid; place-items: center;
+    color: var(--gold); background: var(--ink); flex-shrink: 0; }
+  .mark .ic { width: 25px; height: 25px; }
+  .nav { padding: 12px 10px; display: flex; flex-direction: column; gap: 2px; flex: 1; overflow-y: auto; }
+  .nav-i { display: flex; align-items: center; gap: 10px; width: 100%; padding: 9px 12px; border-radius: 4px; color: var(--dim);
+    position: relative; font-size: 14.5px; text-align: start; transition: color .15s, background-color .15s; }
+  .nav-i:hover { color: var(--cream); background: var(--hover); }
+  .nav-i.is-on { color: var(--gold-light); background: rgba(201,165,92,.09); }
+  .nav-i.is-on::before { content: ''; position: absolute; right: -10px; top: 8px; bottom: 8px; width: 2px; background: var(--gold); }
+  .nav-n { margin-inline-start: auto; font-size: 12px; color: var(--mute); font-variant-numeric: tabular-nums; }
+  .nav-n.is-hold { color: var(--gold-light); font-weight: 700; }
+  .side-foot { border-top: 1px solid var(--line-faint); padding: 12px 14px 14px; display: flex; flex-direction: column; gap: 10px; }
+  .side-tools { display: flex; gap: 4px; flex-wrap: wrap; }
+
+  /* ───────── Buttons and fields ───────── */
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 38px; padding: 7px 14px;
+    border: 1px solid var(--line); border-radius: 3px; color: var(--cream); font-size: 14px; font-weight: 500; line-height: 1.4;
+    white-space: nowrap; transition: border-color .15s, color .15s, background-color .15s; }
+  .btn:hover { border-color: var(--gold); color: var(--gold-light); }
+  .btn:disabled { opacity: .45; pointer-events: none; }
+  .btn-gold { background: var(--gold); border-color: var(--gold); color: var(--on-gold); font-weight: 700; }
+  .btn-gold:hover { background: var(--gold-light); border-color: var(--gold-light); color: var(--on-gold); }
+  .btn-gold kbd { background: transparent; color: inherit; border-color: currentColor; opacity: .7; }
+  .btn-quiet { border-color: transparent; color: var(--dim); }
+  .btn-quiet:hover { border-color: transparent; color: var(--gold-light); background: var(--hover); }
+  .btn-ok { color: var(--ok); border-color: var(--ok); background: var(--ok-bg); }
+  .btn-ok:hover { color: var(--ok); border-color: var(--ok); background: rgba(169,199,154,.18); }
+  .btn-icon { padding: 0; width: 38px; }
+  .btn-sm { min-height: 32px; padding: 4px 11px; font-size: 13px; }
+  .btn-sm .ic { width: 16px; height: 16px; }
+  .btn-lg { width: 100%; min-height: 54px; padding: 12px 18px; font-size: 16px; justify-content: flex-start; white-space: normal;
+    text-align: start; }
+  .btn-lg .ic { width: 21px; height: 21px; }
+  .btn kbd { margin-inline-start: auto; }
+  .btn-sm kbd, .acts kbd { margin-inline-start: 4px; }
+  .in { background: var(--field); border: 1px solid var(--line-soft); border-radius: 3px; padding: 6px 9px; font-size: 14px;
+    color: var(--cream); min-width: 0; transition: border-color .15s, box-shadow .15s; }
+  .in::placeholder { color: var(--placeholder); }
+  .in:focus { outline: none; border-color: var(--gold); box-shadow: 0 0 0 3px rgba(201,165,92,.15); }
+
+  /* ───────── States: one dot and one word, the same everywhere ───────── */
+  .st { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 500; padding: 0 10px; line-height: 1.9;
+    border: 1px solid var(--line-soft); border-radius: 20px; color: var(--dim); white-space: nowrap; }
+  .st i { width: 7px; height: 7px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
+  .st.is-run, .st.is-ok { color: var(--ok); border-color: var(--ok); background: var(--ok-bg); }
+  .st.is-run i { animation: pulse 1.4s ease-in-out infinite; }
+  .st.is-hold, .st.is-gold { color: var(--gold-light); border-color: var(--line); background: rgba(201,165,92,.1); }
+  .st.is-bad { color: var(--alert); border-color: var(--alert); background: var(--alert-bg); }
+  .st.is-wait i { background: var(--mute); }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--mute); flex-shrink: 0; }
+  .dot.is-ok { background: var(--ok); }
+  .dot.is-hold { background: var(--gold); }
+  .dot.is-bad { background: var(--alert); }
+  .dot.is-busy { background: var(--gold); animation: pulse .9s ease-in-out infinite; }
+  .sync { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--dim); min-width: 0; }
+  .count { display: inline-block; font-size: 12px; color: var(--gold-soft); border: 1px solid var(--line-soft); border-radius: 20px;
+    padding: 0 9px; line-height: 1.9; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .count:empty { display: none; }
+
+  /* ───────── Page head ───────── */
+  .vh { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "t tools" "a a"; gap: 14px 16px;
+    align-items: center; margin-bottom: 16px; }
+  .vh-t { grid-area: t; display: flex; align-items: center; gap: 14px; min-width: 0; }
+  .vh-tools { grid-area: tools; display: flex; gap: 2px; }
+  .acts { grid-area: a; display: flex; gap: 8px; flex-wrap: wrap; }
+  .acts .btn { flex: 1 1 auto; }
+  @media (min-width: 700px) {
+    .vh { grid-template-columns: minmax(0, 1fr) auto auto; grid-template-areas: "t a tools"; align-items: end; }
+    .acts .btn { flex: none; }
   }
-  .big { font-size: 1.1rem; font-weight: 600; overflow-wrap: anywhere; }
-  .note { border-radius: 10px; padding: 8px 12px; margin-top: 8px; font-size: .95rem; }
-  .note.warn { background: var(--warn-bg); color: var(--warn); }
-  .note.bad { background: var(--bad-bg); color: var(--bad); }
-  button {
-    width: 100%;
-    font: inherit;
-    font-weight: 600;
-    padding: 12px;
-    border: 0;
-    border-radius: 12px;
-    background: var(--accent);
-    color: var(--accent-text);
-    cursor: pointer;
+  .eyebrow { font-size: 12.5px; color: var(--mute); }
+  .title { font-family: var(--f-display); font-weight: 700; font-size: 30px; line-height: 1.3; color: var(--cream); }
+  @media (max-width: 640px) { .title { font-size: 26px; } }
+
+  /* Section links on a phone: they stay at the top while the page scrolls. */
+  .jump { position: sticky; top: 0; z-index: 30; display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none;
+    padding: 8px 16px; margin: 0 -16px 16px; background: var(--desk); border-bottom: 1px solid var(--line-faint); }
+  .jump::-webkit-scrollbar { display: none; }
+  .jchip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px; border: 1px solid var(--line-soft);
+    border-radius: 20px; font-size: 13px; color: var(--dim); white-space: nowrap; flex-shrink: 0; }
+  .jchip .ic { width: 14px; height: 14px; color: var(--gold-soft); }
+  .jchip em { font-style: normal; font-size: 11.5px; color: var(--gold-soft); font-variant-numeric: tabular-nums; }
+  .jchip.is-on { color: var(--gold-light); border-color: var(--gold-soft); background: rgba(201,165,92,.12); }
+  .jchip .dot { width: 7px; height: 7px; }
+  section { scroll-margin-top: 64px; }
+  @media (min-width: 1024px) { section { scroll-margin-top: 20px; } }
+
+  /* ───────── The day at a glance ───────── */
+  .figs { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 18px; }
+  @media (max-width: 560px) { .figs { grid-template-columns: 1fr 1fr; } .figs .fig:first-child { grid-column: 1 / -1; } }
+  .fig { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; min-width: 0; padding: 11px 15px 10px;
+    background: var(--panel); border: 1px solid var(--line-faint); border-top: 2px solid var(--line-soft); border-radius: 3px;
+    text-align: start; transition: border-color .15s, background-color .15s; }
+  .fig:hover { border-color: var(--line); background: var(--panel-2); }
+  .fig-l { display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--dim); }
+  .fig-l .ic { width: 15px; height: 15px; color: var(--gold-soft); }
+  .fig-v { font-family: var(--f-num); font-weight: 600; font-size: 31px; line-height: 1.2; color: var(--cream);
+    font-variant-numeric: lining-nums tabular-nums; }
+  .fig-v small { font-family: var(--f-ui); font-size: 14px; color: var(--mute); font-weight: 500; margin-inline-start: 2px; }
+  .fig-s { font-size: 12px; color: var(--mute); max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .fig.is-run, .fig.is-ok { border-top-color: var(--ok); }
+  .fig.is-hold { border-top-color: var(--gold); }
+  .fig.is-hold .fig-v { color: var(--gold-light); }
+  .fig.is-bad { border-top-color: var(--alert); }
+  .fig.is-bad .fig-v { color: var(--alert); }
+
+  /* ───────── Notes ───────── */
+  .note { display: flex; align-items: flex-start; gap: 10px; border: 1px solid var(--line); background: rgba(201,165,92,.07);
+    padding: 10px 13px; border-radius: 3px; margin-top: 10px; font-size: 14px; line-height: 1.8; }
+  .note > .ic { color: var(--gold); margin-top: 3px; }
+  .note p { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+  .note.is-bad { border-color: var(--alert); background: var(--alert-bg); }
+  .note.is-bad > .ic { color: var(--alert); }
+  .note.is-ok { border-color: var(--ok); background: var(--ok-bg); }
+  .note.is-ok > .ic { color: var(--ok); }
+  #notices .note { margin: 0 0 12px; }
+
+  /* ───────── Cards ───────── */
+  .grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 18px; margin-bottom: 18px; }
+  @media (min-width: 900px) { .grid { grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); align-items: start; } }
+  .card { background: var(--panel); border: 1px solid var(--line-faint); border-radius: 4px; padding: 18px 20px; min-width: 0;
+    margin-bottom: 18px; }
+  .grid > .card { margin-bottom: 0; }
+  @media (max-width: 640px) { .card { padding: 16px; } }
+  .ch { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
+  .ch-ic { width: 34px; height: 34px; border-radius: 50%; border: 1px solid var(--line); display: grid; place-items: center;
+    color: var(--gold); flex-shrink: 0; }
+  .ch-ic .ic { width: 17px; height: 17px; }
+  .ch h2 { font-family: var(--f-display); font-weight: 700; font-size: 21px; line-height: 1.3; color: var(--cream); }
+  .ch .end { margin-inline-start: auto; }
+  .sub { font-size: 13px; color: var(--mute); line-height: 1.8; }
+  .ch + .sub { margin: -6px 0 12px; }
+  .h3 { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 500; color: var(--gold-soft);
+    margin: 16px 0 8px; padding-top: 14px; border-top: 1px solid var(--line-faint); }
+
+  /* The book being converted. */
+  .hero { position: relative; overflow: hidden; background: var(--ink); border-color: var(--line-soft); border-top: 2px solid var(--gold); }
+  .hero::after { content: ''; position: absolute; left: -70px; bottom: -70px; width: 240px; height: 240px; border-radius: 50%;
+    background: radial-gradient(circle, rgba(201,165,92,.12), transparent 70%); pointer-events: none; }
+  .hero > * { position: relative; z-index: 1; }
+  .hero-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+  .hero-eb { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--gold-soft); }
+  .hero-eb .ic { width: 16px; height: 16px; }
+  .hero-title { font-family: var(--f-display); font-weight: 700; font-size: 28px; line-height: 1.45; color: var(--cream);
+    margin: 8px 0 4px; overflow-wrap: anywhere; }
+  @media (max-width: 640px) { .hero-title { font-size: 24px; } }
+  .hero-lines { font-size: 14.5px; line-height: 1.9; color: var(--dim); }
+  .hero-acts { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
+  .prog { margin-top: 18px; }
+  .prog-n { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+  .prog-n b { font-family: var(--f-num); font-weight: 600; font-size: 46px; line-height: 1; color: var(--gold-light);
+    font-variant-numeric: lining-nums tabular-nums; }
+  .prog-n span { font-size: 14px; color: var(--dim); }
+  .prog-n em { margin-inline-start: auto; font-style: normal; font-family: var(--f-num); font-weight: 600; font-size: 26px;
+    color: var(--cream); font-variant-numeric: lining-nums tabular-nums; }
+  .prog-s { font-size: 12.5px; color: var(--mute); margin-top: 6px; }
+  .meter { height: 6px; background: var(--line-faint); border-radius: 3px; overflow: hidden; margin-top: 10px; }
+  .meter > i { display: block; height: 100%; border-radius: 3px; background: linear-gradient(to left, var(--gold-soft), var(--gold-light));
+    transition: width .4s ease; }
+  .facts { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 5px 16px; margin-top: 16px;
+    padding-top: 13px; border-top: 1px dotted var(--line-soft); font-size: 13.5px; }
+  .facts dt { color: var(--mute); white-space: nowrap; }
+  .facts dd { color: var(--cream); overflow-wrap: anywhere; }
+
+  /* Lists of books. */
+  .ol { list-style: none; counter-reset: q; display: flex; flex-direction: column; gap: 8px; }
+  .ol li { counter-increment: q; display: flex; align-items: flex-start; gap: 10px; line-height: 1.6; overflow-wrap: anywhere; }
+  .ol li::before { content: counter(q); width: 24px; height: 24px; border-radius: 50%; border: 1px solid var(--gold); color: var(--gold);
+    display: grid; place-items: center; font-family: var(--f-num); font-weight: 700; font-size: 14px; flex-shrink: 0; margin-top: 1px; }
+  .ol li.more::before { content: '…'; border-style: dashed; }
+  .ol li.more { color: var(--mute); }
+  .rows { list-style: none; }
+  .rw { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-top: 1px solid var(--line-faint); flex-wrap: wrap; }
+  .rw:first-child { border-top: 0; padding-top: 2px; }
+  .rw-ic { width: 36px; height: 36px; border-radius: 4px; display: grid; place-items: center; flex-shrink: 0; color: var(--gold-soft);
+    background: var(--field-2); border: 1px solid var(--line-faint); }
+  .rw-ic .ic { width: 18px; height: 18px; }
+  .rw-ic.is-ok { color: var(--ok); }
+  .rw-ic.is-bad { color: var(--alert); }
+  .rw-ic.is-hold, .rw-ic.is-gold { color: var(--gold); }
+  .rw-b { flex: 1 1 200px; min-width: 0; }
+  .rw-t { font-weight: 500; font-size: 14.5px; color: var(--cream); line-height: 1.55; overflow-wrap: anywhere; }
+  .rw-m { font-size: 12.5px; color: var(--mute); margin-top: 2px; }
+  .rw-a { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .rw .meter { flex-basis: 100%; margin-top: 0; }
+  .rw .note { margin-top: 6px; }
+  .rw.is-empty { color: var(--mute); font-size: 14px; }
+  @media (max-width: 640px) { .rw-a { flex-basis: 100%; padding-inline-start: 48px; } }
+
+  /* ───────── The models on the computer ───────── */
+  .bx { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--line-faint); }
+  .bx-h { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .bx-h h3 { font-family: var(--f-display); font-size: 18px; font-weight: 700; color: var(--cream); }
+  .bx-h + .sub { margin-top: 2px; }
+  .pair { display: flex; gap: 14px; margin-top: 12px; align-items: stretch; }
+  @media (max-width: 640px) { .pair { flex-direction: column-reverse; } }
+  .box { flex: 1 1 0; min-width: 0; min-height: 150px; border: 1px dashed var(--line); border-radius: 4px; padding: 12px;
+    background: var(--field-2); transition: background-color .15s, border-color .15s; }
+  .box.is-on { flex-grow: 1.4; border-style: solid; border-color: var(--line); background: var(--panel-2); }
+  .box.is-over { border-color: var(--gold); background: rgba(201,165,92,.12); }
+  /* A phone: one box above the other (the working one first), each as tall as what it holds. */
+  @media (max-width: 640px) { .box, .box.is-on { flex: none; min-height: 0; } }
+  .box-h { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 12.5px; font-weight: 500; color: var(--gold-soft);
+    margin-bottom: 10px; }
+  .box-h .ic { width: 15px; height: 15px; }
+  .box-h small { font-weight: 400; color: var(--mute); font-size: 11.5px; }
+  .box-e { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--mute); padding: 6px 2px; }
+  .grp + .grp { margin-top: 10px; }
+  .grp-n { font-size: 11.5px; color: var(--mute); margin-bottom: 6px; }
+  .mchips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .mchip { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 2px 6px; max-width: 100%; padding: 6px 12px;
+    border: 1px solid var(--line-soft); border-radius: 18px; background: var(--panel); font-size: 13.5px; color: var(--cream);
+    cursor: grab; touch-action: manipulation; transition: border-color .15s, color .15s; }
+  .mchip:hover { border-color: var(--gold-soft); color: var(--gold-light); }
+  .mchip .ic { width: 14px; height: 14px; color: var(--gold-soft); }
+  .mchip small { flex-basis: 100%; font-size: 11px; color: var(--gold-light); padding-inline-start: 20px; }
+  .mchip.is-warn { border-color: var(--line); border-style: dashed; }
+  .mcard { background: var(--panel); border: 1px solid var(--line-soft); border-inline-start: 3px solid var(--mute); border-radius: 4px;
+    padding: 10px 12px; margin-bottom: 10px; cursor: grab; }
+  .mcard.is-run { border-inline-start-color: var(--ok); }
+  .mcard.is-hold { border-inline-start-color: var(--gold); }
+  .mcard.is-bad { border-inline-start-color: var(--alert); }
+  .mc-h { display: flex; align-items: flex-start; gap: 8px; }
+  .mc-n { flex: 1; min-width: 0; }
+  .mc-n b { display: block; font-weight: 700; font-size: 15px; color: var(--cream); overflow-wrap: anywhere; }
+  .mc-n span { font-size: 12px; color: var(--mute); }
+  .mc-s { display: flex; align-items: center; gap: 6px 8px; flex-wrap: wrap; margin-top: 8px; font-size: 13px; color: var(--dim);
+    line-height: 1.6; }
+  .mc-w { font-size: 12px; color: var(--gold-light); margin-top: 4px; }
+  .mcard > .btn { margin-top: 8px; }
+  .mc-t { margin-top: 8px; padding-top: 8px; border-top: 1px dotted var(--line-soft); }
+  .mc-ts { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 12.5px; color: var(--dim); }
+  .mc-ts .ic { width: 14px; height: 14px; color: var(--gold-soft); }
+  .mc-ts .btn { margin-inline-start: auto; }
+  .times { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+  .trow { display: grid; grid-template-columns: 52px minmax(0, 1fr); gap: 6px; align-items: center; font-size: 12.5px; }
+  .trow > span { color: var(--dim); }
+  .tin { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+  .tin select { flex: 1 1 120px; }
+  .tin input { flex: 0 1 112px; }
+
+  /* ───────── The helper ───────── */
+  .hl { font-size: 14px; color: var(--dim); margin-top: 6px; overflow-wrap: anywhere; }
+  .hl a, .note a { margin-inline-start: 6px; }
+  .req { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 13px; color: var(--dim); margin-top: 8px; }
+  .act { border-top: 1px solid var(--line-faint); margin-top: 14px; padding-top: 12px; }
+  .act b { display: block; font-size: 14.5px; }
+  .act label { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; font-size: 13px; color: var(--dim); }
+  .act .btn { margin-top: 10px; }
+  .code { display: block; width: 100%; direction: ltr; text-align: left; font: 12.5px/1.7 ui-monospace, Consolas, monospace;
+    background: var(--field); border: 1px solid var(--line-soft); border-radius: 3px; padding: 9px 11px; color: var(--cream); margin: 8px 0; }
+  details.inst { margin-top: 14px; border-top: 1px solid var(--line-faint); padding-top: 10px; }
+  details.inst summary { cursor: pointer; color: var(--gold-soft); font-size: 13px; }
+  details.inst[open] summary { margin-bottom: 6px; }
+
+  /* ───────── Foot ───────── */
+  .foot { display: flex; flex-wrap: wrap; gap: 8px 10px; align-items: center; padding-top: 16px; border-top: 1px solid var(--line-faint);
+    font-size: 13px; color: var(--mute); }
+  .fchip { display: inline-flex; align-items: center; gap: 7px; padding: 5px 12px; border: 1px solid var(--line-soft);
+    border-radius: 20px; color: var(--dim); font-size: 13px; }
+  .fchip:hover { border-color: var(--gold-soft); color: var(--gold-light); }
+  .fchip .ic { width: 15px; height: 15px; color: var(--gold-soft); }
+  .foot-l { flex-basis: 100%; line-height: 1.8; }
+
+  /* ───────── Messages ───────── */
+  .toasts { position: fixed; left: 20px; bottom: 20px; z-index: 250; display: flex; flex-direction: column; gap: 8px;
+    max-width: min(440px, calc(100vw - 32px)); }
+  .toasts.is-high { bottom: 100px; }
+  @media (max-width: 640px) { .toasts { left: 12px; right: 12px; bottom: 12px; max-width: none; } }
+  .toast { display: flex; align-items: flex-start; gap: 10px; background: var(--panel-2); border: 1px solid var(--line);
+    border-right: 3px solid var(--gold); border-radius: 3px; padding: 10px 10px 10px 14px; font-size: 14px; line-height: 1.7;
+    box-shadow: var(--shadow); animation: pop .2s ease-out; }
+  .toast > .ic { margin-top: 3px; color: var(--gold); }
+  .toast p { flex: 1; min-width: 0; }
+  .toast.is-ok { border-right-color: var(--ok); }
+  .toast.is-ok > .ic { color: var(--ok); }
+  .toast.is-bad { border-right-color: var(--alert); }
+  .toast.is-bad > .ic { color: var(--alert); }
+  .toast.is-busy > .ic { animation: spin 1s linear infinite; }
+  .toast .x { min-height: 26px; width: 26px; padding: 0; }
+
+  /* ───────── Windows ───────── */
+  .ml { position: fixed; inset: 0; z-index: 200; overflow-y: auto; display: flex; align-items: flex-start; justify-content: center;
+    padding: 7vh 12px 4vh; }
+  .ml-scrim { position: fixed; inset: 0; background: var(--scrim); animation: fade .15s ease; }
+  .modal { position: relative; width: min(640px, 100%); background: var(--panel); border: 1px solid var(--line);
+    border-top: 2px solid var(--gold); border-radius: 4px; box-shadow: var(--shadow-lg); animation: pop .18s ease-out; }
+  .modal-h { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 13px 18px;
+    border-bottom: 1px solid var(--line-faint); }
+  .modal-h h3 { font-family: var(--f-display); font-weight: 700; font-size: 21px; }
+  .modal-b { padding: 16px 18px 20px; }
+  .modal-b > .sub { margin-bottom: 14px; }
+  .th-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(112px, 1fr)); gap: 14px 12px; }
+  .th { display: block; text-align: center; }
+  .th-p { display: block; height: 56px; border-radius: 6px; position: relative; overflow: hidden;
+    box-shadow: inset 0 0 0 1px rgba(128,128,128,.3); transition: transform .15s; }
+  .th-p i { position: absolute; display: block; border-radius: 2px; }
+  .th:hover .th-p { transform: translateY(-2px); }
+  .th.is-on .th-p { box-shadow: inset 0 0 0 1px rgba(128,128,128,.3), 0 0 0 2px var(--panel), 0 0 0 4px var(--gold); }
+  .th-n { display: block; font-size: 12px; color: var(--dim); margin-top: 7px; line-height: 1.4; }
+  .th.is-on .th-n { color: var(--gold-light); font-weight: 700; }
+  .keys { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 22px; }
+  @media (max-width: 560px) { .keys { grid-template-columns: 1fr; } }
+  .keys h4 { font-size: 13px; color: var(--gold-soft); font-weight: 500; margin-bottom: 4px; }
+  .kl { list-style: none; }
+  .kl li { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 0;
+    border-top: 1px solid var(--line-faint); font-size: 13.5px; }
+  .kl li:first-child { border-top: 0; }
+
+  /* ───────── Review by hand ───────── */
+  .rv { padding-bottom: 130px; }
+  .rv-head { position: sticky; top: 0; z-index: 20; background: var(--desk); padding: 12px 0 12px; margin-bottom: 16px;
+    border-bottom: 1px solid var(--line-faint); }
+  .rv-top { display: flex; align-items: center; gap: 10px 14px; flex-wrap: wrap; }
+  .rv-title { flex: 1 1 200px; min-width: 0; font-family: var(--f-display); font-weight: 700; font-size: 21px; line-height: 1.35;
+    overflow-wrap: anywhere; }
+  .rv-count { font-size: 12.5px; color: var(--mute); }
+  .rv-head .meter { margin-top: 10px; }
+  .rv-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
+  @media (min-width: 1000px) {
+    .rv-grid { grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); align-items: start; }
+    .rv-pic { position: sticky; top: 104px; }
+    .rv-pic .zoom { height: calc(100vh - 250px); min-height: 360px; }
   }
-  button:disabled { opacity: .6; cursor: default; }
-  #judge { margin-top: 8px; }
-  #msg { min-height: 1.7em; text-align: center; margin: 6px 0 0; }
-  ul { list-style: none; margin: 0; padding: 0; }
-  li { padding: 10px 0; border-top: 1px solid var(--line); }
-  li:first-child { border-top: 0; padding-top: 0; }
-  .row { display: flex; gap: 8px; align-items: baseline; justify-content: space-between; flex-wrap: wrap; }
-  .title { font-weight: 600; overflow-wrap: anywhere; }
-  .badge { font-size: .8rem; padding: 1px 10px; border-radius: 999px; white-space: nowrap; }
-  .badge.ok { background: var(--ok-bg); color: var(--ok); }
-  .badge.warn { background: var(--warn-bg); color: var(--warn); }
-  .badge.bad { background: var(--bad-bg); color: var(--bad); }
-  a { color: var(--accent); }
-  .links a { display: inline-block; margin-left: 14px; }
-  .bar { height: 8px; background: var(--line); border-radius: 99px; overflow: hidden; margin-top: 8px; }
-  .bar > span { display: block; height: 100%; background: var(--accent); }
-  button.small { width: auto; padding: 6px 14px; font-size: .9rem; }
-  button.plain { background: transparent; color: var(--accent); border: 1px solid var(--line); }
-  button.ok { background: var(--ok); color: var(--card); }
-  .books li .row button { margin-top: 4px; }
-  /* Review screen */
-  #review { padding-bottom: 96px; }
-  .head { display: flex; gap: 8px; align-items: center; justify-content: space-between; }
-  .zoom { position: relative; height: 45vh; overflow: auto; border: 1px solid var(--line); border-radius: 12px;
-    background: #fff; margin-top: 8px; }
+  .zoom { position: relative; height: 40vh; overflow: auto; border: 1px solid var(--line-soft); border-radius: 4px; background: #fff; }
   .zoom .page { position: relative; }
   .zoom img { display: block; width: 100%; height: auto; }
-  .frame { position: absolute; border: 3px solid #d93025; border-radius: 4px; box-shadow: 0 0 0 2px #fff; }
-  .read { font-size: 1.15rem; line-height: 2; padding: 10px 12px; border-radius: 10px; background: var(--bg);
-    margin-top: 8px; unicode-bidi: isolate; overflow-wrap: anywhere; max-height: 40vh; overflow: auto; }
-  .read .ctx { color: var(--muted); }
-  .read mark { background: #ffe58a; color: #1d2433; padding: 0 2px; border-radius: 4px; }
-  .read .gap { color: #d93025; font-weight: 700; }
-  .choices button { margin-top: 8px; }
-  .minor { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
-  .minor button { flex: 1 1 auto; }
-  textarea { width: 100%; min-height: 6em; font: inherit; font-size: 18px; line-height: 1.8; padding: 10px;
-    border-radius: 10px; border: 1px solid var(--line); background: var(--card); color: var(--text); }
-  .fills { display: flex; gap: 6px; flex-wrap: wrap; margin: 6px 0; }
-  .fills button { width: auto; flex: 0 1 auto; padding: 6px 10px; font-size: .9rem; font-weight: 500;
-    background: var(--bg); color: var(--text); border: 1px solid var(--line); text-align: start;
-    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
-  .sendbar { position: fixed; left: 0; right: 0; bottom: 0; background: var(--card); border-top: 1px solid var(--line);
-    padding: 10px 16px; }
-  .sendbar > div { max-width: 640px; margin: 0 auto; }
-  .helper-line { width: 100%; font: inherit; font-size: .8rem; direction: ltr; padding: 8px; margin: 6px 0;
-    border-radius: 10px; border: 1px solid var(--line); background: var(--bg); color: var(--text); }
-  .act { border-top: 1px solid var(--line); padding-top: 10px; margin-top: 10px; }
-  .act label { display: block; margin-top: 6px; }
-  .act select { width: 100%; font: inherit; padding: 8px; border-radius: 10px; border: 1px solid var(--line);
-    background: var(--card); color: var(--text); }
-  .act button { margin-top: 10px; }
-  details { margin-top: 10px; }
-  .tag { display: inline-block; font-size: .8rem; padding: 0 8px; border-radius: 999px; background: var(--ok-bg);
-    color: var(--ok); margin-inline-start: 6px; }
-  /* The home page: wider on a computer, its cards two by two. */
-  main#home { max-width: 1100px; }
-  .top { display: flex; gap: 12px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
-  .tools { display: flex; gap: 8px; flex-wrap: wrap; }
-  .tools button { width: auto; padding: 8px 16px; }
-  .pills { display: flex; gap: 8px; flex-wrap: wrap; margin: 12px 0 2px; }
-  .pill { font-size: .9rem; padding: 4px 12px; border-radius: 999px; background: var(--card); border: 1px solid var(--line); }
-  .pill.ok { background: var(--ok-bg); color: var(--ok); border-color: transparent; }
-  .pill.warn { background: var(--warn-bg); color: var(--warn); border-color: transparent; }
-  .pill.bad { background: var(--bad-bg); color: var(--bad); border-color: transparent; }
-  .grid2 { display: grid; grid-template-columns: 1fr; column-gap: 14px; }
-  .grid2 > .card { min-width: 0; }
-  @media (min-width: 900px) { .grid2 { grid-template-columns: 1fr 1fr; align-items: start; } }
-  ol.names { margin: 6px 0 0; padding-inline-start: 22px; }
-  ol.names li { border: 0; padding: 2px 0; overflow-wrap: anywhere; }
-  .parked { margin-top: 10px; }
-  .books .links-row { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; margin-top: 4px; }
-  .books .links-row button { width: auto; }
-  .retry { display: block; width: 100%; margin: -4px 0 10px; }
-  .times { margin: -4px 0 12px; font-size: .85rem; }
-  .times .trow { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-top: 4px; }
-  .times input, .times select { font: inherit; padding: 4px 6px; border-radius: 8px; border: 1px solid var(--line);
-    background: var(--card); color: var(--text); }
-  .times input { width: 7em; }
-  .times button { width: auto; padding: 4px 10px; }
-  #boxes h2 { font-size: 1.15rem; }
-  .sec { border-top: 1px solid var(--line); padding-top: 14px; margin-top: 14px; }
-  .sec > .title { font-size: 1.1rem; }
-  .pair { display: flex; gap: 14px; margin-top: 10px; align-items: stretch; }
-  .box { flex: 3 1 0; min-width: 0; min-height: 200px; border: 2px dashed var(--line); border-radius: 14px;
-    padding: 10px 12px; background: var(--bg); }
-  .box.on { flex-grow: 2; border-color: var(--accent); }
-  .box.over { background: var(--ok-bg); }
-  /* A phone: the two boxes one above the other, the working one first. */
-  @media (max-width: 599px) {
-    .pair { flex-direction: column-reverse; }
-    .box { flex: none; min-height: 90px; }
-  }
-  .boxhead { font-size: .9rem; font-weight: 600; color: var(--muted); margin-bottom: 8px; }
-  .group { margin-bottom: 10px; }
-  .gname { font-size: .8rem; color: var(--muted); margin-bottom: 4px; }
-  .chips { display: flex; flex-wrap: wrap; gap: 8px; }
-  button.chip { display: inline-block; width: auto; max-width: 100%; text-align: start; font-size: .95rem; font-weight: 500;
-    padding: 8px 12px; margin: 0; border-radius: 12px; border: 1px solid var(--line); background: var(--card);
-    color: var(--text); cursor: grab; touch-action: manipulation; overflow-wrap: anywhere; }
-  .box.on button.chip { display: block; width: 100%; margin-bottom: 8px; }
-  button.chip.warn { border-color: var(--warn); }
-  .chip small { display: block; font-size: .78rem; color: var(--muted); line-height: 1.5; }
-  .chip small.warntext { color: var(--warn); }
-  .chip small.working { color: var(--ok); }
-  .chip small.exhausted, .chip small.failing { color: var(--bad); }
+  .frame { position: absolute; border: 3px solid #d93025; border-radius: 4px; box-shadow: 0 0 0 2px #fff, 0 0 0 4000px rgba(0,0,0,.07); }
+  .pic-u { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin-top: 8px;
+    font-size: 12.5px; color: var(--mute); }
+  .rv-side .h3:first-child { margin-top: 0; padding-top: 0; border-top: 0; }
+  .tag { font-size: 11.5px; padding: 0 9px; border-radius: 20px; color: var(--ok); background: var(--ok-bg); border: 1px solid var(--ok); }
+  .read { font-family: var(--f-display); font-size: 20px; line-height: 2.1; padding: 12px 16px; border-radius: 4px; background: var(--field);
+    border: 1px solid var(--line-soft); unicode-bidi: isolate; overflow-wrap: anywhere; max-height: 40vh; overflow: auto; }
+  @media (max-width: 640px) { .read { font-size: 19px; max-height: 32vh; } }
+  .read .ctx { color: var(--mute); }
+  .read mark { background: rgba(201,165,92,.3); color: var(--cream); padding: 0 3px; border-radius: 3px; box-shadow: inset 0 -2px 0 var(--gold); }
+  .read .gap { color: var(--alert); font-weight: 700; font-family: var(--f-ui); font-size: 15px; }
+  .alt { font-size: 13px; color: var(--dim); margin-top: 8px; overflow-wrap: anywhere; }
+  .choices { display: flex; flex-direction: column; gap: 10px; margin-top: 14px; }
+  .minor { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 12px; }
+  .rv-note { font-size: 12.5px; color: var(--mute); margin-top: 10px; }
+  .ed-l { font-size: 13px; color: var(--dim); }
+  textarea.in { width: 100%; min-height: 7em; font-family: var(--f-display); font-size: 19px; line-height: 1.9; padding: 10px 12px; resize: vertical; }
+  .fills { display: flex; gap: 6px; flex-wrap: wrap; margin: 8px 0; }
+  .fill { max-width: 100%; padding: 4px 11px; border: 1px solid var(--line-soft); border-radius: 18px; font-size: 13px; color: var(--dim);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .fill:hover { border-color: var(--gold-soft); color: var(--gold-light); }
+  .ed-acts { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+  .rv-done { border: 1px dashed var(--line); border-radius: 4px; padding: 34px 20px; text-align: center; color: var(--dim);
+    max-width: 640px; margin: 10px auto 0; }
+  .rv-done > .ic { width: 40px; height: 40px; color: var(--ok); margin-bottom: 8px; }
+  .rv-done b { display: block; font-family: var(--f-display); font-size: 24px; color: var(--cream); margin-bottom: 6px; }
+  .rv-done .btn { margin-top: 14px; }
+  #rv-msg:empty { display: none; }
+  #rv-msg { margin-top: 14px; font-size: 13.5px; color: var(--dim); }
+  #rv-msg.is-bad { color: var(--alert); }
+  .sendbar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 40; background: var(--panel-2); border-top: 1px solid var(--line);
+    box-shadow: 0 -10px 30px rgba(0,0,0,.12); padding: 10px 16px; }
+  .sendbar > div { max-width: 1180px; margin: 0 auto; display: flex; align-items: center; gap: 8px 14px; flex-wrap: wrap; }
+  #rv-saving { flex: 1 1 220px; min-width: 0; font-size: 13px; color: var(--mute); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  #rv-saving.is-bad { color: var(--alert); }
+  #rv-send { min-width: 230px; }
+  @media (max-width: 640px) { #rv-send { width: 100%; } }
 </style>
 </head>
 <body>
-<main id="home">
-  <div class="top">
-    <div>
-      <h1>تحويل الكتب</h1>
-      <div class="muted" id="sub"></div>
+<div class="app" id="app">
+  <aside class="side">
+    <div class="side-brand">
+      <span class="mark" data-ic="logo"></span>
+      <div><b>تحويل الكتب</b><span>من PDF إلى كتاب EPUB</span></div>
     </div>
-    <div class="tools">
-      <button id="check" class="small" type="button">افحص الآن</button>
-      <button id="judge" class="small plain" type="button">اعرض على الحكّام الآن</button>
+    <nav class="nav" id="side-nav" aria-label="أقسام الصفحة"></nav>
+    <div class="side-foot">
+      <div class="sync" id="side-sync"></div>
+      <div class="side-tools">
+        <button type="button" class="btn btn-sm btn-quiet" data-act="theme"><span data-ic="theme"></span><span>المظهر</span></button>
+        <button type="button" class="btn btn-sm btn-quiet k-only" data-act="keys"><span data-ic="keys"></span><span>الاختصارات</span><kbd>?</kbd></button>
+      </div>
     </div>
+  </aside>
+
+  <div class="main">
+    <main id="home" class="wrap">
+      <header class="vh">
+        <div class="vh-t">
+          <span class="mark" data-ic="logo"></span>
+          <div>
+            <div class="eyebrow" id="today"></div>
+            <h1 class="title">تحويل الكتب</h1>
+            <div class="sync" id="sub"></div>
+          </div>
+        </div>
+        <div class="vh-tools">
+          <button type="button" class="btn btn-icon btn-quiet" data-act="theme" title="المظهر" aria-label="المظهر"><span data-ic="theme"></span></button>
+          <button type="button" class="btn btn-icon btn-quiet k-only" data-act="keys" title="الاختصارات" aria-label="الاختصارات"><span data-ic="keys"></span></button>
+        </div>
+        <div class="acts">
+          <button id="check" class="btn btn-gold" type="button"><span data-ic="refresh"></span><span>افحص الآن</span><kbd>F</kbd></button>
+          <button id="judge" class="btn" type="button"><span data-ic="scale"></span><span>اعرض على الحكّام الآن</span><kbd>J</kbd></button>
+        </div>
+      </header>
+
+      <nav class="jump" id="jump" aria-label="أقسام الصفحة"></nav>
+      <div class="figs" id="figs"></div>
+      <div id="notices"></div>
+
+      <div class="grid">
+        <section class="card hero" id="now"></section>
+        <section class="card" id="queue"></section>
+      </div>
+      <section class="card" id="reviews" hidden></section>
+      <section class="card" id="boxes" hidden></section>
+      <div class="grid">
+        <section class="card" id="recent-card">
+          <div class="ch"><span class="ch-ic" data-ic="archive"></span><h2>آخر الكتب</h2><span class="count end" id="recent-n"></span></div>
+          <ul id="recent" class="rows"></ul>
+        </section>
+        <section class="card" id="helper" hidden></section>
+      </div>
+      <footer class="foot" id="foot"></footer>
+    </main>
+
+    <main id="review" class="wrap rv" hidden>
+      <div class="rv-head">
+        <div class="rv-top">
+          <button id="rv-back" class="btn btn-sm" type="button"><span data-ic="back"></span><span>رجوع</span></button>
+          <div class="rv-title" id="rv-title"></div>
+          <span class="rv-count" id="rv-count"></span>
+        </div>
+        <div class="meter"><i id="rv-bar" style="width:0%"></i></div>
+      </div>
+      <div id="rv-body"></div>
+      <div id="rv-msg" role="status"></div>
+      <div class="sendbar">
+        <div>
+          <div id="rv-saving"></div>
+          <button id="rv-send" class="btn btn-gold" type="button">أرسل التصحيحات</button>
+        </div>
+      </div>
+    </main>
   </div>
-  <div class="pills" id="pills"></div>
-  <p id="msg" class="muted" role="status"></p>
-
-  <div class="grid2">
-    <section class="card" id="now"></section>
-    <section class="card" id="queue"></section>
-  </div>
-
-  <section class="card" id="reviews" hidden></section>
-
-  <section class="card" id="boxes" hidden></section>
-
-  <div class="grid2">
-    <section class="card">
-      <h2>آخر الكتب</h2>
-      <ul id="recent" class="books"></ul>
-    </section>
-    <section class="card" id="helper" hidden></section>
-  </div>
-
-  <section class="card muted" id="foot"></section>
-</main>
-
-<main id="review" hidden>
-  <div class="head">
-    <button id="rv-back" class="small plain" type="button">رجوع</button>
-    <span class="muted" id="rv-count"></span>
-  </div>
-  <div class="big" id="rv-title"></div>
-  <div class="bar"><span id="rv-bar" style="width:0%"></span></div>
-  <div id="rv-body"></div>
-  <p id="rv-msg" class="muted" role="status"></p>
-  <div class="sendbar">
-    <div>
-      <div id="rv-saving" class="muted"></div>
-      <button id="rv-send" type="button">أرسل التصحيحات</button>
-    </div>
-  </div>
-</main>
+</div>
+<div class="toasts" id="toasts" role="status" aria-live="polite"></div>
 
 <script>
   var INITIAL = <?!= initialJson ?>;
+  var LAST = INITIAL;
+  var BUSY = false;
+
+  // ------------------------------------------------------------------------
+  // Small helpers.
+  // ------------------------------------------------------------------------
+  // Line icons on a 24×24 grid, drawn in the colour of the text.
+  var ICONS = {
+    logo: '<path d="M2 4h6a4 4 0 0 1 4 4v13a3 3 0 0 0-3-3H2z"/><path d="M22 4h-6a4 4 0 0 0-4 4v13a3 3 0 0 1 3-3h7z"/><path d="M5 8.5h3M5 12h3M16 8.5h3M16 12h3"/>',
+    book: '<path d="M2 4h6a4 4 0 0 1 4 4v13a3 3 0 0 0-3-3H2z"/><path d="M22 4h-6a4 4 0 0 0-4 4v13a3 3 0 0 1 3-3h7z"/>',
+    inbox: '<path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/>',
+    pen: '<path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"/>',
+    cpu: '<rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M9 1v3M15 1v3M9 20v3M15 20v3M20 9h3M20 14h3M1 9h3M1 14h3"/>',
+    archive: '<path d="M21 8v13H3V8"/><rect x="1" y="3" width="22" height="5" rx="1"/><path d="M10 12h4"/>',
+    monitor: '<rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/>',
+    refresh: '<path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>',
+    scale: '<path d="M12 3v17M6 20h12M4 7h16"/><path d="m4 7-3 7a3 3 0 0 0 6 0z"/><path d="m20 7-3 7a3 3 0 0 0 6 0z"/>',
+    theme: '<circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 0 0 18z" fill="currentColor"/>',
+    keys: '<rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 14h10"/>',
+    folder: '<path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>',
+    alert: '<path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><path d="M12 9v4M12 17h.01"/>',
+    info: '<circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/>',
+    check: '<path d="M20 6 9 17l-5-5"/>',
+    checks: '<path d="M17 6 6 17l-5-5"/><path d="m22 10-7.5 7.5L13 16"/>',
+    x: '<path d="M18 6 6 18M6 6l12 12"/>',
+    back: '<path d="M5 12h14M12 5l7 7-7 7"/>',
+    next: '<path d="M19 12H5M12 19l-7-7 7-7"/>',
+    external: '<path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><path d="M15 3h6v6M10 14 21 3"/>',
+    copy: '<rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>',
+    play: '<path d="M6 4l14 8-14 8z"/>',
+    stop: '<rect x="6" y="6" width="12" height="12" rx="2"/>',
+    plus: '<path d="M12 5v14M5 12h14"/>',
+    clock: '<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>',
+    calendar: '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',
+    maximize: '<path d="M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M16 21h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/>',
+    terminal: '<path d="m4 17 6-6-6-6M12 19h8"/>',
+    grid: '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/>'
+  };
+
+  function svg(name) {
+    return '<svg viewBox="0 0 24 24" aria-hidden="true">' + (ICONS[name] || '') + '</svg>';
+  }
 
   function el(tag, cls, text) {
     var e = document.createElement(tag);
@@ -240,13 +610,72 @@
     return e;
   }
 
-  function link(href, text) {
-    var a = el('a', '', text);
+  function icon(name) {
+    var s = el('span', 'ic');
+    s.innerHTML = svg(name);
+    return s;
+  }
+
+  // A button: its label is kept in .lab so it can change without losing the icon.
+  function button(cls, text, onClick, ic, key) {
+    var b = el('button', 'btn' + (cls ? ' ' + cls : ''));
+    b.type = 'button';
+    if (ic) b.appendChild(icon(ic));
+    b.lab = b.appendChild(el('span', '', text));
+    if (key) b.appendChild(el('kbd', '', key));
+    if (onClick) b.addEventListener('click', onClick);
+    return b;
+  }
+
+  function setLabel(b, text) { if (b.lab) b.lab.textContent = text; else b.textContent = text; }
+
+  function link(href, text, cls, ic) {
+    var a = el('a', cls || '');
+    if (ic) a.appendChild(icon(ic));
+    a.appendChild(el('span', '', text));
     a.href = href;
     a.target = '_blank';
     a.rel = 'noopener';
     return a;
   }
+
+  // A state: a dot and a word, coloured by kind (run, ok, hold, gold, bad, wait).
+  function st(kind, text) {
+    var p = el('span', 'st is-' + kind);
+    p.appendChild(el('i'));
+    p.appendChild(el('span', '', text));
+    return p;
+  }
+
+  function note(kind, text) {
+    var d = el('div', 'note is-' + kind);
+    d.appendChild(icon(kind === 'bad' ? 'alert' : kind === 'ok' ? 'check' : 'info'));
+    d.p = d.appendChild(el('p', '', text));
+    return d;
+  }
+
+  function cardHead(ic, title, end) {
+    var h = el('div', 'ch');
+    var c = el('span', 'ch-ic');
+    c.appendChild(icon(ic));
+    h.appendChild(c);
+    h.appendChild(el('h2', '', title));
+    if (end) {
+      end.className += ' end';
+      h.appendChild(end);
+    }
+    return h;
+  }
+
+  function meter(done, total) {
+    var m = el('div', 'meter');
+    var fill = el('i');
+    fill.style.width = pct(done, total) + '%';
+    m.appendChild(fill);
+    return m;
+  }
+
+  function pct(done, total) { return total ? Math.min(100, Math.round(100 * done / total)) : 0; }
 
   // Arabic counted nouns: 1 دقيقة، 2 دقيقتان، 3-10 دقائق، 11+ دقيقة.
   function count(n, one, two, few, many) {
@@ -276,165 +705,146 @@
     }
   }
 
+  // Today, in the Gregorian and the Umm al-Qura calendars.
+  function today(iso) {
+    var d = iso ? new Date(iso) : new Date();
+    var out = [];
+    try {
+      out.push(d.toLocaleDateString('ar', { calendar: 'gregory', numberingSystem: 'latn', weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }));
+      out.push(d.toLocaleDateString('ar-SA-u-ca-islamic-umalqura-nu-latn', { day: 'numeric', month: 'long', year: 'numeric' }));
+    } catch (e) { /* the date alone is enough */ }
+    return out.join(' · ');
+  }
+
   function minutesSince(iso, nowIso) {
     return Math.max(0, Math.floor((Date.parse(nowIso) - Date.parse(iso)) / 60000));
   }
 
+  function parse(text) {
+    try { return JSON.parse(text) || { ok: false }; } catch (e) { return { ok: false, error: 'رد غير مفهوم' }; }
+  }
+
+  function errText(e) { return String(e && e.message ? e.message : e || 'خطأ غير معروف'); }
+
+  // ------------------------------------------------------------------------
+  // Messages: one at a time, at the bottom of the screen.
+  // ------------------------------------------------------------------------
+  var TOAST = null;
+  var TOAST_T = 0;
+
+  function setMsg(text, kind) {
+    if (TOAST_T) { clearTimeout(TOAST_T); TOAST_T = 0; }
+    if (!text) return hideToast();
+    kind = kind || (/^تعذّر/.test(text) ? 'bad' : /…$/.test(text) ? 'busy' : 'ok');
+    if (!TOAST) {
+      TOAST = el('div', 'toast');
+      document.getElementById('toasts').appendChild(TOAST);
+    }
+    TOAST.className = 'toast is-' + kind;
+    TOAST.textContent = '';
+    TOAST.appendChild(icon(kind === 'bad' ? 'alert' : kind === 'busy' ? 'refresh' : kind === 'info' ? 'info' : 'check'));
+    TOAST.appendChild(el('p', '', text));
+    var x = button('btn-quiet x', '', hideToast, 'x');
+    x.setAttribute('aria-label', 'إغلاق');
+    TOAST.appendChild(x);
+    if (kind !== 'busy') TOAST_T = setTimeout(hideToast, kind === 'bad' ? 15000 : 7000);
+  }
+
+  function hideToast() {
+    if (TOAST && TOAST.parentNode) TOAST.parentNode.removeChild(TOAST);
+    TOAST = null;
+  }
+
+  // ------------------------------------------------------------------------
+  // The status page.
+  // ------------------------------------------------------------------------
   function render(s) {
+    LAST = s;
     var now = document.getElementById('now');
-    var queue = document.getElementById('queue');
-    var recent = document.getElementById('recent');
+    var waiting = document.getElementById('queue');
     var foot = document.getElementById('foot');
-    var sub = document.getElementById('sub');
     now.textContent = '';
-    queue.textContent = '';
-    recent.textContent = '';
+    waiting.textContent = '';
+    document.getElementById('recent').textContent = '';
     foot.textContent = '';
+    document.getElementById('notices').textContent = '';
+    document.getElementById('today').textContent = today(s && s.now);
+    renderSync(s);
 
     if (!s || !s.ok) {
-      now.appendChild(el('div', 'note bad', 'تعذّر قراءة الحالة: ' + ((s && s.error) || 'خطأ غير معروف')));
+      var bad = note('bad', 'تعذّر قراءة الحالة: ' + ((s && s.error) || 'خطأ غير معروف'));
+      bad.p.appendChild(document.createTextNode(' '));
+      bad.p.appendChild(button('btn-sm', 'أعد المحاولة', function () { refresh(); }, 'refresh'));
+      now.appendChild(bad);
       return;
     }
-    sub.textContent = s.lastTick ? 'آخر فحص: قبل ' + duration(minutesSince(s.lastTick, s.now)) : 'لم يجرِ أي فحص بعد';
-    renderPills(s);
 
-    if (!s.setUp) {
-      now.appendChild(el('div', 'note warn', 'الإعداد لم يكتمل. شغّل الدالة setup من المحرر (الخطوة 4 في دليل الإعداد).'));
-    }
-    if (!s.hasToken) {
-      now.appendChild(el('div', 'note bad', 'رمز GitHub غير موجود. أضف GITHUB_TOKEN (الخطوة 3 في دليل الإعداد).'));
-    }
-
-    // The book being converted.
-    now.appendChild(el('h2', '', 'الآن'));
-    var a = s.active;
-    if (!a) {
-      now.appendChild(el('div', 'big', 'لا يوجد كتاب قيد التحويل.'));
-    } else {
-      now.appendChild(el('div', 'big', '«' + a.title + '»'));
-      if (a.stage === 'queued') {
-        now.appendChild(el('div', '', 'ينتظر بدء التحويل.'));
-        if (a.lastError) {
-          now.appendChild(el('div', 'note warn', 'تعذّر بدء التحويل على GitHub، وسأحاول مرة أخرى تلقائياً. (' + a.lastError + ')'));
-        }
-      } else if (a.paused && helperOn(s, a)) {
-        now.appendChild(el('div', '', 'نماذجك على جهازك تعمل عليه الآن. النموذج المجاني وحده متوقف حتى الغد (انتهت حصته).'));
-        now.appendChild(el('div', '', 'يعود النموذج المجاني نحو ' + when(a.resumeAt) + '، أو قبل ذلك حين تنهي نماذجك صفحاتها. ما أُنجز محفوظ.'));
-      } else if (a.paused) {
-        now.appendChild(el('div', '', 'متوقف حتى الغد: انتهت حصة القراءة المجانية لهذا اليوم.'));
-        now.appendChild(el('div', '', 'يكمل تلقائياً نحو ' + when(a.resumeAt) + '. ما أُنجز محفوظ.'));
-      } else {
-        now.appendChild(el('div', '', 'قيد التحويل منذ ' + duration(a.minutes) +
-          (a.attempts > 1 ? ' (المحاولة رقم ' + a.attempts + ')' : '') + '.'));
-      }
-      // The helper's models finish pages between runs; the run adds them to the book later.
-      var hp = helperProgress(s, a);
-      var done = a.pagesDone, total = a.pagesTotal;
-      if (hp && hp.finished > done) {
-        done = hp.finished;
-        total = hp.need;
-        now.appendChild(el('div', 'muted', 'أنجزت نماذجك ' + done + ' من ' + total + ' صفحة، وتُضاف إلى الكتاب في التشغيل القادم.'));
-      } else if (total) {
-        now.appendChild(el('div', 'muted', 'أُنجزت ' + done + ' من ' + total + ' صفحة حتى آخر توقف.'));
-      }
-      if (total) {
-        var bar = el('div', 'bar');
-        var fill = el('span');
-        fill.style.width = Math.min(100, Math.round(100 * done / total)) + '%';
-        bar.appendChild(fill);
-        now.appendChild(bar);
-      }
-    }
-
-    // Waiting books.
-    queue.appendChild(el('h2', '', 'في الانتظار'));
-    queue.appendChild(el('div', '', s.queued
-      ? count(s.queued, 'كتاب واحد', 'كتابان', 'كتب', 'كتاباً') + ' في «1- جديد»' + (s.queueNames && s.queueNames.length ? '، تبدأ بهذا الترتيب:' : '.')
-      : 'لا توجد كتب في «1- جديد».'));
-    if (s.queueNames && s.queueNames.length) {
-      var names = el('ol', 'names');
-      s.queueNames.forEach(function (n) { names.appendChild(el('li', '', n)); });
-      if (s.queued > s.queueNames.length) names.appendChild(el('li', 'muted', '…'));
-      queue.appendChild(names);
-    }
-    if (s.uploading) {
-      queue.appendChild(el('div', 'muted', 'منها ' + s.uploading + ' ما زال يُرفع أو أُضيف قبل دقائق.'));
-    }
-    if (s.unsupported && s.unsupported.length) {
-      queue.appendChild(el('div', 'note warn', 'ملفات لن تُحوَّل لأن نوعها غير مدعوم (المدعوم: PDF و DOCX و TXT): ' +
-        s.unsupported.join('، ')));
-    }
-    // Books waiting in «2- قيد التحويل» without stopping the others.
-    (s.parked || []).forEach(function (p) {
-      var d = el('div', 'parked');
-      d.appendChild(el('div', 'title', '«' + p.title + '»'));
-      d.appendChild(el('div', 'muted', p.stage === 'helper'
-        ? 'ينتظر نماذجك على الجهاز' + (p.need ? ': أنهت ' + p.finished + ' من ' + p.need + ' صفحة.' : '.')
-        : p.stage === 'readerWait' ? 'ينتظر تجدد رصيد القارئ الثاني، ثم يكمل قبل غيره.'
-        : 'ينتظر الحكّام حتى يتجدد رصيدهم.'));
-      if (p.stage === 'helper' && p.need) d.appendChild(progress(p.finished, p.need));
-      queue.appendChild(d);
-    });
-
-    // Finished books.
-    if (!s.recent.length) {
-      recent.appendChild(el('li', 'muted', 'لا شيء بعد.'));
-    }
-    var open = {};
-    (s.reviews || []).forEach(function (b) { if (b.open && b.note !== 'no-data') open[b.fileId] = b.open; });
-    s.recent.forEach(function (j) {
-      var li = el('li');
-      var row = el('div', 'row');
-      row.appendChild(el('span', 'title', j.title));
-      var badge = j.stage === 'problem' ? el('span', 'badge bad', 'مشكلة')
-        : j.incomplete ? el('span', 'badge warn', 'جاهز، فيه صفحات ناقصة')
-        : j.final ? el('span', 'badge ok', 'مكتمل')
-        : el('span', 'badge ok', 'جاهز');
-      row.appendChild(badge);
-      li.appendChild(row);
-      var meta = el('div', 'muted', when(j.finishedAt) + (j.reason ? ' — ' + j.reason : '') +
-        (j.stage !== 'problem' && j.unsure > 0 ? ' — ' + count(j.unsure, 'صفحة مشكوك فيها', 'صفحتان مشكوك فيهما', 'صفحات مشكوك فيها', 'صفحة مشكوك فيها') : ''));
-      li.appendChild(meta);
-      var links = el('div', 'links-row');
-      if (j.url) links.appendChild(link(j.url, j.stage === 'problem' ? 'الملف' : 'افتح الكتاب'));
-      var places = j.fileId && open[j.fileId];
-      if (places) {
-        var rv = el('button', 'small plain', 'راجِع ' + count(places, 'موضعاً واحداً', 'موضعين', 'مواضع', 'موضعاً'));
-        rv.type = 'button';
-        rv.addEventListener('click', function () { openReview(j.fileId); });
-        links.appendChild(rv);
-      }
-      if (j.url || places) li.appendChild(links);
-      recent.appendChild(li);
-    });
-
+    renderNotices(s);
+    renderNow(s);
+    renderQueue(s);
     renderReviews(s);
-    LAST = s;
     renderBoxes(s);
+    renderRecent(s);
     renderHelper(s);
+    renderFoot(s);
+    renderFigs(s);
+    renderNav(s);
+  }
 
-    // Folders and token.
-    var links = el('div', 'links');
-    if (s.links.inbox) links.appendChild(link(s.links.inbox, 'مجلد «1- جديد»'));
-    if (s.links.ready) links.appendChild(link(s.links.ready, 'مجلد «3- جاهز»'));
-    if (s.links.problem) links.appendChild(link(s.links.problem, 'مجلد «5- مشكلة»'));
-    if (s.links.root) links.appendChild(link(s.links.root, 'كل المجلدات'));
-    foot.appendChild(links);
-    if (s.tokenExpires) {
-      var days = Math.floor((Date.parse(s.tokenExpires) - Date.parse(s.now)) / 86400000);
-      foot.appendChild(el('div', days <= 14 ? 'note warn' : '',
-        'صلاحية رمز GitHub حتى ' + when(s.tokenExpires) + (days <= 14 ? ' — جدّده قريباً (الخطوة 7 في الدليل).' : '.')));
+  // When the script last checked the folders: green within its 10 minutes, then gold, then red.
+  function renderSync(s) {
+    var kind = 'bad', text = 'تعذّر قراءة الحالة';
+    if (s && s.ok) {
+      if (!s.lastTick) {
+        text = 'لم يجرِ أي فحص بعد';
+      } else {
+        var m = minutesSince(s.lastTick, s.now);
+        kind = m <= 15 ? 'ok' : m <= 60 ? 'hold' : 'bad';
+        text = 'آخر فحص: قبل ' + duration(m);
+      }
+    }
+    ['sub', 'side-sync'].forEach(function (id) {
+      var box = document.getElementById(id);
+      box.textContent = '';
+      box.appendChild(el('span', 'dot is-' + (BUSY ? 'busy' : kind)));
+      box.appendChild(el('span', '', text));
+    });
+  }
+
+  function setBusy(on) {
+    BUSY = on;
+    renderSync(LAST);
+  }
+
+  function renderNotices(s) {
+    var box = document.getElementById('notices');
+    if (!s.setUp) box.appendChild(note('hold', 'الإعداد لم يكتمل. شغّل الدالة setup من المحرر (الخطوة 4 في دليل الإعداد).'));
+    if (!s.hasToken) box.appendChild(note('bad', 'رمز GitHub غير موجود. أضف GITHUB_TOKEN (الخطوة 3 في دليل الإعداد).'));
+    var days = tokenDays(s);
+    if (days !== null && days <= 14) {
+      box.appendChild(note(days <= 3 ? 'bad' : 'hold', 'صلاحية رمز GitHub تنتهي ' + (days < 1 ? 'اليوم' : 'بعد ' +
+        count(days, 'يوم واحد', 'يومين', 'أيام', 'يوماً')) + ' (' + when(s.tokenExpires) + '). جدّده قريباً (الخطوة 7 في الدليل).'));
     }
   }
 
-  function setMsg(text) { document.getElementById('msg').textContent = text; }
+  function tokenDays(s) {
+    if (!s.tokenExpires) return null;
+    return Math.max(0, Math.floor((Date.parse(s.tokenExpires) - Date.parse(s.now)) / 86400000));
+  }
 
-  function progress(done, total) {
-    var bar = el('div', 'bar');
-    var fill = el('span');
-    fill.style.width = (total ? Math.min(100, Math.round(100 * done / total)) : 0) + '%';
-    bar.appendChild(fill);
-    return bar;
+  // The active book's state, in the words used everywhere on the page.
+  function activeState(s, a) {
+    if (a.stage === 'queued') return { kind: 'wait', label: 'ينتظر البدء' };
+    if (a.paused && helperOn(s, a)) return { kind: 'run', label: 'نماذجك تعمل عليه' };
+    if (a.paused) return { kind: 'hold', label: 'متوقف حتى الغد' };
+    return { kind: 'run', label: 'يُحوَّل الآن' };
+  }
+
+  // The helper's models finish pages between runs; the run adds them to the book later.
+  function activePages(s, a) {
+    var hp = helperProgress(s, a);
+    if (hp && hp.finished > a.pagesDone) return { done: hp.finished, total: hp.need, helper: true };
+    return { done: a.pagesDone, total: a.pagesTotal, helper: false };
   }
 
   // What the helper's models have finished of a book: {need, finished}, or null.
@@ -447,61 +857,352 @@
   function helperOn(s, a) {
     var p = helperProgress(s, a), h = s.helper || {};
     if (!p || p.finished >= p.need || !h.connected) return false;
-    return Object.keys(h.chips || {}).some(function (id) { return h.chips[id].state === 'working'; });
+    return working(h) > 0;
   }
 
-  // The day at a glance: what runs, what waits, what needs the user.
-  function renderPills(s) {
-    var box = document.getElementById('pills');
-    box.textContent = '';
-    var add = function (cls, text) { box.appendChild(el('span', 'pill' + (cls ? ' ' + cls : ''), text)); };
-    var a = s.active;
-    if (a && a.paused && helperOn(s, a)) add('ok', 'نماذجك تعمل على: «' + a.title + '»');
-    else if (a) add(a.paused ? 'warn' : 'ok', (a.paused ? 'متوقف حتى الغد: «' : 'يُحوَّل الآن: «') + a.title + '»');
-    else add('', 'لا يوجد تحويل الآن');
-    if (s.queued) add('', 'في «1- جديد»: ' + s.queued);
-    if (s.parked && s.parked.length) add('', 'ينتظر في «2- قيد التحويل»: ' + s.parked.length);
-    var places = 0;
-    (s.reviews || []).forEach(function (b) { places += b.open || 0; });
-    if (places) add('warn', 'للمراجعة: ' + count(places, 'موضع واحد', 'موضعان', 'مواضع', 'موضعاً'));
-    var h = s.helper;
-    if (h && h.seen) add(h.connected ? 'ok' : 'warn', h.connected ? 'جهازك متصل' : 'جهازك غير متصل');
-    var resting = 0;
-    if (h && h.chips) Object.keys(h.chips).forEach(function (id) { if (/^(exhausted|failing)$/.test(h.chips[id].state)) resting++; });
-    if (resting) add('warn', 'نماذج ترتاح: ' + resting);
-    if (s.tokenExpires) {
-      var days = Math.floor((Date.parse(s.tokenExpires) - Date.parse(s.now)) / 86400000);
-      if (days <= 14) add('bad', 'رمز GitHub ينتهي بعد ' + Math.max(0, days) + ' يوم');
-    }
+  function working(h) {
+    var n = 0;
+    if (h && h.chips) Object.keys(h.chips).forEach(function (id) { if (h.chips[id].state === 'working') n++; });
+    return n;
   }
+
+  function resting(h) {
+    var n = 0;
+    if (h && h.chips) Object.keys(h.chips).forEach(function (id) { if (/^(exhausted|failing)$/.test(h.chips[id].state)) n++; });
+    return n;
+  }
+
+  function places(s) {
+    var n = 0;
+    (s.reviews || []).forEach(function (b) { if (b.note !== 'no-data') n += b.open || 0; });
+    return n;
+  }
+
+  // The book being converted.
+  function renderNow(s) {
+    var box = document.getElementById('now');
+    var a = s.active;
+    var top = el('div', 'hero-top');
+    var eb = el('div', 'hero-eb');
+    eb.appendChild(icon('book'));
+    eb.appendChild(el('span', '', 'الآن'));
+    top.appendChild(eb);
+    box.appendChild(top);
+    if (!a) {
+      box.appendChild(el('div', 'hero-title', 'لا يوجد كتاب قيد التحويل.'));
+      box.appendChild(el('div', 'hero-lines', s.queued ? 'يبدأ الكتاب التالي في الفحص القادم.'
+        : 'ضع ملف PDF أو DOCX أو TXT في مجلد «1- جديد»، فيبدأ تحويله خلال عشر دقائق.'));
+      if (s.links && s.links.inbox) {
+        var acts = el('div', 'hero-acts');
+        acts.appendChild(link(s.links.inbox, 'افتح «1- جديد»', 'btn btn-sm', 'folder'));
+        box.appendChild(acts);
+      }
+      return;
+    }
+    var state = activeState(s, a);
+    top.appendChild(st(state.kind, state.label));
+    box.appendChild(el('div', 'hero-title', '«' + a.title + '»'));
+    var lines = el('div', 'hero-lines');
+    var line = function (t) { lines.appendChild(el('div', '', t)); };
+    if (a.stage === 'queued') {
+      line('ينتظر بدء التحويل.');
+    } else if (a.paused && helperOn(s, a)) {
+      line('نماذجك على جهازك تعمل عليه الآن. النموذج المجاني وحده متوقف حتى الغد (انتهت حصته).');
+      line('يعود النموذج المجاني نحو ' + when(a.resumeAt) + '، أو قبل ذلك حين تنهي نماذجك صفحاتها. ما أُنجز محفوظ.');
+    } else if (a.paused) {
+      line('متوقف حتى الغد: انتهت حصة القراءة المجانية لهذا اليوم.');
+      line('يكمل تلقائياً نحو ' + when(a.resumeAt) + '. ما أُنجز محفوظ.');
+    } else {
+      line('قيد التحويل منذ ' + duration(a.minutes) + (a.attempts > 1 ? ' (المحاولة رقم ' + a.attempts + ')' : '') + '.');
+    }
+    box.appendChild(lines);
+    if (a.stage === 'queued' && a.lastError) {
+      box.appendChild(note('hold', 'تعذّر بدء التحويل على GitHub، وسأحاول مرة أخرى تلقائياً. (' + a.lastError + ')'));
+    }
+
+    var p = activePages(s, a);
+    if (p.total) {
+      var prog = el('div', 'prog');
+      var n = el('div', 'prog-n');
+      n.appendChild(el('b', '', String(p.done)));
+      n.appendChild(el('span', '', 'من ' + p.total + ' صفحة'));
+      n.appendChild(el('em', '', pct(p.done, p.total) + '%'));
+      prog.appendChild(n);
+      prog.appendChild(meter(p.done, p.total));
+      prog.appendChild(el('div', 'prog-s', p.helper
+        ? 'أنجزت نماذجك ' + p.done + ' من ' + p.total + ' صفحة، وتُضاف إلى الكتاب في التشغيل القادم.'
+        : 'أُنجزت ' + p.done + ' من ' + p.total + ' صفحة حتى آخر توقف.'));
+      box.appendChild(prog);
+    }
+
+    var facts = el('dl', 'facts');
+    var any = false;
+    var fact = function (k, v) {
+      facts.appendChild(el('dt', '', k));
+      facts.appendChild(el('dd', '', v));
+      any = true;
+    };
+    if (a.since && a.stage !== 'queued') fact('آخر تشغيل', when(a.since));
+    if (a.attempts > 1) fact('المحاولة', 'رقم ' + a.attempts);
+    if (a.paused) fact('يعود المجاني', when(a.resumeAt));
+    if (p.helper && a.pagesTotal) fact('في الكتاب الآن', a.pagesDone + ' من ' + a.pagesTotal + ' صفحة');
+    if (any) box.appendChild(facts);
+  }
+
+  // Books waiting: in «1- جديد», and parked in «2- قيد التحويل».
+  function renderQueue(s) {
+    var box = document.getElementById('queue');
+    var parked = s.parked || [];
+    var total = s.queued + parked.length;
+    box.appendChild(cardHead('inbox', 'في الانتظار', el('span', 'count', total ? String(total) : '')));
+    box.appendChild(el('div', 'sub', s.queued
+      ? count(s.queued, 'كتاب واحد', 'كتابان', 'كتب', 'كتاباً') + ' في «1- جديد»' + (s.queueNames && s.queueNames.length ? '، تبدأ بهذا الترتيب:' : '.')
+      : 'لا توجد كتب في «1- جديد».'));
+    if (s.queueNames && s.queueNames.length) {
+      var names = el('ol', 'ol');
+      s.queueNames.forEach(function (n) { names.appendChild(el('li', '', n)); });
+      if (s.queued > s.queueNames.length) names.appendChild(el('li', 'more', 'وكتب أخرى'));
+      box.appendChild(names);
+    }
+    if (s.uploading) {
+      box.appendChild(el('div', 'sub', 'منها ' + s.uploading + ' ما زال يُرفع أو أُضيف قبل دقائق.'));
+    }
+    if (s.unsupported && s.unsupported.length) {
+      box.appendChild(note('hold', 'ملفات لن تُحوَّل لأن نوعها غير مدعوم (المدعوم: PDF و DOCX و TXT): ' + s.unsupported.join('، ')));
+    }
+    if (!parked.length) return;
+    var h3 = el('div', 'h3');
+    h3.appendChild(icon('clock'));
+    h3.appendChild(el('span', '', 'ينتظر في «2- قيد التحويل» دون أن يوقف غيره'));
+    box.appendChild(h3);
+    var list = el('ul', 'rows');
+    parked.forEach(function (p) {
+      var li = el('li', 'rw');
+      var busy = p.stage === 'helper' && s.helper && s.helper.connected && working(s.helper) > 0;
+      var ic = el('div', 'rw-ic is-' + (busy ? 'ok' : 'hold'));
+      ic.appendChild(icon(p.stage === 'helper' ? 'cpu' : p.stage === 'readerWait' ? 'book' : 'scale'));
+      li.appendChild(ic);
+      var b = el('div', 'rw-b');
+      b.appendChild(el('div', 'rw-t', '«' + p.title + '»'));
+      b.appendChild(el('div', 'rw-m', p.stage === 'helper'
+        ? 'ينتظر نماذجك على الجهاز' + (p.need ? ': أنهت ' + p.finished + ' من ' + p.need + ' صفحة.' : '.')
+        : p.stage === 'readerWait' ? 'ينتظر تجدد رصيد القارئ الثاني، ثم يكمل قبل غيره.'
+        : 'ينتظر الحكّام حتى يتجدد رصيدهم.'));
+      li.appendChild(b);
+      li.appendChild(st(busy ? 'run' : 'hold', busy ? 'نماذجك تعمل عليه'
+        : p.stage === 'helper' ? 'ينتظر نماذجك' : p.stage === 'readerWait' ? 'ينتظر القارئ الثاني' : 'ينتظر الحكّام'));
+      if (p.stage === 'helper' && p.need) li.appendChild(meter(p.finished, p.need));
+      list.appendChild(li);
+    });
+    box.appendChild(list);
+  }
+
+  // Finished books.
+  function renderRecent(s) {
+    var list = document.getElementById('recent');
+    document.getElementById('recent-n').textContent = s.recent.length ? String(s.recent.length) : '';
+    if (!s.recent.length) list.appendChild(el('li', 'rw is-empty', 'لا شيء بعد.'));
+    var open = {};
+    (s.reviews || []).forEach(function (b) { if (b.open && b.note !== 'no-data') open[b.fileId] = b.open; });
+    s.recent.forEach(function (j) {
+      var li = el('li', 'rw');
+      var kind = j.stage === 'problem' ? 'bad' : j.incomplete ? 'hold' : j.final ? 'ok' : 'gold';
+      var ic = el('div', 'rw-ic is-' + kind);
+      ic.appendChild(icon(j.stage === 'problem' ? 'alert' : j.final ? 'check' : 'book'));
+      li.appendChild(ic);
+      var b = el('div', 'rw-b');
+      b.appendChild(el('div', 'rw-t', j.title));
+      var meta = [when(j.finishedAt)];
+      if (j.stage !== 'problem' && j.unsure > 0) {
+        meta.push(count(j.unsure, 'صفحة مشكوك فيها', 'صفحتان مشكوك فيهما', 'صفحات مشكوك فيها', 'صفحة مشكوك فيها'));
+      }
+      if (j.reason) meta.push(j.reason);
+      b.appendChild(el('div', 'rw-m', meta.join(' · ')));
+      li.appendChild(b);
+      var acts = el('div', 'rw-a');
+      acts.appendChild(st(kind, j.stage === 'problem' ? 'مشكلة' : j.incomplete ? 'جاهز، فيه صفحات ناقصة' : j.final ? 'مكتمل' : 'جاهز'));
+      if (j.url) acts.appendChild(link(j.url, j.stage === 'problem' ? 'الملف' : 'افتح الكتاب', 'btn btn-sm', 'external'));
+      var n = j.fileId && open[j.fileId];
+      if (n) {
+        acts.appendChild(button('btn-sm btn-gold', 'راجِع ' + count(n, 'موضعاً واحداً', 'موضعين', 'مواضع', 'موضعاً'),
+          function () { openReview(j.fileId); }, 'pen'));
+      }
+      li.appendChild(acts);
+      list.appendChild(li);
+    });
+  }
+
+  function renderFoot(s) {
+    var foot = document.getElementById('foot');
+    var add = function (href, text) { if (href) foot.appendChild(link(href, text, 'fchip', 'folder')); };
+    add(s.links.inbox, '1- جديد');
+    add(s.links.ready, '3- جاهز');
+    add(s.links.problem, '5- مشكلة');
+    add(s.links.root, 'كل المجلدات');
+    var words = [];
+    if (s.tokenExpires) words.push('صلاحية رمز GitHub حتى ' + when(s.tokenExpires) + '.');
+    words.push('تتحدّث الصفحة وحدها كل دقيقتين.');
+    foot.appendChild(el('div', 'foot-l', words.join(' ')));
+  }
+
+  // The day at a glance: each number opens its section.
+  function renderFigs(s) {
+    var box = document.getElementById('figs');
+    box.textContent = '';
+    var add = function (target, kind, ic, label, value, unit, small) {
+      var b = el('button', 'fig' + (kind ? ' is-' + kind : ''));
+      b.type = 'button';
+      var l = el('span', 'fig-l');
+      l.appendChild(icon(ic));
+      l.appendChild(el('span', '', label));
+      b.appendChild(l);
+      var v = el('span', 'fig-v', value);
+      if (unit) v.appendChild(el('small', '', unit));
+      b.appendChild(v);
+      b.appendChild(el('span', 'fig-s', small));
+      b.addEventListener('click', function () { jump(target); });
+      box.appendChild(b);
+    };
+    var a = s.active;
+    if (a) {
+      var state = activeState(s, a), p = activePages(s, a);
+      add('now', state.kind, 'book', 'الكتاب الحالي', p.total ? String(pct(p.done, p.total)) : '—', p.total ? '%' : '',
+        state.label + (p.total ? ' · ' + p.done + ' من ' + p.total : ''));
+    } else {
+      add('now', '', 'book', 'الكتاب الحالي', '—', '', 'لا يوجد تحويل الآن');
+    }
+    var parked = (s.parked || []).length;
+    add('queue', '', 'inbox', 'في الانتظار', String(s.queued + parked), '',
+      'في «1- جديد»: ' + s.queued + (parked ? ' · مركون: ' + parked : ''));
+    var n = places(s);
+    var books = (s.reviews || []).filter(function (b) { return b.open && b.note !== 'no-data'; }).length;
+    add(n ? 'reviews' : 'recent-card', n ? 'hold' : '', 'pen', 'للمراجعة', String(n), '',
+      n ? 'في ' + count(books, 'كتاب واحد', 'كتابين', 'كتب', 'كتاباً') : 'لا مواضع تنتظرك');
+    var h = s.helper;
+    if (h) {
+      var w = working(h), r = resting(h);
+      add(h.seen ? 'boxes' : 'helper', !h.seen ? '' : h.connected ? (w ? 'run' : 'ok') : 'bad', 'cpu', 'نماذجك تعمل', String(w), '',
+        (h.connected ? 'جهازك متصل' : h.seen ? 'جهازك غير متصل' : 'المساعد غير مثبّت') + (r ? ' · ' + count(r, 'نموذج يرتاح', 'نموذجان يرتاحان', 'نماذج ترتاح', 'نموذجاً يرتاح') : ''));
+    }
+    add('recent-card', '', 'archive', 'آخر الكتب', String(s.recent.length), '',
+      s.recent.length ? 'آخرها ' + when(s.recent[0].finishedAt) : 'لا شيء بعد');
+  }
+
+  // ------------------------------------------------------------------------
+  // The sections: in the side bar on a computer, as links at the top on a phone.
+  // ------------------------------------------------------------------------
+  var NAV = [];
+  var NAV_EL = [];
+
+  function renderNav(s) {
+    var h = s.helper;
+    var a = s.active;
+    var p = a ? activePages(s, a) : null;
+    var n = places(s);
+    var w = working(h);
+    var items = [
+      { id: 'now', name: 'الآن', ic: 'book', n: p && p.total ? pct(p.done, p.total) + '%' : '' },
+      { id: 'queue', name: 'في الانتظار', short: 'الانتظار', ic: 'inbox', n: s.queued + (s.parked || []).length || '' },
+      { id: 'reviews', name: 'مراجعة المشكوك فيه', short: 'المراجعة', ic: 'pen', n: n || '', hold: n > 0, off: !(s.reviews || []).length },
+      { id: 'boxes', name: 'نماذجك على الجهاز', short: 'نماذجك', ic: 'cpu', n: w || '', off: !h || !h.seen },
+      { id: 'recent-card', name: 'آخر الكتب', ic: 'archive', n: s.recent.length || '' },
+      { id: 'helper', name: 'المساعد على جهازك', short: 'المساعد', ic: 'monitor', dot: h && h.seen ? (h.connected ? 'ok' : 'bad') : '', off: !h }
+    ].filter(function (x) { return !x.off; });
+    NAV = items.map(function (x) { return x.id; });
+    NAV_EL = [];
+    var side = document.getElementById('side-nav');
+    var top = document.getElementById('jump');
+    side.textContent = '';
+    top.textContent = '';
+    items.forEach(function (x) {
+      var b = el('button', 'nav-i');
+      b.type = 'button';
+      b.appendChild(icon(x.ic));
+      b.appendChild(el('span', '', x.name));
+      if (x.dot) b.appendChild(el('span', 'nav-n')).appendChild(el('span', 'dot is-' + x.dot));
+      else if (x.n !== '') b.appendChild(el('span', 'nav-n' + (x.hold ? ' is-hold' : ''), String(x.n)));
+      b.addEventListener('click', function () { jump(x.id); });
+      side.appendChild(b);
+      NAV_EL.push({ id: x.id, node: b, base: 'nav-i' });
+
+      var c = el('button', 'jchip');
+      c.type = 'button';
+      c.appendChild(icon(x.ic));
+      c.appendChild(el('span', '', x.short || x.name));
+      if (x.dot) c.appendChild(el('span', 'dot is-' + x.dot));
+      else if (x.n !== '' && x.id !== 'now') c.appendChild(el('em', '', String(x.n)));
+      c.addEventListener('click', function () { jump(x.id); });
+      top.appendChild(c);
+      NAV_EL.push({ id: x.id, node: c, base: 'jchip' });
+    });
+    if (typeof requestAnimationFrame === 'function') requestAnimationFrame(spy);
+  }
+
+  function jump(id) {
+    var t = document.getElementById(id);
+    if (t && !t.hidden && t.scrollIntoView) t.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  // The section on screen is marked in the side bar and the links.
+  var SPY = 0;
+  function spy() {
+    SPY = 0;
+    var cur = NAV[0] || '';
+    NAV.forEach(function (id) {
+      var t = document.getElementById(id);
+      if (t && !t.hidden && t.getBoundingClientRect().top < 170) cur = id;
+    });
+    NAV_EL.forEach(function (x) { x.node.className = x.base + (x.id === cur ? ' is-on' : ''); });
+  }
+  document.addEventListener('scroll', function () {
+    if (!SPY && typeof requestAnimationFrame === 'function') SPY = requestAnimationFrame(spy);
+  }, { passive: true });
+
+  // ------------------------------------------------------------------------
+  // Refresh, check now, judges now.
+  // ------------------------------------------------------------------------
+  // One getStatus at a time; what waits for it runs when it is back.
+  var REFRESHING = null;
 
   function refresh(after) {
+    if (REFRESHING) {
+      if (after) REFRESHING.push(after);
+      return;
+    }
+    var waiting = REFRESHING = after ? [after] : [];
+    setBusy(true);
     google.script.run
       .withSuccessHandler(function (text) {
-        var s = null;
-        try { s = JSON.parse(text); } catch (e) { s = { ok: false, error: 'رد غير مفهوم' }; }
-        LAST = s;
-        render(s);
-        if (after) after();
+        REFRESHING = null;
+        BUSY = false;
+        render(parse(text));
+        waiting.forEach(function (f) { f(); });
       })
-      .withFailureHandler(function (err) { setMsg('تعذّر التحديث: ' + (err && err.message ? err.message : err)); })
+      .withFailureHandler(function (err) {
+        REFRESHING = null;
+        setBusy(false);
+        waiting.forEach(function (f) { f(); });
+        setMsg('تعذّر التحديث: ' + errText(err));
+      })
       .getStatus();
   }
 
   document.getElementById('check').addEventListener('click', function () {
     var btn = this;
     btn.disabled = true;
+    setBusy(true);
     setMsg('جارٍ الفحص…');
     google.script.run
       .withSuccessHandler(function (result) {
         refresh(function () {
           btn.disabled = false;
-          setMsg(result === 'busy' ? 'يوجد فحص يعمل الآن، حدّثت الصفحة.' : 'تم الفحص.');
+          setMsg(result === 'busy' ? 'يوجد فحص يعمل الآن، حدّثت الصفحة.' : 'تم الفحص.', result === 'busy' ? 'info' : 'ok');
         });
       })
       .withFailureHandler(function (err) {
         btn.disabled = false;
-        setMsg('تعذّر الفحص: ' + (err && err.message ? err.message : err));
+        setBusy(false);
+        setMsg('تعذّر الفحص: ' + errText(err));
       })
       .tick();
   });
@@ -518,41 +1219,46 @@
           setMsg(result === 'busy' ? 'يوجد فحص يعمل الآن، أعد المحاولة بعد دقيقة.'
             : result === 'nothing to judge' ? 'لا يوجد كتاب فيه صفحات مشكوك فيها تنتظر الحكّام.'
             : /(judging|refining) [\w-]+: dispatched/.test(result) ? 'بدأت مراجعة الحكّام. تصلك رسالة حين تنتهي الجولة.'
-            : 'تبدأ المراجعة بعد الكتاب الجاري تحويله أو الكتاب الجديد، تلقائياً.');
+            : 'تبدأ المراجعة بعد الكتاب الجاري تحويله أو الكتاب الجديد، تلقائياً.',
+            /dispatched/.test(result) ? 'ok' : 'info');
         });
       })
       .withFailureHandler(function (err) {
         btn.disabled = false;
-        setMsg('تعذّر الطلب: ' + (err && err.message ? err.message : err));
+        setMsg('تعذّر الطلب: ' + errText(err));
       })
       .judgeNow();
   });
+
+  // Keep the page current while it is open (not during a review or while typing), and when the user comes back to it.
+  function typing() {
+    var t = document.activeElement;
+    return !!t && /^(INPUT|SELECT|TEXTAREA)$/.test(t.tagName || '');
+  }
+  setInterval(function () { if (!document.hidden && !RV && !typing()) refresh(); }, 120000);
+  document.addEventListener('visibilitychange', function () { if (!document.hidden && !RV) refresh(); });
 
   // ------------------------------------------------------------------------
   // Review by hand: one place at a time, its page image zoomed on it, and two
   // big buttons. Answers are saved as they are given (one call at a time); "send"
   // asks for the book to be rebuilt with them.
   // ------------------------------------------------------------------------
-  var LAST = INITIAL;
   var RV = null;
   var RETRY = [3000, 10000, 30000];
   var HELP = ' إن تكرر الخطأ فافتح الرابط في نافذة خاصة بحسابك وحده.';
 
-  function parse(text) {
-    try { return JSON.parse(text) || { ok: false }; } catch (e) { return { ok: false, error: 'رد غير مفهوم' }; }
-  }
-
-  function errText(e) { return String(e && e.message ? e.message : e || 'خطأ غير معروف'); }
-
   function setRvMsg(text, bad) {
     var m = document.getElementById('rv-msg');
-    m.textContent = text;
-    m.className = bad ? 'note bad' : 'muted';
+    m.textContent = text || '';
+    m.className = bad ? 'is-bad' : '';
   }
 
   function show(which) {
     document.getElementById('home').hidden = which !== 'home';
     document.getElementById('review').hidden = which !== 'review';
+    document.getElementById('app').className = 'app' + (which === 'review' ? ' is-review' : '');
+    document.getElementById('toasts').className = 'toasts' + (which === 'review' ? ' is-high' : '');
+    if (typeof scrollTo === 'function') scrollTo(0, 0);
   }
 
   function remember(rv) {
@@ -575,33 +1281,34 @@
     var list = (s && s.reviews) || [];
     box.hidden = !list.length;
     if (!list.length) return;
-    box.appendChild(el('h2', '', 'مراجعة المشكوك فيه'));
-    box.appendChild(el('div', 'muted', 'مواضع لم تقدر النماذج على حسمها: ترى كل موضع على صورة الصفحة وتجيب بزر.'));
-    var ul = el('ul', 'books');
+    var n = places(s);
+    box.appendChild(cardHead('pen', 'مراجعة المشكوك فيه', el('span', 'count', n ? count(n, 'موضع واحد', 'موضعان', 'مواضع', 'موضعاً') : '')));
+    box.appendChild(el('div', 'sub', 'مواضع لم تقدر النماذج على حسمها: ترى كل موضع على صورة الصفحة وتجيب بزر.'));
+    var ul = el('ul', 'rows');
     list.forEach(function (b) {
-      var li = el('li');
-      var row = el('div', 'row');
-      row.appendChild(el('span', 'title', b.title));
-      if (b.open) row.appendChild(el('span', 'badge warn', count(b.open, 'موضع واحد', 'موضعان', 'مواضع', 'موضعاً')));
-      li.appendChild(row);
-      if (b.pending) li.appendChild(el('div', 'muted', 'أُرسلت إجاباتك، ويُحدَّث الكتاب قريباً وتصلك رسالة.'));
-      if (b.note === 'orig-gone') li.appendChild(el('div', 'note warn', 'أعِد الملف الأصلي إلى «4- الأصل» ثم اضغط «أرسل الآن».'));
-      if (b.note === 'no-data') li.appendChild(el('div', 'note warn', 'هذا الكتاب أقدم من خاصية المراجعة.'));
-      if (b.note === 'failed') li.appendChild(el('div', 'note bad', 'تعذّر تطبيق إجاباتك. اضغط «أرسل الآن» للمحاولة مرة أخرى.'));
-      var btns = el('div', 'row');
+      var li = el('li', 'rw');
+      var ic = el('div', 'rw-ic' + (b.open ? ' is-hold' : ''));
+      ic.appendChild(icon(b.pending ? 'refresh' : 'pen'));
+      li.appendChild(ic);
+      var body = el('div', 'rw-b');
+      body.appendChild(el('div', 'rw-t', b.title));
+      if (b.pending) body.appendChild(el('div', 'rw-m', 'أُرسلت إجاباتك، ويُحدَّث الكتاب قريباً وتصلك رسالة.'));
+      else if (b.saved) body.appendChild(el('div', 'rw-m', count(b.saved, 'إجابة محفوظة', 'إجابتان محفوظتان', 'إجابات محفوظة', 'إجابة محفوظة') + ' لم تُرسل بعد.'));
+      if (b.note === 'orig-gone') body.appendChild(note('hold', 'أعِد الملف الأصلي إلى «4- الأصل» ثم اضغط «أرسل الآن».'));
+      if (b.note === 'no-data') body.appendChild(note('hold', 'هذا الكتاب أقدم من خاصية المراجعة.'));
+      if (b.note === 'failed') body.appendChild(note('bad', 'تعذّر تطبيق إجاباتك. اضغط «أرسل الآن» للمحاولة مرة أخرى.'));
+      li.appendChild(body);
+      var acts = el('div', 'rw-a');
+      if (b.pending) acts.appendChild(st('run', 'يُحدَّث'));
       if (b.open && b.note !== 'no-data') {
-        var open = el('button', 'small', 'راجِع');
-        open.type = 'button';
-        open.addEventListener('click', function () { openReview(b.fileId); });
-        btns.appendChild(open);
+        acts.appendChild(button('btn-sm btn-gold', 'راجِع ' + count(b.open, 'موضعاً واحداً', 'موضعين', 'مواضع', 'موضعاً'),
+          function () { openReview(b.fileId); }, 'pen'));
       }
       if (!b.pending && (b.saved > 0 || b.note === 'orig-gone' || b.note === 'failed')) {
-        var send = el('button', 'small plain', 'أرسل الآن' + (b.saved ? ' (' + b.saved + ')' : ''));
-        send.type = 'button';
-        send.addEventListener('click', function () { sendReview(b.fileId, send); });
-        btns.appendChild(send);
+        var send = button('btn-sm', 'أرسل الآن' + (b.saved ? ' (' + b.saved + ')' : ''), function () { sendReview(b.fileId, send); }, 'check');
+        acts.appendChild(send);
       }
-      li.appendChild(btns);
+      li.appendChild(acts);
       ul.appendChild(li);
     });
     box.appendChild(ul);
@@ -613,6 +1320,7 @@
     document.getElementById('rv-title').textContent = '';
     document.getElementById('rv-count').textContent = '';
     document.getElementById('rv-body').textContent = '';
+    document.getElementById('rv-saving').textContent = '';
     setRvMsg('جارٍ التحميل…');
     google.script.run
       .withSuccessHandler(function (text) {
@@ -628,7 +1336,7 @@
     var flat = [];
     r.pages.forEach(function (p) { p.items.forEach(function (it) { flat.push({ page: p, item: it }); }); });
     RV = { fileId: fileId, title: r.title, flat: flat, at: 0, done: {}, images: {}, waiting: {},
-      outbox: {}, saving: null, tries: 0, saved: r.saved || 0, sent: r.sent || r.running };
+      outbox: {}, saving: null, tries: 0, saved: r.saved || 0, sent: r.sent || r.running, keys: null, editing: null };
     // Answers not saved last time (the page was closed or offline) go out now.
     var left = remembered(fileId);
     Object.keys(left).forEach(function (id) { RV.outbox[id] = left[id]; RV.done[id] = left[id].verdict; });
@@ -655,10 +1363,14 @@
     var it = cur.item, page = cur.page;
     var body = document.getElementById('rv-body');
     body.textContent = '';
+    RV.editing = null;
     document.getElementById('rv-count').textContent =
       'الموضع ' + (RV.at + 1) + ' من ' + RV.flat.length + ' · صفحة ' + page.page + ' من الأصل';
     document.getElementById('rv-bar').style.width = Math.round(100 * RV.at / RV.flat.length) + '%';
+    var grid = el('div', 'rv-grid');
 
+    // The page image, zoomed on the place.
+    var pic = el('div', 'rv-pic');
     var zoom = el('div', 'zoom');
     zoom.dir = 'ltr';
     var holder = el('div', 'page');
@@ -666,35 +1378,38 @@
     img.alt = 'صفحة ' + page.page;
     holder.appendChild(img);
     zoom.appendChild(holder);
-    body.appendChild(zoom);
-    var under = el('div', 'row');
-    var note = el('span', 'muted', page.img ? 'تحميل الصورة…' : 'لا توجد صورة لهذه الصفحة.');
-    under.appendChild(note);
+    pic.appendChild(zoom);
+    var under = el('div', 'pic-u');
+    var hint = el('span', '', page.img ? 'تحميل الصورة…' : 'لا توجد صورة لهذه الصفحة.');
+    under.appendChild(hint);
     var full = false;
-    var whole = el('button', 'small plain', 'الصفحة كاملة');
-    whole.type = 'button';
-    whole.addEventListener('click', function () {
+    var whole = button('btn-sm btn-quiet', 'الصفحة كاملة', function () {
       full = !full;
-      whole.textContent = full ? 'كبّر على الموضع' : 'الصفحة كاملة';
+      setLabel(whole, full ? 'كبّر على الموضع' : 'الصفحة كاملة');
       view(zoom, holder, page, it, full);
-    });
+    }, 'maximize', 'Z');
     if (it.located) under.appendChild(whole);
-    body.appendChild(under);
+    pic.appendChild(under);
+    grid.appendChild(pic);
     if (page.img) {
       image(page.img, function (src) {
         if (!RV || RV.flat[RV.at] !== cur) return;
-        if (!src) { note.textContent = 'تعذّر تحميل الصورة.'; return; }
+        if (!src) { hint.textContent = 'تعذّر تحميل الصورة.'; return; }
         img.src = src;
-        note.textContent = it.kind === 'page' ? 'لم أجد موضعاً محدداً في هذه الصفحة؛ قارنها كلها بالأصل.'
+        hint.textContent = it.kind === 'page' ? 'لم أجد موضعاً محدداً في هذه الصفحة؛ قارنها كلها بالأصل.'
           : it.located ? 'الموضع في المربع الأحمر.' : 'لم أحدد الموضع بدقة: ابحث عنه في الصفحة.';
         view(zoom, holder, page, it, full);
       });
     }
     prefetch();
 
-    var head = el('h2', '', 'ما قرأه البرنامج');
+    // What was read, and the answers.
+    var side = el('div', 'rv-side');
+    var head = el('div', 'h3');
+    head.appendChild(icon('book'));
+    head.appendChild(el('span', '', 'ما قرأه البرنامج'));
     if (it.hint === 'likely-ok') head.appendChild(el('span', 'tag', 'غالباً صحيح'));
-    body.appendChild(head);
+    side.appendChild(head);
     var read = el('div', 'read');
     read.dir = 'auto';
     if (it.kind === 'page') {
@@ -705,36 +1420,33 @@
       else read.appendChild(el('mark', '', plain(it.core)));
       read.appendChild(el('span', 'ctx', plain(it.after)));
     }
-    body.appendChild(read);
+    side.appendChild(read);
     if (isGap(it) && it.options.length) {
-      body.appendChild(el('div', 'muted', 'السطر في الصورة كما قرأته قراءة أخرى: ' + short(it.options[0].text, 200)));
+      side.appendChild(el('div', 'alt', 'السطر في الصورة كما قرأته قراءة أخرى: ' + short(it.options[0].text, 200)));
     }
 
     var choices = el('div', 'choices');
-    var keepText = it.hint === 'header' ? '✓ هذه ترويسة، لا شيء ناقص'
-      : isGap(it) ? '✓ شكّك في غير محله — لا شيء ناقص' : '✓ شكّك في غير محله — القراءة صحيحة';
-    var keep = el('button', 'ok', keepText);
-    keep.type = 'button';
-    keep.addEventListener('click', function () { answer('keep'); });
-    var fix = el('button', '', '✎ شكّك في محله — الصواب هو…');
-    fix.type = 'button';
-    fix.addEventListener('click', function () { editor(cur, choices); });
-    choices.appendChild(keep);
-    choices.appendChild(fix);
-    body.appendChild(choices);
+    var keepText = it.hint === 'header' ? 'هذه ترويسة، لا شيء ناقص'
+      : isGap(it) ? 'شكّك في غير محله — لا شيء ناقص' : 'شكّك في غير محله — القراءة صحيحة';
+    var keep = function () { answer('keep'); };
+    var fix = function () { editor(cur, choices); };
+    choices.appendChild(button('btn-lg btn-ok', keepText, keep, 'check', '1'));
+    choices.appendChild(button('btn-lg btn-gold', 'شكّك في محله — الصواب هو…', fix, 'pen', '2'));
+    side.appendChild(choices);
 
     var minor = el('div', 'minor');
-    [['تخطَّ', function () { go(RV.at + 1); }],
-     ['السابق', function () { go(RV.at - 1); }],
-     ['كل ما بقي في هذه الصفحة صحيح', rest]].forEach(function (b) {
-      var btn = el('button', 'small plain', b[0]);
-      btn.type = 'button';
-      if (b[0] === 'السابق') btn.disabled = RV.at === 0;
-      btn.addEventListener('click', b[1]);
-      minor.appendChild(btn);
-    });
-    body.appendChild(minor);
-    if (RV.done[it.id]) body.appendChild(el('div', 'muted', 'أجبت عن هذا الموضع؛ إجابتك الجديدة تحل محل السابقة.'));
+    var prev = button('btn-sm', 'السابق', function () { go(RV.at - 1); }, 'back', '→');
+    prev.disabled = RV.at === 0;
+    minor.appendChild(prev);
+    minor.appendChild(button('btn-sm', 'تخطَّ', function () { go(RV.at + 1); }, 'next', '←'));
+    minor.appendChild(button('btn-sm', 'كل ما بقي في هذه الصفحة صحيح', rest, 'checks', '3'));
+    side.appendChild(minor);
+    if (RV.done[it.id]) side.appendChild(el('div', 'rv-note', 'أجبت عن هذا الموضع؛ إجابتك الجديدة تحل محل السابقة.'));
+    grid.appendChild(side);
+    body.appendChild(grid);
+    RV.keys = { keep: keep, fix: fix, rest: rest,
+      next: function () { go(RV.at + 1); }, prev: function () { go(RV.at - 1); },
+      whole: function () { if (it.located) whole.click(); } };
     updateSend();
   }
 
@@ -793,18 +1505,21 @@
     var it = cur.item;
     choices.textContent = '';
     var box = el('div');
-    box.appendChild(el('div', 'muted', isGap(it) ? 'اكتب السطر الساقط كما في الصورة:'
+    box.appendChild(el('div', 'ed-l', isGap(it) ? 'اكتب السطر الساقط كما في الصورة:'
       : it.kind === 'page' ? 'صحّح نص الصفحة كما في الصورة:' : 'اكتب الصواب مكان الكلام المظلل:'));
-    var ta = el('textarea');
+    var ta = el('textarea', 'in');
     ta.dir = 'rtl';
     var first = isGap(it) ? (it.options[0] ? it.options[0].text : '') : it.core;
     if (isGap(it) && it.hint === 'heading') first = '## ' + first;
     ta.value = first;
     var fills = el('div', 'fills');
     var fill = function (label, value) {
-      var b = el('button', '', label);
+      var b = el('button', 'fill', label);
       b.type = 'button';
-      b.addEventListener('click', function () { ta.value = value; });
+      b.addEventListener('click', function () {
+        ta.value = value;
+        if (ta.focus) ta.focus();
+      });
       fills.appendChild(b);
     };
     it.options.forEach(function (o) {
@@ -813,7 +1528,7 @@
     });
     if (String(it.core).trim()) fill('احذف المظلل', '');
     if (isGap(it)) {
-      var h = el('button', '', 'عنوان');
+      var h = el('button', 'fill', 'عنوان');
       h.type = 'button';
       h.addEventListener('click', function () {
         ta.value = /^#+\s/.test(ta.value) ? ta.value.replace(/^#+\s*/, '') : '## ' + ta.value;
@@ -822,15 +1537,14 @@
     }
     box.appendChild(fills);
     box.appendChild(ta);
-    var save = el('button', '', 'حفظ والتالي');
-    save.type = 'button';
-    save.addEventListener('click', function () { answer('fix', ta.value); });
-    var cancel = el('button', 'plain', 'إلغاء');
-    cancel.type = 'button';
-    cancel.addEventListener('click', showItem);
-    box.appendChild(save);
-    box.appendChild(cancel);
+    var save = function () { answer('fix', ta.value); };
+    var acts = el('div', 'ed-acts');
+    acts.appendChild(button('btn-gold', 'حفظ والتالي', save, 'check', 'Ctrl+Enter'));
+    acts.appendChild(button('btn-quiet', 'إلغاء', showItem, '', 'Esc'));
+    box.appendChild(acts);
     choices.appendChild(box);
+    RV.editing = { save: save, cancel: showItem };
+    if (ta.focus) ta.focus();
   }
 
   function answer(verdict, text) {
@@ -839,7 +1553,7 @@
     var a = { page: cur.page.page, kind: it.kind, fp: it.fp, before: it.before, core: it.core, after: it.after,
       pos: it.pos, base: cur.page.base, place: it.place || '', verdict: verdict };
     if (verdict === 'fix') a.text = String(text || '');
-    queue(it.id, a);
+    enqueue(it.id, a);
     RV.done[it.id] = verdict;
     go(RV.at + 1);
   }
@@ -849,7 +1563,7 @@
     var page = RV.flat[RV.at].page.page;
     var left = RV.flat.filter(function (x) { return x.page.page === page && !RV.done[x.item.id]; }).slice(0, 25);
     if (left.length) {
-      queue('p' + page + '-rest-' + Date.now().toString(36), { kind: 'rest', page: page, verdict: 'keep',
+      enqueue('p' + page + '-rest-' + Date.now().toString(36), { kind: 'rest', page: page, verdict: 'keep',
         ids: left.map(function (x) { return x.item.id; }), fps: left.map(function (x) { return x.item.fp; }) });
       left.forEach(function (x) { RV.done[x.item.id] = 'keep'; });
     }
@@ -865,28 +1579,30 @@
   }
 
   function finished() {
+    RV.keys = null;
+    RV.editing = null;
     var body = document.getElementById('rv-body');
     body.textContent = '';
     document.getElementById('rv-bar').style.width = '100%';
     document.getElementById('rv-count').textContent = '';
     var answered = RV.flat.filter(function (x) { return RV.done[x.item.id]; }).length;
     var skipped = RV.flat.length - answered;
-    body.appendChild(el('div', 'big', RV.flat.length ? 'انتهت المواضع.' : 'لا مواضع تنتظر المراجعة الآن.'));
-    if (RV.flat.length) body.appendChild(el('div', '', 'اضغط «أرسل التصحيحات» في الأسفل ليُحدَّث الكتاب بإجاباتك.'));
+    var box = el('div', 'rv-done');
+    box.appendChild(icon('checks'));
+    box.appendChild(el('b', '', RV.flat.length ? 'انتهت المواضع.' : 'لا مواضع تنتظر المراجعة الآن.'));
+    if (RV.flat.length) box.appendChild(el('p', '', 'اضغط «أرسل التصحيحات» في الأسفل ليُحدَّث الكتاب بإجاباتك.'));
     if (skipped) {
-      body.appendChild(el('div', 'muted', 'تخطّيت ' + count(skipped, 'موضعاً واحداً', 'موضعين', 'مواضع', 'موضعاً') +
+      box.appendChild(el('p', '', 'تخطّيت ' + count(skipped, 'موضعاً واحداً', 'موضعين', 'مواضع', 'موضعاً') +
         '؛ تجدها مرة أخرى في المراجعة القادمة.'));
-      var back = el('button', 'small plain', 'ارجع إلى أول موضع لم تُجب عنه');
-      back.type = 'button';
-      back.addEventListener('click', function () {
+      box.appendChild(button('btn-sm', 'ارجع إلى أول موضع لم تُجب عنه', function () {
         for (var k = 0; k < RV.flat.length; k++) if (!RV.done[RV.flat[k].item.id]) return go(k);
-      });
-      body.appendChild(back);
+      }, 'back'));
     }
+    body.appendChild(box);
     updateSend();
   }
 
-  function queue(id, a) {
+  function enqueue(id, a) {
     RV.outbox[id] = a;
     remember(RV);
     flush(RV);
@@ -936,14 +1652,16 @@
     btn.textContent = 'أرسل التصحيحات' + (n ? ' (' + n + ')' : '');
     btn.armed = false;
     btn.disabled = waiting > 0 || !n;
-    info.className = RV.stuck ? 'note bad' : 'muted';
-    info.textContent = RV.stuck ? 'لم تُحفظ ' + waiting + ' إجابة (' + RV.stuck + ').' + HELP
+    info.className = RV.stuck ? 'is-bad' : '';
+    info.textContent = '';
+    var text = RV.stuck ? 'لم تُحفظ ' + waiting + ' إجابة (' + RV.stuck + ').' + HELP
       : waiting ? 'جارٍ حفظ ' + waiting + ' إجابة…' : n ? 'إجاباتك محفوظة.' : '';
+    if (text) {
+      info.appendChild(el('span', 'dot is-' + (RV.stuck ? 'bad' : waiting ? 'busy' : 'ok')));
+      info.appendChild(el('span', '', text));
+    }
     if (RV.stuck && waiting) {
-      var again = el('button', 'small plain', 'أعد المحاولة');
-      again.type = 'button';
-      again.addEventListener('click', function () { RV.stuck = false; RV.tries = 0; flush(RV); });
-      info.appendChild(again);
+      info.appendChild(button('btn-sm', 'أعد المحاولة', function () { RV.stuck = false; RV.tries = 0; flush(RV); }, 'refresh'));
     }
   }
 
@@ -954,19 +1672,21 @@
         var r = parse(text);
         btn.disabled = false;
         if (!r.ok) {
-          (after ? setRvMsg : setMsg)(r.busy ? 'يوجد فحص يعمل الآن، أعد المحاولة بعد دقيقة.' : 'تعذّر الإرسال: ' + (r.error || '') + '.' + HELP, true);
+          var why = r.busy ? 'يوجد فحص يعمل الآن، أعد المحاولة بعد دقيقة.' : 'تعذّر الإرسال: ' + (r.error || '') + '.' + HELP;
+          if (after) setRvMsg(why, true); else setMsg(why, r.busy ? 'info' : 'bad');
           return;
         }
         var text2 = r.started ? 'بدأ تحديث الكتاب بإجاباتك، وتصلك رسالة حين يجهز (نحو نصف ساعة).'
           : r.nothing ? 'لا إجابات جديدة لإرسالها.'
           : 'يبدأ تحديث الكتاب تلقائياً بعد أن ينتهي الكتاب الجاري تحويله.';
         if (after) after();
-        setMsg(text2);
+        setMsg(text2, r.nothing ? 'info' : 'ok');
         refresh();
       })
       .withFailureHandler(function (err) {
         btn.disabled = false;
-        (after ? setRvMsg : setMsg)('تعذّر الإرسال: ' + errText(err) + '.' + HELP, true);
+        var why = 'تعذّر الإرسال: ' + errText(err) + '.' + HELP;
+        if (after) setRvMsg(why, true); else setMsg(why);
       })
       .sendReview(fileId);
   }
@@ -992,10 +1712,6 @@
     sendReview(fileId, btn, function () { show('home'); RV = null; });
   });
 
-  // Keep the page current while it is open (not during a review), and when the user comes back to it.
-  setInterval(function () { if (!document.hidden && !RV) refresh(); }, 120000);
-  document.addEventListener('visibilitychange', function () { if (!document.hidden && !RV) refresh(); });
-
   // ------------------------------------------------------------------------
   // The helper on the user's computer: its install line, its own lines and
   // buttons (from its status file), and the requests it has not finished.
@@ -1008,55 +1724,54 @@
     var h = s.helper;
     box.hidden = !h;
     if (!h) return;
-    box.appendChild(el('h2', '', 'المساعد على جهازك'));
-    if (h.error) box.appendChild(el('div', 'note warn', h.error));
-    if (h.connected) {
-      box.appendChild(el('div', '', 'متصل (آخر اتصال قبل ' + duration(h.minutes) + ').'));
-    } else if (h.seen) {
-      box.appendChild(el('div', '', 'غير متصل منذ ' + duration(h.minutes) + '. يعمل حين يكون جهازك مفتوحاً.'));
-    } else {
-      box.appendChild(el('div', '', 'لم يُثبَّت بعد على جهازك.'));
-    }
+    box.appendChild(cardHead('monitor', 'المساعد على جهازك',
+      h.connected ? st('ok', 'متصل') : h.seen ? st('bad', 'غير متصل') : st('wait', 'غير مثبّت')));
+    box.appendChild(el('div', 'sub', h.connected ? 'آخر اتصال قبل ' + duration(h.minutes) + '.'
+      : h.seen ? 'غير متصل منذ ' + duration(h.minutes) + '. يعمل حين يكون جهازك مفتوحاً.'
+      : 'لم يُثبَّت بعد على جهازك. ثبّته مرة واحدة بالسطر في الأسفل.'));
+    if (h.error) box.appendChild(note('hold', h.error));
     (h.lines || []).forEach(function (l) {
-      var d = el('div', l.kind ? 'note ' + l.kind : '', l.text);
-      if (l.link && /^https:\/\/(drive|docs)\.google\.com\//.test(l.link)) {
-        d.appendChild(document.createTextNode(' '));
-        d.appendChild(link(l.link, l.linkText || 'افتح'));
-      }
+      var d = l.kind ? note(l.kind === 'bad' ? 'bad' : 'hold', l.text) : el('div', 'hl', l.text);
+      if (l.link && /^https:\/\/(drive|docs)\.google\.com\//.test(l.link)) (d.p || d).appendChild(link(l.link, l.linkText || 'افتح'));
       box.appendChild(d);
     });
     (h.pending || []).forEach(function (p) {
-      box.appendChild(el('div', 'note warn', (p.id === h.busy ? 'يعمل الآن: ' : 'ينتظر المساعد: ') +
-        (p.label || p.action) + ' (طُلب ' + when(p.at) + ')'));
+      var r = el('div', 'req');
+      r.appendChild(st(p.id === h.busy ? 'run' : 'wait', p.id === h.busy ? 'يعمل الآن' : 'ينتظر المساعد'));
+      r.appendChild(el('span', '', (p.label || p.action) + ' · طُلب ' + when(p.at)));
+      box.appendChild(r);
     });
     (h.actions || []).forEach(function (a) { box.appendChild(helperAction(a)); });
 
     if (h.line) {
       var holder = box;
       if (h.seen) {
-        holder = el('details');
-        holder.appendChild(el('summary', 'muted', 'إعادة التثبيت'));
+        holder = el('details', 'inst');
+        holder.appendChild(el('summary', '', 'إعادة التثبيت'));
         box.appendChild(holder);
+      } else {
+        var h3 = el('div', 'h3');
+        h3.appendChild(icon('terminal'));
+        h3.appendChild(el('span', '', 'التثبيت'));
+        box.appendChild(h3);
       }
-      holder.appendChild(el('div', 'muted', 'على جهازك: افتح PowerShell، والصق هذا السطر، ثم اضغط Enter (مرة واحدة فقط):'));
-      var input = el('input', 'helper-line');
+      holder.appendChild(el('div', 'sub', 'على جهازك: افتح PowerShell، والصق هذا السطر، ثم اضغط Enter (مرة واحدة فقط):'));
+      var input = el('input', 'code');
       input.readOnly = true;
       input.value = h.line;
       input.addEventListener('focus', function () { input.select(); });
       holder.appendChild(input);
-      var copy = el('button', 'small', 'انسخ السطر');
-      copy.type = 'button';
-      copy.addEventListener('click', function () {
+      var copy = button('btn-sm btn-gold', 'انسخ السطر', function () {
         input.focus();
         input.select();
-        var done = function () { copy.textContent = 'نُسخ ✓'; };
+        var done = function () { setLabel(copy, 'نُسخ ✓'); };
         try {
           if (document.execCommand('copy')) return done();
         } catch (e) { /* try the other way */ }
         if (navigator.clipboard) navigator.clipboard.writeText(h.line).then(done, function () {
-          copy.textContent = 'انسخه يدوياً (Ctrl+C)';
+          setLabel(copy, 'انسخه يدوياً (Ctrl+C)');
         });
-      });
+      }, 'copy');
       holder.appendChild(copy);
     }
   }
@@ -1064,12 +1779,12 @@
   // One button of the helper's, with its choices: {id, label, button, options: [{name, label, choices: [{value, label}]}]}.
   function helperAction(a) {
     var box = el('div', 'act');
-    box.appendChild(el('div', 'title', String(a.label || '')));
-    if (a.note) box.appendChild(el('div', 'muted', String(a.note)));
+    box.appendChild(el('b', '', String(a.label || '')));
+    if (a.note) box.appendChild(el('div', 'sub', String(a.note)));
     var selects = [];
     (Array.isArray(a.options) ? a.options : []).forEach(function (o) {
       var lab = el('label', '', String(o.label || ''));
-      var sel = el('select');
+      var sel = el('select', 'in');
       (Array.isArray(o.choices) ? o.choices : []).forEach(function (c) {
         var opt = el('option', '', String(c.label || c.value));
         opt.value = String(c.value);
@@ -1082,9 +1797,7 @@
       box.appendChild(lab);
       selects.push({ name: String(o.name), sel: sel });
     });
-    var btn = el('button', '', String(a.button || 'ابدأ'));
-    btn.type = 'button';
-    btn.addEventListener('click', function () {
+    var btn = button('btn-gold', String(a.button || 'ابدأ'), function () {
       var choices = {};
       var words = [String(a.label || '')];
       selects.forEach(function (x) {
@@ -1106,17 +1819,20 @@
           setMsg('تعذّر الطلب: ' + errText(err));
         })
         .helperRequest(JSON.stringify({ action: String(a.id), choices: choices, label: words.join(' — ') }));
-    });
+    }, 'play');
     box.appendChild(btn);
     return box;
   }
 
   // ------------------------------------------------------------------------
   // The boxes: the models on the user's computer go to work when moved from the
-  // right box of a section to its left box (dragged on a computer, or tapped).
+  // right box of a section to its left box (dragged on a computer, or tapped), and
+  // stop when moved back.
   // ------------------------------------------------------------------------
   var BOXES = null;
   var BOXES_SAVING = 0;
+  var TIMES_OPEN = {};
+  var DRAFT = {};
   var SECTIONS = [
     { key: 'transcribe', title: 'التفريغ',
       note: 'يقرأ النموذج المجاني الصفحة مرة، ونماذجك تقرؤها ثانيةً وتحسم الخلاف. إن نفد المجاني قامت نماذجك بالعمل كله.',
@@ -1125,6 +1841,7 @@
       note: 'نماذجك تحكم على مواضع الشك. التصحيح الكبير لا يُطبَّق إلا إذا اتفق عليه نموذجان، وإجابتك تغلب دائماً.',
       empty: 'فارغ: المواضع تبقى لك.' }
   ];
+  var CHIP_STATES = { working: ['run', 'يعمل'], idle: ['wait', 'ينتظر عملاً'], exhausted: ['hold', 'يرتاح'], failing: ['bad', 'يتعثّر'] };
 
   function modelOf(models, id) {
     for (var i = 0; i < models.length; i++) if (models[i].id === id) return models[i];
@@ -1143,28 +1860,32 @@
       BOXES = { transcribe: (b.transcribe || []).slice(), review: (b.review || []).slice(),
         times: JSON.parse(JSON.stringify(b.times || {})) };
     }
-    box.appendChild(el('h2', '', 'نماذجك على الجهاز'));
+    box.appendChild(cardHead('cpu', 'نماذجك على الجهاز', st(h.connected ? 'ok' : 'bad', h.connected ? 'جهازك متصل' : 'جهازك غير متصل')));
+    box.appendChild(el('div', 'sub', 'نماذج اشتراكاتك تعمل حين يكون عندك فائض: انقل النموذج إلى «تعمل الآن» فيبدأ، وأوقفه متى شئت.'));
     if (!h.connected) {
-      box.appendChild(el('div', 'note warn', 'جهازك غير متصل الآن، فلا يعمل أي نموذج حتى تفتحه.' +
+      box.appendChild(note('hold', 'جهازك غير متصل الآن، فلا يعمل أي نموذج حتى تفتحه.' +
         (BOXES.transcribe.length ? ' إن طال الغياب أكمل النموذج المجاني الكتب وحده.' : '')));
     }
     var models = h.models || [];
     if (!models.length) {
-      box.appendChild(el('div', 'muted', 'لم يجد المساعد بعد أي برنامج نماذج على جهازك.'));
+      box.appendChild(note('hold', 'لم يجد المساعد بعد أي برنامج نماذج على جهازك.'));
       return;
     }
-    SECTIONS.forEach(function (sec) { box.appendChild(boxSection(sec, models, h, s)); });
+    SECTIONS.forEach(function (sec) { box.appendChild(boxSection(sec, models, h)); });
   }
 
-  function boxSection(sec, models, h, s) {
-    var wrap = el('div', 'sec');
-    wrap.appendChild(el('div', 'title', sec.title));
-    wrap.appendChild(el('div', 'muted', sec.note));
+  function boxSection(sec, models, h) {
+    var wrap = el('div', 'bx');
     var on = BOXES[sec.key];
+    var head = el('div', 'bx-h');
+    head.appendChild(el('h3', '', sec.title));
+    head.appendChild(on.length ? st('run', count(on.length, 'نموذج يعمل', 'نموذجان يعملان', 'نماذج تعمل', 'نموذجاً يعمل')) : st('wait', 'لا نموذج'));
+    wrap.appendChild(head);
+    wrap.appendChild(el('div', 'sub', sec.note));
     var pair = el('div', 'pair');
     // Right to left: the first box is on the right.
-    var offBox = dropBox(sec.key, false, 'المتاحة: المس النموذج أو اسحبه إلى «تعمل الآن»');
-    var onBox = dropBox(sec.key, true, 'تعمل الآن');
+    var offBox = dropBox(sec.key, false, 'grid', 'المتاحة', 'المس النموذج أو اسحبه إلى «تعمل الآن»');
+    var onBox = dropBox(sec.key, true, 'play', 'تعمل الآن', '');
     // The models waiting in the right box, in rows under the name of their program.
     var groups = [];
     models.forEach(function (m) {
@@ -1175,55 +1896,90 @@
       g.list.push(m);
     });
     groups.forEach(function (g) {
-      var group = el('div', 'group');
-      if (g.tool) group.appendChild(el('div', 'gname', g.tool));
-      var row = el('div', 'chips');
-      g.list.forEach(function (m) { row.appendChild(chip(sec.key, m, false, h)); });
+      var group = el('div', 'grp');
+      if (g.tool) group.appendChild(el('div', 'grp-n', g.tool));
+      var row = el('div', 'mchips');
+      g.list.forEach(function (m) { row.appendChild(chip(sec.key, m)); });
       group.appendChild(row);
       offBox.appendChild(group);
     });
+    if (!groups.length) offBox.appendChild(el('div', 'box-e', 'كل نماذجك في «تعمل الآن».'));
     on.forEach(function (id) {
-      var m = modelOf(models, id) || { id: id, label: id, tool: '', gone: true };
-      onBox.appendChild(chip(sec.key, m, true, h));
-      var c = (h.chips || {})[id];
-      if (c && /^(exhausted|failing)$/.test(c.state) && !m.gone) onBox.appendChild(retryButton(m));
-      if (!m.gone) onBox.appendChild(timeRows(m));
+      onBox.appendChild(modelCard(sec.key, modelOf(models, id) || { id: id, label: id, tool: '', gone: true }, h));
     });
-    if (!on.length) onBox.appendChild(el('div', 'muted', sec.empty));
+    if (!on.length) {
+      var e = el('div', 'box-e');
+      e.appendChild(icon('next'));
+      e.appendChild(el('span', '', sec.empty));
+      onBox.appendChild(e);
+    }
     pair.appendChild(offBox);
     pair.appendChild(onBox);
     wrap.appendChild(pair);
     return wrap;
   }
 
-  function chip(sec, m, isOn, h) {
-    var b = el('button', 'chip' + (m.warn ? ' warn' : ''));
-    b.type = 'button';
-    b.draggable = true;
-    // Latin names keep their own direction inside the Arabic page.
-    b.appendChild(el('span', '', m.label)).dir = 'auto';
-    // In the right box the program's name is above its row.
-    if (m.tool && isOn) b.appendChild(el('small', '', m.tool));
-    if (m.warn) b.appendChild(el('small', 'warntext', '⚠ ' + m.warn));
-    if (isOn) {
-      var c = (h.chips || {})[m.id];
-      var text = m.gone ? 'لم يعد على جهازك'
-        : c && c.text ? c.text
-        : h.connected ? 'يبدأ خلال دقيقة أو دقيقتين' : 'ينتظر أن يتصل جهازك';
-      b.appendChild(el('small', c ? c.state : '', text));
-    }
-    b.addEventListener('click', function () { moveChip(sec, m.id, !isOn); });
-    b.addEventListener('dragstart', function (e) {
-      e.dataTransfer.setData('text/plain', JSON.stringify({ id: m.id }));
+  function draggable(node, id) {
+    node.draggable = true;
+    node.addEventListener('dragstart', function (e) {
+      e.dataTransfer.setData('text/plain', JSON.stringify({ id: id }));
       e.dataTransfer.effectAllowed = 'move';
     });
+  }
+
+  // A model waiting in the right box: a tap starts it.
+  function chip(sec, m) {
+    var b = el('button', 'mchip' + (m.warn ? ' is-warn' : ''));
+    b.type = 'button';
+    b.title = 'شغّل ' + m.label;
+    b.appendChild(icon('plus'));
+    // Latin names keep their own direction inside the Arabic page.
+    b.appendChild(el('span', '', m.label)).dir = 'auto';
+    if (m.warn) b.appendChild(el('small', '', '⚠ ' + m.warn));
+    b.addEventListener('click', function () { moveChip(sec, m.id, true); });
+    draggable(b, m.id);
     return b;
   }
 
+  // A model at work: what it does, when it may work, and a button to stop it.
+  function modelCard(sec, m, h) {
+    var c = (h.chips || {})[m.id];
+    var t = BOXES.times[m.id] || {};
+    var now = Date.now();
+    var startAt = Date.parse(t.start || ''), stopAt = Date.parse(t.stop || '');
+    var ended = isFinite(stopAt) && stopAt <= now, later = isFinite(startAt) && startAt > now;
+    var state = m.gone ? ['bad', 'غير موجود']
+      : ended ? ['wait', 'انتهى وقته']
+      : later ? ['wait', 'مجدول']
+      : c ? CHIP_STATES[c.state] || ['wait', 'ينتظر']
+      : ['wait', h.connected ? 'يبدأ قريباً' : 'ينتظر جهازك'];
+    var d = el('div', 'mcard is-' + state[0]);
+    draggable(d, m.id);
+    var top = el('div', 'mc-h');
+    var name = el('div', 'mc-n');
+    name.appendChild(el('b', '', m.label)).dir = 'auto';
+    if (m.tool) name.appendChild(el('span', '', m.tool));
+    top.appendChild(name);
+    var stop = button('btn-sm btn-quiet', 'أوقف', function () { moveChip(sec, m.id, false); }, 'stop');
+    stop.title = 'يكمل ما بين يديه ثم يتوقف';
+    top.appendChild(stop);
+    d.appendChild(top);
+    var line = el('div', 'mc-s');
+    line.appendChild(st(state[0], state[1]));
+    line.appendChild(el('span', '', m.gone ? 'لم يعد على جهازك'
+      : ended ? 'انتهى الوقت الذي حددته له.'
+      : later ? 'يبدأ ' + when(t.start) + '.'
+      : c && c.text ? c.text
+      : h.connected ? 'يبدأ خلال دقيقة أو دقيقتين' : 'ينتظر أن يتصل جهازك'));
+    d.appendChild(line);
+    if (m.warn) d.appendChild(el('div', 'mc-w', '⚠ ' + m.warn));
+    if (c && /^(exhausted|failing)$/.test(c.state) && !m.gone) d.appendChild(retryButton(m));
+    if (!m.gone) d.appendChild(schedule(sec, m, t));
+    return d;
+  }
+
   function retryButton(m) {
-    var b = el('button', 'small plain retry', 'أعد المحاولة الآن');
-    b.type = 'button';
-    b.addEventListener('click', function () {
+    var b = button('btn-sm', 'أعد المحاولة الآن', function () {
       b.disabled = true;
       setMsg('جارٍ الطلب…');
       google.script.run
@@ -1237,15 +1993,19 @@
           setMsg('تعذّر الطلب: ' + errText(err));
         })
         .helperRequest(JSON.stringify({ action: 'retry', choices: { model: m.id }, label: 'أعد المحاولة: ' + m.label }));
-    });
+    }, 'refresh');
     return b;
   }
 
-  function dropBox(sec, isOn, head) {
-    var base = 'box' + (isOn ? ' on' : '');
+  function dropBox(sec, isOn, ic, head, hint) {
+    var base = 'box' + (isOn ? ' is-on' : '');
     var d = el('div', base);
-    d.appendChild(el('div', 'boxhead', head));
-    d.addEventListener('dragover', function (e) { e.preventDefault(); d.className = base + ' over'; });
+    var hd = el('div', 'box-h');
+    hd.appendChild(icon(ic));
+    hd.appendChild(el('span', '', head));
+    if (hint) hd.appendChild(el('small', '', hint));
+    d.appendChild(hd);
+    d.addEventListener('dragover', function (e) { e.preventDefault(); d.className = base + ' is-over'; });
     d.addEventListener('dragleave', function () { d.className = base; });
     d.addEventListener('drop', function (e) {
       e.preventDefault();
@@ -1257,15 +2017,33 @@
     return d;
   }
 
-  // When a model may work: "يبدأ" and "يتوقف" at a day and a clock time.
+  // When a model may work: "يبدأ" and "يتوقف" at a day and a clock time, folded under one line.
   var DAYS = ['اليوم', 'غداً', 'بعد غد'];
 
-  function timeRows(m) {
-    var t = BOXES.times[m.id] || {};
-    var box = el('div', 'times');
-    box.appendChild(timeRow(m.id, 'start', 'يبدأ', t.start, 'الآن'));
-    box.appendChild(timeRow(m.id, 'stop', 'يتوقف', t.stop, 'لا يتوقف'));
-    return box;
+  function timeText(iso, key) {
+    var at = Date.parse(iso || '');
+    if (isFinite(at) && at > Date.now()) return when(iso);
+    return key === 'stop' ? (isFinite(at) ? 'توقّف' : 'لا يتوقف') : 'الآن';
+  }
+
+  function schedule(sec, m, t) {
+    var wrap = el('div', 'mc-t');
+    var line = el('div', 'mc-ts');
+    line.appendChild(icon('clock'));
+    line.appendChild(el('span', '', 'يبدأ: ' + timeText(t.start, 'start') + ' · يتوقف: ' + timeText(t.stop, 'stop')));
+    var key = sec + '|' + m.id;
+    line.appendChild(button('btn-sm btn-quiet', TIMES_OPEN[key] ? 'إخفاء' : 'المواعيد', function () {
+      TIMES_OPEN[key] = !TIMES_OPEN[key];
+      renderBoxes(LAST);
+    }, 'calendar'));
+    wrap.appendChild(line);
+    if (TIMES_OPEN[key]) {
+      var box = el('div', 'times');
+      box.appendChild(timeRow(m.id, 'start', 'يبدأ', t.start));
+      box.appendChild(timeRow(m.id, 'stop', 'يتوقف', t.stop));
+      wrap.appendChild(box);
+    }
+    return wrap;
   }
 
   function dayName(offset) {
@@ -1279,36 +2057,37 @@
     }
   }
 
-  function timeRow(id, key, label, iso, none) {
+  function timeRow(id, key, label, iso) {
     var row = el('div', 'trow');
-    var at = Date.parse(iso || '');
-    var later = isFinite(at) && at > Date.now();
-    row.appendChild(el('span', '', label + ': ' + (later ? when(iso) : key === 'stop' && isFinite(at) ? 'توقّف' : none) + '. غيّره إلى'));
-    var day = el('select');
+    row.appendChild(el('span', '', label));
+    var fields = el('div', 'tin');
+    // What the user chose but has not set yet survives the page's own refresh.
+    var dk = id + '|' + key;
+    var draft = DRAFT[dk] || {};
+    var day = el('select', 'in');
     for (var i = 0; i < 8; i++) { var o = el('option', '', dayName(i)); o.value = String(i); day.appendChild(o); }
-    row.appendChild(day);
-    row.appendChild(el('span', '', 'الساعة'));
-    var clock = el('input');
+    if (draft.day) day.value = draft.day;
+    day.addEventListener('change', function () { (DRAFT[dk] = DRAFT[dk] || {}).day = day.value; });
+    var clock = el('input', 'in');
     clock.type = 'time';
-    row.appendChild(clock);
-    var set = el('button', 'small plain', 'حدّد');
-    set.type = 'button';
-    set.addEventListener('click', function () {
+    if (draft.clock) clock.value = draft.clock;
+    clock.addEventListener('input', function () { (DRAFT[dk] = DRAFT[dk] || {}).clock = clock.value; });
+    fields.appendChild(day);
+    fields.appendChild(clock);
+    fields.appendChild(button('btn-sm', 'حدّد', function () {
       var hm = /^(\d{1,2}):(\d{2})/.exec(clock.value || '');
-      if (!hm) return setMsg('اختر الساعة.');
+      if (!hm) return setMsg('اختر الساعة.', 'info');
       var d = new Date();
       d.setDate(d.getDate() + Number(day.value));
       d.setHours(Number(hm[1]), Number(hm[2]), 0, 0);
-      if (d.getTime() <= Date.now()) return setMsg('هذا الوقت مضى، اختر وقتاً بعد الآن.');
+      if (d.getTime() <= Date.now()) return setMsg('هذا الوقت مضى، اختر وقتاً بعد الآن.', 'info');
+      delete DRAFT[dk];
       setTime(id, key, d.toISOString());
-    });
-    row.appendChild(set);
-    if (isFinite(at)) {
-      var clear = el('button', 'small plain', key === 'start' ? 'ابدأ الآن' : 'بلا توقف');
-      clear.type = 'button';
-      clear.addEventListener('click', function () { setTime(id, key, ''); });
-      row.appendChild(clear);
+    }));
+    if (isFinite(Date.parse(iso || ''))) {
+      fields.appendChild(button('btn-sm btn-quiet', key === 'start' ? 'ابدأ الآن' : 'بلا توقف', function () { setTime(id, key, ''); }));
     }
+    row.appendChild(fields);
     return row;
   }
 
@@ -1349,12 +2128,217 @@
         var r = parse(text);
         if (!r.ok) return undo(r.error || '');
         BOXES_SAVING--;
+        // The page's copy of the status follows, so drawing the boxes again keeps the change.
+        if (LAST && LAST.helper) LAST.helper.boxes = copyBoxes(next);
         setMsg(done);
       })
       .withFailureHandler(function (err) { undo(errText(err)); })
       .setHelperBoxes(JSON.stringify(next));
   }
 
+  // ------------------------------------------------------------------------
+  // Windows: the themes and the keyboard shortcuts.
+  // ------------------------------------------------------------------------
+  var MODAL = null;
+
+  function openModal(title, body) {
+    closeModal();
+    var layer = el('div', 'ml');
+    var scrim = el('div', 'ml-scrim');
+    scrim.addEventListener('click', closeModal);
+    layer.appendChild(scrim);
+    var m = el('div', 'modal');
+    m.setAttribute('role', 'dialog');
+    m.setAttribute('aria-modal', 'true');
+    m.setAttribute('aria-label', title);
+    var head = el('div', 'modal-h');
+    head.appendChild(el('h3', '', title));
+    var x = button('btn-quiet btn-icon', '', closeModal, 'x');
+    x.setAttribute('aria-label', 'إغلاق');
+    head.appendChild(x);
+    m.appendChild(head);
+    var b = el('div', 'modal-b');
+    b.appendChild(body);
+    m.appendChild(b);
+    layer.appendChild(m);
+    document.body.appendChild(layer);
+    MODAL = { layer: layer, back: document.activeElement };
+    x.focus();
+  }
+
+  function closeModal() {
+    if (!MODAL) return;
+    var back = MODAL.back;
+    if (MODAL.layer.parentNode) MODAL.layer.parentNode.removeChild(MODAL.layer);
+    MODAL = null;
+    if (back && back.focus) back.focus();
+  }
+
+  // Each theme with its colours for the little preview: page, side bar, text, gold.
+  var THEMES = [
+    { id: 'auto', name: 'تلقائي (يتبع الجهاز)' },
+    { id: 'gold', name: 'الأسود والذهبي', c: ['#18181a', '#0a0a0a', '#f5f1e8', '#c9a55c'] },
+    { id: 'navy', name: 'الكحلي', c: ['#10223a', '#0b1a2e', '#f5f1e8', '#c9a55c'] },
+    { id: 'green', name: 'الأخضر', c: ['#112720', '#0d1f1a', '#f5f1e8', '#c9a55c'] },
+    { id: 'burgundy', name: 'العنّابي', c: ['#221016', '#1a0a0f', '#f5f1e8', '#c9a55c'] },
+    { id: 'charcoal', name: 'الفحمي', c: ['#292929', '#1c1c1c', '#f2efe9', '#b89968'] },
+    { id: 'slate', name: 'الرصاصي', c: ['#283540', '#1e2830', '#eef1f3', '#cdb887'] },
+    { id: 'espresso', name: 'البنّي', c: ['#2f221a', '#1f1611', '#f4ece1', '#c9935b'] },
+    { id: 'ivory', name: 'العاجي', c: ['#f7f3eb', '#efe8da', '#2a1f0f', '#8a6d2a'] },
+    { id: 'white', name: 'الأبيض', c: ['#f4f4f2', '#ffffff', '#1d1d1f', '#9a7a35'] },
+    { id: 'parchment', name: 'الورق القديم', c: ['#f2e9d6', '#e7dbc1', '#36261a', '#7a5424'] },
+    { id: 'linen', name: 'الكتّاني', c: ['#f5f3ed', '#e6e5e1', '#1f242b', '#2f4b6e'] }
+  ];
+
+  function theme() {
+    try { return localStorage.getItem('cb-ui') || 'auto'; } catch (e) { return 'auto'; }
+  }
+
+  function applyTheme(id) {
+    document.documentElement.setAttribute('data-ui', id);
+  }
+
+  function setTheme(id) {
+    applyTheme(id);
+    try { localStorage.setItem('cb-ui', id); } catch (e) { /* kept for this visit only */ }
+  }
+
+  function preview(t) {
+    var p = el('span', 'th-p');
+    var c = t.c || ['#18181a', '#f7f3eb', '#f5f1e8', '#c9a55c'];
+    p.style.background = t.c ? c[0] : 'linear-gradient(135deg, #18181a 50%, #f7f3eb 50%)';
+    var add = function (css) {
+      var i = el('i');
+      Object.keys(css).forEach(function (k) { i.style[k] = css[k]; });
+      p.appendChild(i);
+    };
+    if (t.c) add({ top: '0', bottom: '0', right: '0', width: '24%', borderRadius: '0', background: c[1] });
+    add({ top: '12px', right: '32%', width: '42%', height: '3px', background: t.c ? c[2] : '#c9a55c' });
+    add({ top: '20px', right: '32%', width: '54%', height: '1px', background: c[3] });
+    add({ top: '27px', right: '32%', width: '36%', height: '2px', background: t.c ? c[2] : '#c9a55c', opacity: '.5' });
+    add({ bottom: '9px', right: '32%', width: '24%', height: '7px', background: c[3] });
+    return p;
+  }
+
+  function showThemes() {
+    var cur = theme();
+    var body = el('div');
+    body.appendChild(el('div', 'sub', 'يُحفظ اختيارك في هذا المتصفح. «تلقائي» يتبع وضع جهازك: الأسود والذهبي ليلاً، والعاجي نهاراً.'));
+    var grid = el('div', 'th-grid');
+    var tiles = [];
+    THEMES.forEach(function (t) {
+      var b = el('button', 'th' + (t.id === cur ? ' is-on' : ''));
+      b.type = 'button';
+      b.setAttribute('aria-pressed', t.id === cur ? 'true' : 'false');
+      b.appendChild(preview(t));
+      b.appendChild(el('span', 'th-n', t.name));
+      b.addEventListener('click', function () {
+        setTheme(t.id);
+        tiles.forEach(function (x) {
+          x.node.className = 'th' + (x.id === t.id ? ' is-on' : '');
+          x.node.setAttribute('aria-pressed', x.id === t.id ? 'true' : 'false');
+        });
+      });
+      tiles.push({ id: t.id, node: b });
+      grid.appendChild(b);
+    });
+    body.appendChild(grid);
+    openModal('المظهر', body);
+  }
+
+  var KEYS_HOME = [['F', 'افحص الآن'], ['J', 'اعرض على الحكّام الآن'], ['R', 'حدّث الصفحة'], ['V', 'افتح أول مراجعة'],
+    ['1 – 6', 'انتقل إلى قسم'], ['T', 'المظهر'], ['?', 'الاختصارات']];
+  var KEYS_REVIEW = [['1', 'القراءة صحيحة'], ['2', 'صحّح'], ['3', 'كل ما بقي في الصفحة صحيح'], ['←', 'تخطَّ'], ['→', 'السابق'],
+    ['Z', 'الصفحة كاملة أو الموضع'], ['Ctrl+Enter', 'احفظ التصحيح'], ['Esc', 'ألغِ التصحيح أو ارجع']];
+
+  function showKeys() {
+    var body = el('div');
+    body.appendChild(el('div', 'sub', 'تعمل الحروف بأي لغة للوحة المفاتيح، ولا تعمل وأنت تكتب في خانة.'));
+    var keys = el('div', 'keys');
+    [['في الصفحة الرئيسية', KEYS_HOME], ['في شاشة المراجعة', KEYS_REVIEW]].forEach(function (g) {
+      var col = el('div');
+      col.appendChild(el('h4', '', g[0]));
+      var ul = el('ul', 'kl');
+      g[1].forEach(function (k) {
+        var li = el('li');
+        li.appendChild(el('span', '', k[1]));
+        li.appendChild(el('kbd', '', k[0]));
+        ul.appendChild(li);
+      });
+      col.appendChild(ul);
+      keys.appendChild(col);
+    });
+    body.appendChild(keys);
+    openModal('الاختصارات', body);
+  }
+
+  // Keys by their place on the keyboard (e.code), so an Arabic layout works too.
+  document.addEventListener('keydown', function (e) {
+    var t = e.target || {};
+    var inField = /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName || '') || t.isContentEditable;
+    if (e.key === 'Escape') {
+      if (MODAL) return closeModal();
+      if (RV && RV.editing) return RV.editing.cancel();
+      if (RV && !inField) return closeReview();
+      return;
+    }
+    if (RV && RV.editing && e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault();
+      return RV.editing.save();
+    }
+    if (inField || MODAL || e.ctrlKey || e.metaKey || e.altKey) return;
+    var code = e.code || '';
+    if (e.key === '?' || e.key === '؟' || (code === 'Slash' && e.shiftKey)) {
+      e.preventDefault();
+      return showKeys();
+    }
+    var digit = /^(Digit|Numpad)([1-9])$/.exec(code);
+    if (RV) {
+      var k = RV.editing ? null : RV.keys;
+      if (!k) return;
+      var act = digit && digit[2] === '1' ? k.keep : digit && digit[2] === '2' ? k.fix : digit && digit[2] === '3' ? k.rest
+        : code === 'ArrowLeft' ? k.next : code === 'ArrowRight' ? k.prev : code === 'KeyZ' ? k.whole : null;
+      if (act) { e.preventDefault(); act(); }
+      return;
+    }
+    if (digit) {
+      var id = NAV[Number(digit[2]) - 1];
+      if (id) { e.preventDefault(); jump(id); }
+      return;
+    }
+    var click = function (id) { var b = document.getElementById(id); if (b && !b.disabled) b.click(); };
+    if (code === 'KeyF') click('check');
+    else if (code === 'KeyJ') click('judge');
+    else if (code === 'KeyR') refresh(function () { setMsg('حُدّثت الصفحة.'); });
+    else if (code === 'KeyT') showThemes();
+    else if (code === 'KeyV') {
+      var first = ((LAST && LAST.reviews) || []).filter(function (b) { return b.open && b.note !== 'no-data'; })[0];
+      if (first) openReview(first.fileId); else setMsg('لا مواضع تنتظر المراجعة.', 'info');
+    } else return;
+    e.preventDefault();
+  });
+
+  // The icons and buttons written in the page itself.
+  function wire() {
+    if (!document.querySelectorAll) return;
+    var list = document.querySelectorAll('[data-ic]');
+    for (var i = 0; i < list.length; i++) {
+      var node = list[i], name = node.getAttribute('data-ic');
+      if (/\b(mark|ch-ic)\b/.test(node.className)) {
+        node.appendChild(icon(name));
+      } else {
+        node.className = (node.className ? node.className + ' ' : '') + 'ic';
+        node.innerHTML = svg(name);
+      }
+    }
+    var acts = document.querySelectorAll('[data-act]');
+    for (var j = 0; j < acts.length; j++) {
+      acts[j].addEventListener('click', acts[j].getAttribute('data-act') === 'theme' ? showThemes : showKeys);
+    }
+  }
+
+  applyTheme(theme());
+  wire();
   render(INITIAL);
   if (INITIAL && INITIAL.openReview) openReview(INITIAL.openReview);
 </script>

@@ -1460,8 +1460,11 @@ test('the page script renders running, paused, finished and error states', () =>
     set textContent(v) { this.own = String(v); this.kids = []; },
     get textContent() { return [this.own].concat(this.kids.map((k) => k.textContent)).join(' '); },
     appendChild(c) { this.kids.push(c); return c; },
+    setAttribute() {},
     addEventListener() {}
   });
+  const find = (n, cls) => n.className.split(' ').indexOf(cls) >= 0 ? n
+    : (n.kids || []).reduce((hit, k) => hit || find(k, cls), null);
   const chain = { withSuccessHandler: () => chain, withFailureHandler: () => chain, getStatus() {}, tick() {} };
   const sandbox = {
     document: {
@@ -1469,6 +1472,7 @@ test('the page script renders running, paused, finished and error states', () =>
       createElement: node,
       createTextNode: (t) => ({ textContent: String(t) }),
       getElementById: (id) => byId[id] || (byId[id] = node('div')),
+      documentElement: node('html'),
       addEventListener() {}
     },
     google: { script: { run: chain } },
@@ -1490,7 +1494,7 @@ test('the page script renders running, paused, finished and error states', () =>
   sandbox.render(JSON.parse(env.ctx.getStatus()));
   text = byId.now.textContent;
   assert.ok(/متوقف حتى الغد/.test(text) && /200 من 800/.test(text), text);
-  assert.strictEqual(byId.now.kids.find((k) => k.className === 'bar').kids[0].style.width, '25%');
+  assert.strictEqual(find(byId.now, 'meter').kids[0].style.width, '25%');
 
   sandbox.render({ ok: false, error: 'boom' });
   assert.ok(/تعذّر قراءة الحالة: boom/.test(byId.now.textContent));
@@ -1886,6 +1890,7 @@ function pageSandbox(env, initial) {
       set textContent(v) { this.own = String(v); this.kids = []; },
       get textContent() { return [this.own].concat(this.kids.map((k) => k.textContent)).join(' '); },
       appendChild(c) { this.kids.push(c); return c; },
+      setAttribute(k, v) { this[k] = String(v); },
       addEventListener(type, fn) { (this.handlers[type] = this.handlers[type] || []).push(fn); }
     };
     return n;
@@ -1910,11 +1915,13 @@ function pageSandbox(env, initial) {
       createElement: node,
       createTextNode: (t) => ({ textContent: String(t) }),
       getElementById: (id) => byId[id] || (byId[id] = node('div')),
+      documentElement: node('html'),
       addEventListener() {}
     },
     google: { script: { get run() { return run(); } } },
     setInterval: () => 0,
     setTimeout: (fn, ms) => { timers.push({ fn, ms }); return timers.length; },
+    clearTimeout: () => {},
     localStorage: { getItem: (k) => (k in storage ? storage[k] : null), setItem: (k, v) => { storage[k] = String(v); } },
     Date, JSON, Math, String, Object, Array
   };
@@ -1933,7 +1940,7 @@ function pageSandbox(env, initial) {
       // The static elements are separate nodes here (no HTML parsing): look in all of them.
       const roots = root ? [root] : Object.values(byId);
       let b = null;
-      roots.some((r) => (b = find(r, (x) => x.tag === 'button' && x.own.indexOf(text) >= 0)));
+      roots.some((r) => (b = find(r, (x) => x.tag === 'button' && x.textContent.indexOf(text) >= 0)));
       assert.ok(b, 'button ' + text);
       return b;
     },
@@ -2036,7 +2043,7 @@ test('the review screen: one place at a time, each button gives the right answer
   assert.deepStrictEqual(sr.map((c) => c.args), [[id]]);
   P.answer(sr[0], { ok: true, started: true });
   assert.strictEqual(P.byId.home.hidden, false);
-  assert.ok(/بدأ تحديث الكتاب/.test(P.byId.msg.textContent));
+  assert.ok(/بدأ تحديث الكتاب/.test(P.byId.toasts.textContent));
 });
 
 test('a link with ?review= opens the review at once; saves that keep failing ask the user', () => {
@@ -2449,7 +2456,7 @@ test('the page: models move between the boxes with a tap (or a drag), are saved,
   const page = pageSandbox(env, status(env));
   const boxes = page.byId.boxes;
   assert.strictEqual(boxes.hidden, false);
-  const sections = boxes.kids.filter((k) => k.className === 'sec');
+  const sections = boxes.kids.filter((k) => k.className === 'bx');
   assert.strictEqual(sections.length, 2);
   const pair = (sec) => sec.kids.find((k) => k.className === 'pair');
   const chipIn = (box, text) => {
@@ -2463,7 +2470,7 @@ test('the page: models move between the boxes with a tap (or a drag), are saved,
   const [offT, onT] = pair(sections[0]).kids;
   assert.ok(/Gemini 3\.8 Flash/.test(onT.textContent) && /يقرأ ص 12/.test(onT.textContent), onT.textContent);
   assert.ok(/Grok 4\.7/.test(offT.textContent) && /يستنفد الحدود/.test(offT.textContent));
-  assert.deepStrictEqual(offT.kids.filter((k) => k.className === 'group').map((g) => g.kids[0].textContent),
+  assert.deepStrictEqual(offT.kids.filter((k) => k.className === 'grp').map((g) => g.kids[0].textContent),
     ['Grok Build', 'Antigravity'], 'in rows under the name of their program');
   assert.ok(/فارغ: المواضع تبقى لك/.test(pair(sections[1]).kids[1].textContent));
 
@@ -2471,26 +2478,30 @@ test('the page: models move between the boxes with a tap (or a drag), are saved,
   page.click(chipIn(offT, 'Grok 4.7'));
   const call = page.pending('setHelperBoxes')[0];
   assert.deepStrictEqual(JSON.parse(call.args[0]), { transcribe: [GEMINI, GROK], review: [], times: {} });
-  let now = pair(boxes.kids.filter((k) => k.className === 'sec')[0]).kids[1];
+  let now = pair(boxes.kids.filter((k) => k.className === 'bx')[0]).kids[1];
   assert.ok(/Grok 4\.7/.test(now.textContent), 'shown in the left box at once');
   page.answer(call, env.ctx.setHelperBoxes(call.args[0]));
   assert.deepStrictEqual(JSON.parse(env.props.get('HELPER_BOXES')).transcribe, [GEMINI, GROK]);
 
-  // A start time: Grok begins tomorrow at 14:30 (local time).
+  // A start time: Grok begins tomorrow at 14:30 (local time). The times open under its card.
   const find = (node, pred) => { if (pred(node)) return node; for (const k of node.kids || []) { const f = find(k, pred); if (f) return f; } return null; };
-  let onBox = pair(boxes.kids.filter((k) => k.className === 'sec')[0]).kids[1];
-  const times = onBox.kids.filter((k) => k.className === 'times')[1];
-  const startRow = times.kids[0];
-  const daySel = startRow.kids.find((k) => k.tag === 'select');
-  const clock = startRow.kids.find((k) => k.tag === 'input');
+  const cardOf = (box, text) => box.kids.find((k) => /\bmcard\b/.test(k.className) && k.textContent.indexOf(text) >= 0);
+  const buttonIn = (root, text) => find(root, (k) => k.tag === 'button' && k.textContent.trim() === text);
+  let onBox = pair(boxes.kids.filter((k) => k.className === 'bx')[0]).kids[1];
+  assert.ok(/يبدأ: الآن · يتوقف: لا يتوقف/.test(cardOf(onBox, 'Grok 4.7').textContent));
+  page.click(buttonIn(cardOf(onBox, 'Grok 4.7'), 'المواعيد'));
+  onBox = pair(boxes.kids.filter((k) => k.className === 'bx')[0]).kids[1];
+  const startRow = find(cardOf(onBox, 'Grok 4.7'), (k) => k.className === 'times').kids[0];
+  const daySel = find(startRow, (k) => k.tag === 'select');
+  const clock = find(startRow, (k) => k.tag === 'input');
   daySel.value = '0';
   clock.value = '00:00';
-  page.click(find(startRow, (k) => k.tag === 'button' && k.own === 'حدّد'));
+  page.click(buttonIn(startRow, 'حدّد'));
   assert.strictEqual(page.pending('setHelperBoxes').length, 0, 'a time already past is not saved');
-  assert.ok(/مضى/.test(page.byId.msg.textContent));
+  assert.ok(/مضى/.test(page.byId.toasts.textContent));
   daySel.value = '1';
   clock.value = '14:30';
-  page.click(find(startRow, (k) => k.tag === 'button' && k.own === 'حدّد'));
+  page.click(buttonIn(startRow, 'حدّد'));
   const timed = JSON.parse(page.pending('setHelperBoxes')[0].args[0]);
   const expect = new Date();
   expect.setDate(expect.getDate() + 1);
@@ -2499,16 +2510,20 @@ test('the page: models move between the boxes with a tap (or a drag), are saved,
   page.answer(page.pending('setHelperBoxes')[0], env.ctx.setHelperBoxes(JSON.stringify(timed)));
   assert.strictEqual(JSON.parse(env.props.get('HELPER_BOXES')).times[GROK].start, timed.times[GROK].start);
 
-  // Saving fails: it goes back.
-  now = pair(boxes.kids.filter((k) => k.className === 'sec')[0]).kids[1];
-  page.click(chipIn(now, 'Gemini 3.8 Flash'));
+  now = pair(boxes.kids.filter((k) => k.className === 'bx')[0]).kids[1];
+  const grok = cardOf(now, 'Grok 4.7').textContent;
+  assert.ok(/مجدول/.test(grok) && /يبدأ: [^·]*:30/.test(grok) && !/يبدأ خلال دقيقة/.test(grok), grok);
+
+  // Its stop button sends Gemini back; saving fails: it comes back.
+  page.click(buttonIn(cardOf(now, 'Gemini 3.8 Flash'), 'أوقف'));
+  assert.deepStrictEqual(JSON.parse(page.pending('setHelperBoxes')[0].args[0]).transcribe, [GROK]);
   page.fail(page.pending('setHelperBoxes')[0], 'offline');
-  now = pair(boxes.kids.filter((k) => k.className === 'sec')[0]).kids[1];
+  now = pair(boxes.kids.filter((k) => k.className === 'bx')[0]).kids[1];
   assert.ok(/Gemini 3\.8 Flash/.test(now.textContent), now.textContent);
-  assert.ok(/تعذّر الحفظ/.test(page.byId.msg.textContent));
+  assert.ok(/تعذّر الحفظ/.test(page.byId.toasts.textContent));
 
   // A drop on the left box of the review section.
-  const reviewOn = pair(boxes.kids.filter((k) => k.className === 'sec')[1]).kids[1];
+  const reviewOn = pair(boxes.kids.filter((k) => k.className === 'bx')[1]).kids[1];
   reviewOn.handlers.drop[0]({ preventDefault() {}, dataTransfer: { getData: () => JSON.stringify({ id: GEMINI }) } });
   assert.deepStrictEqual(JSON.parse(page.pending('setHelperBoxes')[0].args[0]).review, [GEMINI]);
 });
@@ -2523,7 +2538,8 @@ test('the page: the waiting books by name in their order, and how each finished 
   assert.deepStrictEqual(s.queueNames, ['ثان', 'ثالث'], 'without their extension, oldest first');
   const page = pageSandbox(env, s);
   assert.ok(/2\. ?|ثان/.test(page.byId.queue.textContent) && /تبدأ بهذا الترتيب/.test(page.byId.queue.textContent));
-  assert.ok(/يُحوَّل الآن: «أول»/.test(page.byId.pills.textContent), page.byId.pills.textContent);
+  assert.ok(/يُحوَّل الآن/.test(page.byId.now.textContent) && /«أول»/.test(page.byId.now.textContent), page.byId.now.textContent);
+  assert.ok(/الكتاب الحالي/.test(page.byId.figs.textContent) && /يُحوَّل الآن/.test(page.byId.figs.textContent));
   minutes(env, 30);
   writeStatus(env, first.id, 'done', { epub: 'أول.epub', pages_unsure: [4, 9] });
   writeEpub(env, first.id, 'أول.epub');
