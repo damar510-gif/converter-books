@@ -353,7 +353,12 @@ function getStatus() {
         return { title: j.title, stage: j.stage, need: Number(p.need) || 0, finished: Number(p.finished) || 0 };
       });
 
-    out.recent = finishedJobs_(jobs).filter(function (j) { return !isParked_(j); }).slice(0, 10).map(function (j) {
+    // The last ten, leaving out the books the user deleted.
+    var shown = [];
+    finishedJobs_(jobs).forEach(function (j) {
+      if (shown.length < 10 && !isParked_(j) && !bookGone_(j.fileId, j.epubId)) shown.push(j);
+    });
+    out.recent = shown.map(function (j) {
       return {
         title: j.title,
         stage: j.stage,
@@ -867,14 +872,15 @@ function refineNext_(ctx) {
   // Finished jobs are stored without these fields (see pruneJobs_); rebuild them.
   pick.resultDir = 'drive-' + pick.fileId;
   try {
+    if (bookGone_(pick.fileId, pick.epubId)) throw new Error('gone');
     var again = newJob_(DriveApp.getFileById(pick.fileId));
     pick.name = again.name;
     if (again.driveName) pick.driveName = again.driveName;
   } catch (err) {
-    // The original was deleted from "4- الأصل": nothing left to improve.
+    // The original was deleted from "4- الأصل", or the EPUB: nothing left to improve.
     pick.refineDone = true;
     saveJobs_(ctx.jobs);
-    return 'idle (original gone: ' + pick.fileId + ')';
+    return 'idle (book gone: ' + pick.fileId + ')';
   }
   pick.refineDay = today;
   pick.refines = (pick.refines || 0) + 1;
@@ -1208,10 +1214,15 @@ function reviewSummaries_(jobs) {
     var pending = reviewPending_(rv) || !!(j && j.humanRound && isActive_(j));
     if (!(rv.o > 0 || rv.n > 0 || pending || rv.x)) return null;
     // A book the user deleted (its original, or its EPUB) is not listed any more.
-    if (!fileAlive_(id) || (rv.e && !fileAlive_(rv.e))) return null;
+    if (bookGone_(id, rv.e)) return null;
     return { fileId: id, title: rv.t || (j && j.title) || '', open: rv.o || 0, saved: rv.n || 0,
       pending: pending, note: rv.x || '' };
   }).filter(function (x) { return x; });
+}
+
+/** The user deleted the book: its original, or its EPUB, is gone or in the trash. */
+function bookGone_(id, epubId) {
+  return !fileAlive_(id) || (!!epubId && !fileAlive_(epubId));
 }
 
 /** The Drive file exists and is not in the trash. */
@@ -2136,7 +2147,7 @@ function helperJudgeNext_(ctx) {
   reviewIds_().forEach(function (id) {
     var rv = loadRv_(id);
     var j = ctx.jobs[id];
-    if (!rv || rv.x || !j || j.stage !== 'delivered') return;
+    if (!rv || rv.x || !j || j.stage !== 'delivered' || bookGone_(id, rv.e)) return;
     var f = verdictsFile_(id);
     var data = f ? parseJson_(f.getBlob().getDataAsString('UTF-8')) : null;
     if (!data || data.done !== true || !data.answers || typeof data.answers !== 'object') return;
@@ -2165,7 +2176,8 @@ function syncHelperReviews_(cfg) {
   var open = {};
   reviewIds_().forEach(function (id) {
     var rv = loadRv_(id);
-    if (rv && rv.o > 0 && !rv.x) open[id] = rv;
+    // A book the user deleted is not reviewed: its folder goes below.
+    if (rv && rv.o > 0 && !rv.x && !bookGone_(id, rv.e)) open[id] = rv;
   });
   // A folder goes once nothing is open (a round running on the book keeps it, and the
   // verdicts in it).
