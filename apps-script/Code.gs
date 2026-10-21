@@ -2178,6 +2178,9 @@ function syncHelperReviews_(cfg) {
   var parent = helperSub_(CONFIG.HELPER_REVIEWS, boxed);
   if (!parent) return;
   var open = dropHelperReviews_(parent);
+  // The helper reviews only the books requests.json lists: a book deleted (or closed)
+  // stops there at once, even while Drive for desktop has not yet removed its folder.
+  if (props_().getProperty('HELPER_REVIEW_IDS') !== JSON.stringify(Object.keys(open).sort())) writeRequests_();
   if (!boxed) return;
   var jobs = loadJobs_();
   var budget = CONFIG.HELPER_REVIEW_FILES;
@@ -2194,16 +2197,22 @@ function syncHelperReviews_(cfg) {
  * open for review: {fileId: rv}.
  */
 function dropHelperReviews_(parent) {
-  var open = {};
-  reviewIds_().forEach(function (id) {
-    var rv = loadRv_(id);
-    if (rv && rv.o > 0 && !rv.x && !bookGone_(id, rv.e)) open[id] = rv;
-  });
+  var open = openForHelper_();
   var it = parent.getFolders();
   while (it.hasNext()) {
     var f = it.next();
     if (!f.isTrashed() && !open[f.getName()]) f.setTrashed(true);
   }
+  return open;
+}
+
+/** The books open for the models in the review box: {fileId: rv}, leaving out the deleted ones. */
+function openForHelper_() {
+  var open = {};
+  reviewIds_().forEach(function (id) {
+    var rv = loadRv_(id);
+    if (rv && rv.o > 0 && !rv.x && !bookGone_(id, rv.e)) open[id] = rv;
+  });
   return open;
 }
 
@@ -2272,11 +2281,14 @@ function fileFromProp_(prop) {
 /** The helper's to-do list, with the books it may be asked about. */
 function writeRequests_() {
   var jobs = loadJobs_();
+  // The books the models in the review box may review (their folders are in «مراجعة»).
+  var reviews = Object.keys(openForHelper_()).sort();
   var text = JSON.stringify({
     v: 1,
     at: now_().toISOString(),
     requests: helperRequests_(),
     boxes: helperBoxes_(),
+    reviews: reviews,
     books: Object.keys(jobs).map(function (id) {
       var j = jobs[id];
       return j ? { id: id, title: j.title || '', stage: j.stage || '', unsure: j.unsure || 0 } : null;
@@ -2289,6 +2301,7 @@ function writeRequests_() {
     f = helperFolder_().createFile(CONFIG.HELPER_REQUESTS, text, 'text/plain');
     props_().setProperty('HELPER_REQUESTS_ID', f.getId());
   }
+  props_().setProperty('HELPER_REVIEW_IDS', JSON.stringify(reviews));
 }
 
 /**

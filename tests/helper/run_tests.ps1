@@ -248,6 +248,43 @@ Test 'review: safe verdicts become answers; a risky one needs a second model; mo
   Same (Work 'agy') '' 'and no more jobs'
 }
 
+Test 'review: only the books the script lists; a book that leaves while judged keeps no verdict; an idle model is not shown at work' {
+  $requests = { param($reviews)
+    Write-Utf8 (Join-Path $Folder 'requests.json') (@{ v = 1; requests = @(); books = @(@{ id = 'book1'; title = 'كتاب الاختبار' })
+        boxes = @{ transcribe = @(); review = @($GEMINI) }; reviews = @($reviews) } | ConvertTo-Json -Depth 5) }
+  $dir = Join-Path (Join-Path $Folder $ReviewsName) 'book1'
+  New-Item -ItemType Directory -Force -Path $dir | Out-Null
+  [IO.File]::WriteAllBytes((Join-Path $dir 'p0003-0123456789.jpg'), [byte[]](0xff, 0xd8))
+  $items = @(@{ id = 'p3-0000000001'; n = 1; kind = 'diff'; fp = 'diff|1'; before = 'قبل '; core = 'كلمة'; after = ' بعد'; pos = 10
+      options = @(@{ label = 'other'; text = 'كلمه' }) })
+  Write-Utf8 (Join-Path $dir 'items.json') (@{ v = 1; generated_at = 'x'; pages = @(@{ page = 3; base = 'b'; img = 'p0003-0123456789.jpg'; items = $items }) } |
+    ConvertTo-Json -Depth 8)
+  $verdictFiles = { @(Get-ChildItem -LiteralPath $dir -Filter 'j-*.json' -File).Count }
+
+  # Deleted: its folder is still on the computer, but not listed. The model is not shown at work.
+  & $requests @()
+  Set-Chip $GEMINI @{ state = 'working'; text = 'يراجع ص 3 من «كتاب الاختبار»'; until = '' } | Out-Null
+  Same (Work 'agy') '' 'no job on a book the script does not list'
+  Same (All-Chips)[$GEMINI].state 'idle' 'shown idle'
+  Same @($script:Calls).Count 0 'no request'
+
+  # Listed, but it leaves while the model judges it: no verdict is kept.
+  & $requests @('book1')
+  $script:Answer = { param($tool, $model, $kind, $task)
+    & $requests @()
+    return @{ text = '[{"n":1,"verdict":"keep"}]' } }
+  $job = Work 'agy'
+  Same $job.kind 'judge' 'judged while listed'
+  Same (& $verdictFiles) 0 'its verdict dropped'
+  Same (All-Chips)[$GEMINI].state 'idle' 'and the model idle'
+
+  # Listed and still listed: the verdict is kept.
+  & $requests @('book1')
+  $script:Answer = { param($tool, $model, $kind, $task) @{ text = '[{"n":1,"verdict":"keep"}]' } }
+  Same (Work 'agy').kind 'judge' 'judged'
+  Same (& $verdictFiles) 1 'verdict kept'
+}
+
 Test 'review: when two models disagree on a risky place, it stays for the user' {
   Set-Boxes @() @($GEMINI, $GROK)
   $dir = Join-Path (Join-Path $Folder $ReviewsName) 'book1'

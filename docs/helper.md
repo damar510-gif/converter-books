@@ -15,7 +15,7 @@ or key there, and the helper never calls a Google or GitHub API.
 | `install.ps1` | Apps Script (copy of `helper/install.ps1`) | The one public file (anyone with the link can read it): the install's first step. No secret. |
 | `البرنامج/` | Apps Script (copy of `helper/`, each check, only changed files) | `launcher.ps1`, `helper.ps1`. |
 | `صفحات الاختبار/` | Apps Script (copy of `compare/pages` in the results branch) | The six hard test pages (`page_image`). |
-| `requests.json` | Apps Script | `{v, at, requests: [{id, action, choices, label, at}], books: [{id, title, stage, unsure}]}` |
+| `requests.json` | Apps Script | `{v, at, requests: [{id, action, choices, label, at}], books: [{id, title, stage, unsure}], reviews: [fileId]}` |
 | `helper-status.json` | helper | `{v, at, version, computer, busy, handled: [ids], lines: [{text, kind, path, linkText}], actions: [...]}` |
 | `probe.txt` | helper | Each tool's `--help`/`--version` and a one-word headless answer, rewritten when the helper's version or the set of tools changes: read it to fix the command lines in `helper.ps1`. |
 | `نتائج/<date> <kind> <model>/` | helper (until 2026-10-21) | The trials of the six test pages: `pNNN.md` per page, `log.txt`, `meta.json`, and `مقارنة.md`. The trial button is gone. |
@@ -27,7 +27,10 @@ or key there, and the helper never calls a Google or GitHub API.
 `<tool>|<model>`), and `helper-status.json` also carries `models` (every model of the tools
 found: `{id, label, tool, warn}`), `chips` (`{id: {state: working|idle|exhausted|failing, text}}`
 for the models in the boxes) and `books` (`{fileId: {need, finished, book_at}}`, the helper's
-work on each book's pages).
+work on each book's pages). `reviews` in `requests.json` lists the books open for review (a book the
+user deleted is left out): the helper reviews only those folders of `مراجعة/`, even while
+Drive for desktop has not yet removed a folder from the computer, and drops a verdict on a book
+that left the list while it was being judged.
 
 ## Install (once)
 

@@ -317,7 +317,9 @@ $RefusalPattern = '(?i)(copyright|can.?t (help|assist|transcribe|reproduce|provi
 $Claims = Join-Path $Local 'claims'
 
 function Get-Boxes($reqs) {
-  $out = @{ transcribe = @(); review = @(); times = @{} }
+  $out = @{ transcribe = @(); review = @(); times = @{}; reviews = $null }
+  # The books open for review, as the script lists them ($null from an older script: every folder).
+  if ($reqs -and $null -ne $reqs.reviews) { $out.reviews = @(@($reqs.reviews) | Where-Object { $_ } | ForEach-Object { [string]$_ }) }
   if ($reqs -and $reqs.boxes) {
     foreach ($k in 'transcribe', 'review') {
       $out[$k] = @(@($reqs.boxes.$k) | Where-Object { $_ -and ([string]$_) -match $ChipPattern } | ForEach-Object { [string]$_ })
@@ -755,16 +757,23 @@ function Invoke-TranscribeJob($job, [string]$exe, [string]$work, $boxes) {
 
 # --- Review: books in «مراجعة», with items.json and the place images from the run ---
 
-function Get-ReviewBooks {
+function Get-ReviewBooks($boxes) {
   $root = Join-Path $Folder $ReviewsName
   $out = @()
   if (-not (Test-Path -LiteralPath $root)) { return }
   foreach ($d in @(Get-ChildItem -LiteralPath $root -Directory | Sort-Object CreationTimeUtc)) {
+    # A book the script no longer lists (deleted, or nothing open) is left alone, even while
+    # Drive for desktop has not yet removed its folder from this computer.
+    if (-not (Review-Listed $boxes $d.Name)) { continue }
     $items = Read-Json (Join-Path $d.FullName 'items.json')
     if (-not $items) { continue }
     $out += @{ id = $d.Name; dir = $d.FullName; at = (Iso-Of $items.generated_at); pages = @($items.pages | Where-Object { $_ }) }
   }
   return $out
+}
+
+function Review-Listed($boxes, [string]$id) {
+  return -not ($boxes -and $null -ne $boxes.reviews -and @($boxes.reviews) -notcontains $id)
 }
 
 # Every model's verdicts on a book's places: {item id: [{chip, verdict, text}]}.
@@ -926,6 +935,14 @@ function Invoke-JudgeJob($job, [string]$exe, [string]$work, $titles) {
   } else {
     Job-Done $chip
   }
+  # The book left the review while the model judged it (deleted, or nothing open): its
+  # verdicts are not kept, and nothing is written in a folder that is going.
+  $now = Get-Boxes (Read-Json (Join-Path $Folder 'requests.json'))
+  if (-not (Review-Listed $now ([string]$job.book.id)) -or -not (Test-Path -LiteralPath $job.book.dir)) {
+    Set-Chip $chip @{ state = 'idle'; text = 'لا عمل له الآن'; until = '' } | Out-Null
+    Write-Log "$chip`: $($job.book.id) left the review, verdicts on p$p dropped"
+    return
+  }
   Save-Verdicts $job.book $chip $p $verdicts
 }
 
@@ -933,7 +950,7 @@ function Invoke-JudgeJob($job, [string]$exe, [string]$work, $titles) {
 # «أحكام/<book>.json», kept and added to, with done when no model in the box has anything
 # left to judge. The status page's script applies them in a review round.
 function Update-Verdicts($boxes, $found, $states) {
-  $books = @(Get-ReviewBooks)
+  $books = @(Get-ReviewBooks $boxes)
   if (-not $books.Count) { return }
   $dir = Join-Path $Folder $VerdictsName
   New-Item -ItemType Directory -Force -Path $dir | Out-Null
@@ -1008,10 +1025,13 @@ function Find-BoxJob([string]$tool, $boxes, $found, [int]$turn) {
       if ($job) { return $job }
     }
     if ($boxes.review -contains $chip) {
-      if ($null -eq $rbooks) { $rbooks = @(Get-ReviewBooks) }
+      if ($null -eq $rbooks) { $rbooks = @(Get-ReviewBooks $boxes) }
       $job = Find-ReviewJob $chip $rbooks
       if ($job) { return $job }
     }
+    # Nothing for this model now: it is not shown at work on its last page any more.
+    $st = $states[$chip]
+    if ($st -and [string]$st.state -eq 'working') { Set-Chip $chip @{ state = 'idle'; text = 'لا عمل له الآن'; until = '' } | Out-Null }
   }
   return $null
 }
