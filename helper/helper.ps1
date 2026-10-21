@@ -6,7 +6,7 @@
 # places through the folders «كتب», «مراجعة» and «أحكام» (docs/helper-boxes-plan.md).
 # Windows PowerShell 5.1: no ?? or ?: operators.
 
-$HelperVersion = '2026-10-21.5'
+$HelperVersion = '2026-10-21.6'
 $BooksName = 'كتب'
 $ReviewsName = 'مراجعة'
 $VerdictsName = 'أحكام'
