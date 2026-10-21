@@ -729,10 +729,11 @@ def check_pages(pool, filepath, records, cache_dir, dual, workers, transcribe=Fa
         if check_helper_page(r, tess[r["page"]], vocab) == "done":
             save_record(cache_dir, r)
             print(f"  check page {r['page']}: {r['check']['state']} (helper, diffs {r['check']['diffs']})")
-        elif transcribe:
+        elif transcribe and not r.get("hskip"):
             waiting.add(r["page"])
         else:
-            # The helper is off: Gemini settles what its models read.
+            # The helper is off, or every model in its box refused to settle the page
+            # (skip.json): Gemini settles what its models read.
             todo.append(r)
     if not todo:
         return waiting

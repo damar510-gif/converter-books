@@ -2504,6 +2504,62 @@ test('a deleted book: its review folder goes even while the review box is empty,
   assert.strictEqual(sub(env, reviews(), g.id), undefined, 'gone before the model starts');
 });
 
+test('an improvement round that fails twice leaves the delivered book as it was, with no problem email', () => {
+  const env = readyEnv();
+  const f = addBook(env, 'محسّن.pdf');
+  tick(env);
+  minutes(env, 30);
+  writeStatus(env, f.id, 'done', { epub: 'م.epub', pages_total: 10, pages_done: 10, pages_unsure: [3] });
+  writeEpub(env, f.id, 'م.epub', Buffer.from('PK delivered'));
+  tick(env);
+  const epubId = jobs(env)[f.id].epubId;
+  env.clock += 24 * 3600000;
+  tick(env);
+  assert.strictEqual(jobs(env)[f.id].refining, true, 'improvement round dispatched');
+  for (let i = 0; i < 2; i++) {
+    minutes(env, 20);
+    writeStatus(env, f.id, 'failed', { reason: 'crash' });
+    tick(env);
+  }
+  const j = jobs(env)[f.id];
+  assert.deepStrictEqual([j.stage, j.epubId, j.refining], ['delivered', epubId, false]);
+  assert.ok(!env.mails.some((m) => /مشكلة/.test(m.subject)), env.mails.map((m) => m.subject).join(' | '));
+  assert.strictEqual(filesIn(env, 'problem').filter((x) => !x.trashed).length, 0, 'nothing moved to «5- مشكلة»');
+  assert.ok(filesIn(env, 'ready').some((x) => x.id === epubId && !x.trashed), 'the EPUB stays');
+});
+
+test('a book deleted while it waits for the helper: dropped after two checks, its folder goes, and the helper is told', () => {
+  const env = boxesEnv({ transcribe: [GEMINI], review: [] });
+  const f = addBook(env, 'محذوف قبل التسليم.pdf');
+  tick(env);
+  assert.ok(bookFolderOf(env, f.id), 'folder for the helper');
+  env.drive.DriveApp.getFileById(f.id).setTrashed(true);
+  minutes(env, 10);
+  tick(env);
+  assert.ok(jobs(env)[f.id], 'one check is not enough');
+  minutes(env, 10);
+  tick(env);
+  assert.strictEqual(jobs(env)[f.id], undefined, 'dropped');
+  assert.ok(!bookFolderOf(env, f.id), 'its folder for the helper goes');
+  assert.deepStrictEqual(requestsFile(env).gone, [f.id]);
+  assert.strictEqual(status(env).active, null);
+});
+
+test('the models\' finished verdicts are applied even after the user empties the review box', () => {
+  const env = boxesEnv({ transcribe: [], review: [GEMINI] });
+  const { f, items: placed } = deliverWithPlaces(env, 'أحكام.pdf', 2);
+  const items = placed.pages[0].items;
+  const answers = { [items[0].id]: Object.assign(answerFor(items[0], 'keep'), { by: [GEMINI] }) };
+  const file = helperFolder(env).createFolder('أحكام').createFile(f.id + '.json',
+    JSON.stringify({ v: 1, fileId: f.id, answers, done: true }), 'application/json');
+  env.ctx.setHelperBoxes(JSON.stringify({ transcribe: [], review: [] }));
+  const before = env.gh.dispatches.length;
+  minutes(env, 10);
+  tick(env);
+  assert.strictEqual(env.gh.dispatches.length, before + 1, 'a round with the verdicts');
+  assert.strictEqual(lastDispatch(env).body.inputs.judge, file.id);
+});
+
 test('the page: models move between the boxes with a tap (or a drag), are saved, and come back if saving fails', () => {
   const env = boxesEnv({ transcribe: [GEMINI], review: [] });
   writeHelperStatus(env, { models: MODELS.concat([{ id: 'agy|gemini-4-argon', label: 'Gemini 4 Argon', tool: 'Antigravity',

@@ -862,6 +862,8 @@
 
   function working(h) {
     var n = 0;
+    // A computer that is off runs nothing, whatever its last status said.
+    if (!h || !h.connected) return 0;
     if (h && h.chips) Object.keys(h.chips).forEach(function (id) { if (h.chips[id].state === 'working') n++; });
     return n;
   }
@@ -1950,8 +1952,9 @@
     var state = m.gone ? ['bad', 'غير موجود']
       : ended ? ['wait', 'انتهى وقته']
       : later ? ['wait', 'مجدول']
+      : !h.connected ? ['wait', 'ينتظر جهازك']
       : c ? CHIP_STATES[c.state] || ['wait', 'ينتظر']
-      : ['wait', h.connected ? 'يبدأ قريباً' : 'ينتظر جهازك'];
+      : ['wait', 'يبدأ قريباً'];
     var d = el('div', 'mcard is-' + state[0]);
     draggable(d, m.id);
     var top = el('div', 'mc-h');
@@ -1968,8 +1971,9 @@
     line.appendChild(el('span', '', m.gone ? 'لم يعد على جهازك'
       : ended ? 'انتهى الوقت الذي حددته له.'
       : later ? 'يبدأ ' + when(t.start) + '.'
+      : !h.connected ? 'ينتظر أن يتصل جهازك'
       : c && c.text ? c.text
-      : h.connected ? 'يبدأ خلال دقيقة أو دقيقتين' : 'ينتظر أن يتصل جهازك'));
+      : 'يبدأ خلال دقيقة أو دقيقتين'));
     d.appendChild(line);
     if (m.warn) d.appendChild(el('div', 'mc-w', '⚠ ' + m.warn));
     if (c && /^(exhausted|failing)$/.test(c.state) && !m.gone) d.appendChild(retryButton(m));
