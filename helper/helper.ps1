@@ -6,7 +6,7 @@
 # places through the folders «كتب», «مراجعة» and «أحكام» (docs/helper-boxes-plan.md).
 # Windows PowerShell 5.1: no ?? or ?: operators.
 
-$HelperVersion = '2026-10-21.6'
+$HelperVersion = '2026-10-21.7'
 $BooksName = 'كتب'
 $ReviewsName = 'مراجعة'
 $VerdictsName = 'أحكام'
@@ -575,6 +575,12 @@ function Get-PageFiles($book, [int]$page) {
   if ($s.a -and $s.a.text) { $s.first = $s.a } elseif ($s.ha -and $s.ha.text) { $s.first = $s.ha }
   $s.settled = [bool]($s.first -and $s.hb -and $s.final -and [string]$s.final.a_sha -eq (Text-Sha ([string]$s.first.text)) -and
     [string]$s.final.b_sha -eq (Text-Sha ([string]$s.hb.text)))
+  # Read twice here (two models) and settled before the free model's reading arrived (a run
+  # whose Drive token ran out sends its readings only with the next run): done, the run
+  # takes this pair as it is (helperbox.own_pair).
+  if (-not $s.settled -and $s.ha -and $s.ha.text -and $s.hb -and $s.hb.text -and $s.final -and
+    [string]$s.ha.model -ne [string]$s.hb.model -and [string]$s.final.a_sha -eq (Text-Sha ([string]$s.ha.text)) -and
+    [string]$s.final.b_sha -eq (Text-Sha ([string]$s.hb.text))) { $s.settled = $true }
   return $s
 }
 

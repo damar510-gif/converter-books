@@ -198,6 +198,21 @@ Test 'transcription: a used-up limit rests the model without counting against th
   Same (Refused-Count 1) 1 'after two'
 }
 
+Test 'transcription: a page the helper read twice and settled itself is done, even when the free reading arrives later' {
+  Set-Boxes @($GEMINI, $GROK) @()
+  $dir = Make-Book 'book1' @(5) @() $false @{}
+  Write-Utf8 (Join-Path $dir (Page-Name 5 'ha.json')) (@{ page = 5; model = $GROK; text = $RIGHT } | ConvertTo-Json)
+  Write-Utf8 (Join-Path $dir (Page-Name 5 'hb.json')) (@{ page = 5; model = $GEMINI; text = $RIGHT } | ConvertTo-Json)
+  Write-Utf8 (Join-Path $dir (Page-Name 5 'final.json')) (@{ page = 5; model = $GEMINI; text = $RIGHT
+      a_sha = (Text-Sha $RIGHT); b_sha = (Text-Sha $RIGHT) } | ConvertTo-Json)
+  # The free model's reading of the page reaches the helper only now.
+  Write-Utf8 (Join-Path $dir (Page-Name 5 'a.json')) (@{ page = 5; model = 'gemini-3.5-flash-lite'; text = $WRONG
+      spread = $false; missing = @() } | ConvertTo-Json)
+  Same (Work 'agy') '' 'nothing to settle again'
+  Same (Work 'grok') '' 'nor to read'
+  Same @($script:Calls).Count 0 'no request'
+}
+
 Test 'claims: two workers never take the same job' {
   Set-Boxes @($GEMINI, $GROK) @()
   Make-Book 'book1' @(1) @() $false @{ 1 = $RIGHT } | Out-Null

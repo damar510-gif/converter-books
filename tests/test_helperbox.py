@@ -130,6 +130,22 @@ class HelperPipeline(PipelineBase):
         self.assertEqual(fake.calls, [])
         self.assertEqual(self.drive.json("book.json")["need"], [])
 
+    def test_the_helpers_own_two_readings_count_when_the_free_reading_reached_it_late(self):
+        """A run whose Drive token ran out sent its free readings only with the next run;
+        meanwhile the helper read the page twice itself and settled it: that is kept."""
+        free = {"gemini-3.5-flash-lite": lambda p, n: answer(WRONG),
+                "gemini-3.1-flash-lite": lambda p, n: answer(TRUE)}
+        self.run_helper(free, pages="30")
+        self.helper_files(30, ha=TRUE, b=TRUE, final=TRUE)
+        code, st, md, fake = self.run_helper(free, pages="30")
+        self.assertEqual(code, 0, st)
+        self.assertEqual(st["helper_checked"], 1)
+        rec = self.records()[30]
+        self.assertEqual((rec["a"]["model"], rec["b"]["model"]), (OTHER, CHIP))
+        self.assertIn(rec["check"]["state"], ("agreed", "reconciled"))
+        self.assertNotIn("كاقية", md)
+        self.assertEqual(fake.calls, [])
+
     def test_agreeing_readings_need_no_settled_text(self):
         free = {"gemini-3.5-flash-lite": lambda p, n: answer(TRUE),
                 "gemini-3.1-flash-lite": lambda p, n: answer(TRUE)}
@@ -225,6 +241,23 @@ class Merge(unittest.TestCase):
         got["a"]["text"] = "قراءة جديدة"
         got, changed = helperbox.merge(got, outs, 3, c.CHECK_VERSION)
         self.assertTrue(changed)
+        self.assertNotIn("hfinal", got)
+
+
+    def test_the_helpers_own_pair_is_taken_over_a_free_reading_it_never_got(self):
+        rec = {"page": 3, "status": "ok", "text": WRONG, "ink": 0.1, "spread": False,
+               "a": {"model": "gemini-3.5-flash-lite", "text": WRONG}}
+        outs = {"ha": {"model": OTHER, "text": TRUE + "\n"}, "hb": {"model": CHIP, "text": TRUE},
+                "final": {"model": CHIP, "text": TRUE, "a_sha": helperbox.sha(TRUE + "\n"), "b_sha": helperbox.sha(TRUE)}}
+        got, changed = helperbox.merge(dict(rec), outs, 3, c.CHECK_VERSION)
+        self.assertTrue(changed)
+        self.assertEqual((got["a"]["model"], got["b"]["model"], got["hfinal"]["text"], got["spread"]),
+                         (OTHER, CHIP, TRUE, False))
+        self.assertEqual(helperbox.merge(got, outs, 3, c.CHECK_VERSION), (got, False), "taken once")
+        # Both readings by one model are not a pair: the free reading stays.
+        outs["ha"]["model"] = CHIP
+        got, _ = helperbox.merge(dict(rec), outs, 3, c.CHECK_VERSION)
+        self.assertEqual(got["a"]["model"], "gemini-3.5-flash-lite")
         self.assertNotIn("hfinal", got)
 
 
