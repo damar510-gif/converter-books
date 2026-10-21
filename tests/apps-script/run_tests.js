@@ -2456,12 +2456,15 @@ test('a book the user deleted: off the page, not reviewed by the models, not imp
   minutes(env, 10);
   tick(env);
   assert.ok(sub(env, sub(env, helperFolder(env), 'مراجعة'), f.id), 'copied for the models');
+  assert.deepStrictEqual(requestsFile(env).reviews, [f.id], 'listed for the helper');
   assert.ok(status(env).recent.some((j) => j.fileId === f.id));
 
   env.drive.DriveApp.getFileById(f.id).setTrashed(true);
   minutes(env, 10);
   tick(env);
   assert.strictEqual(sub(env, sub(env, helperFolder(env), 'مراجعة'), f.id), undefined, 'the models stop');
+  // The helper stops on the list, even before Drive for desktop removes the folder from the computer.
+  assert.deepStrictEqual(requestsFile(env).reviews, [], 'no longer listed');
   const s = status(env);
   assert.ok(!s.recent.some((j) => j.fileId === f.id), 'not in the last books');
   assert.strictEqual(s.reviews.length, 0);
