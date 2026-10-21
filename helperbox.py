@@ -289,6 +289,13 @@ def reading_sha(reading):
     return reading.get("sha") or sha(reading.get("text", ""))
 
 
+def own_pair(ha, hb, fin):
+    """The helper read the page twice itself (two models) and settled on those readings."""
+    return has_text(ha) and has_text(hb) and has_text(fin) and EMPTY not in (ha["text"].strip(), hb["text"].strip()) \
+        and str(ha.get("model") or "") != str(hb.get("model") or "") \
+        and fin.get("a_sha") == sha(ha["text"]) and fin.get("b_sha") == sha(hb["text"])
+
+
 def merge(rec, outs, page_no, check_version):
     """Puts the helper's files for one page into its record: (record, changed). A page the
     user pinned, or one already settled, is left alone; so is a settled text made on other
@@ -301,6 +308,15 @@ def merge(rec, outs, page_no, check_version):
         rec = rec or {"page": page_no, "status": "pending"}
         rec["hskip"] = True
         changed = True
+    # The helper's own two readings and its settled text on them, made while the free
+    # model's reading had not reached it (a run whose Drive token ran out sends its readings
+    # only with the next run): a page read by two models and settled, taken as it is.
+    if own_pair(ha, hb, fin) and (rec is None or reading_sha(rec.get("a") or {}) != sha(ha["text"])):
+        keep = {k: v for k, v in (rec or {}).items() if k in ("hskip", "ink", "spread")}
+        a, b = as_reading(ha), as_reading(hb)
+        rec = {"page": page_no, "status": "ok", "text": a["text"], "a": a, "b": b, **keep,
+               "hfinal": {"model": str(fin.get("model") or b["model"]), "text": fin["text"]}}
+        return rec, True
     if (rec is None or rec.get("status") != "ok") and has_text(ha):
         keep = {k: v for k, v in (rec or {}).items() if k == "hskip"}
         if ha["text"].strip() == EMPTY:
