@@ -945,7 +945,6 @@
     if (a.since && a.stage !== 'queued') fact('آخر تشغيل', when(a.since));
     if (a.attempts > 1) fact('المحاولة', 'رقم ' + a.attempts);
     if (a.paused) fact('يعود المجاني', when(a.resumeAt));
-    if (p.helper && a.pagesTotal) fact('في الكتاب الآن', a.pagesDone + ' من ' + a.pagesTotal + ' صفحة');
     if (any) box.appendChild(facts);
   }
 

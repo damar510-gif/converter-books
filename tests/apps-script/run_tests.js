@@ -2449,6 +2449,29 @@ test('review: with models in the review box the places are copied for the helper
   assert.strictEqual(sub(env, sub(env, helperFolder(env), 'مراجعة'), f.id), undefined);
 });
 
+test('a book the user deleted: off the page, not reviewed by the models, not improved', () => {
+  const env = boxesEnv({ transcribe: [], review: [GEMINI] });
+  const { f } = deliverWithPlaces(env, 'محذوف.pdf', 2);
+  env.gh.files['drive-' + f.id + '/review/p0003-0123456789.jpg'] = Buffer.from([0xff, 0xd8, 1]);
+  minutes(env, 10);
+  tick(env);
+  assert.ok(sub(env, sub(env, helperFolder(env), 'مراجعة'), f.id), 'copied for the models');
+  assert.ok(status(env).recent.some((j) => j.fileId === f.id));
+
+  env.drive.DriveApp.getFileById(f.id).setTrashed(true);
+  minutes(env, 10);
+  tick(env);
+  assert.strictEqual(sub(env, sub(env, helperFolder(env), 'مراجعة'), f.id), undefined, 'the models stop');
+  const s = status(env);
+  assert.ok(!s.recent.some((j) => j.fileId === f.id), 'not in the last books');
+  assert.strictEqual(s.reviews.length, 0);
+  minutes(env, 24 * 60);
+  const before = env.gh.dispatches.length;
+  tick(env);
+  assert.strictEqual(env.gh.dispatches.length, before, 'no improvement round the next day');
+  assert.strictEqual(jobs(env)[f.id].refineDone, true);
+});
+
 test('the page: models move between the boxes with a tap (or a drag), are saved, and come back if saving fails', () => {
   const env = boxesEnv({ transcribe: [GEMINI], review: [] });
   writeHelperStatus(env, { models: MODELS.concat([{ id: 'agy|gemini-4-argon', label: 'Gemini 4 Argon', tool: 'Antigravity',
