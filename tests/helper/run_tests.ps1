@@ -189,11 +189,18 @@ Test 'transcription: a used-up limit rests the model without counting against th
   Check (([DateTime]::Parse($c.until)).ToUniversalTime() -gt (Get-Date).ToUniversalTime().AddMinutes(100)) 'for about two hours'
   Same (Work 'agy') '' 'no job while resting'
   Same (Refused-Count 1) 0 'the page is not given up'
-  # A failure that is not the limit: one more try, then the page goes to the others.
+  # A tool error (a crash, signed out, network down) says nothing about the page: never given up for it.
   Set-Chip $GEMINI @{ state = 'idle'; until = '' } | Out-Null
   $script:Answer = { param($tool, $model, $kind, $task) @{ code = 2; err = 'crashed' } }
   Work 'agy' | Out-Null
-  Same (Refused-Count 1) 0 'not after one failure'
+  Work 'agy' | Out-Null
+  Same (Refused-Count 1) 0 'not for a tool error'
+  # The tool ran but gave nothing back, twice: the page goes to the others.
+  Set-Chip $GEMINI @{ state = 'idle'; until = ''; fails = 0 } | Out-Null
+  $script:PageFails = @{}
+  $script:Answer = { param($tool, $model, $kind, $task) @{ text = '' } }
+  Work 'agy' | Out-Null
+  Same (Refused-Count 1) 0 'not after one empty answer'
   Work 'agy' | Out-Null
   Same (Refused-Count 1) 1 'after two'
 }
@@ -211,6 +218,23 @@ Test 'transcription: a page the helper read twice and settled itself is done, ev
   Same (Work 'agy') '' 'nothing to settle again'
   Same (Work 'grok') '' 'nor to read'
   Same @($script:Calls).Count 0 'no request'
+}
+
+Test 'transcription: [[EMPTY]] for a page with words is a refusal, a tool error is not, and a deleted book is left alone' {
+  Set-Boxes @($GEMINI, $GROK) @()
+  $dir = Make-Book 'book1' @(7) @() $false @{ 7 = $RIGHT }
+  $script:Answer = { param($tool, $model, $kind, $task) if ($tool -eq 'agy') { @{ text = '[[EMPTY]]' } } else { @{ text = ''; code = 1; err = 'signed out' } } }
+  Work 'agy' | Out-Null
+  Check (-not (Test-Path -LiteralPath (Join-Path $dir (Page-Name 7 'hb.json')))) 'no empty second reading kept'
+  Same (Refused-Count 7) 1 'Gemini refused the page'
+  Work 'grok' | Out-Null
+  Work 'grok' | Out-Null
+  Same (Refused-Count 7) 1 'a signed-out Grok does not refuse the page'
+  Write-Utf8 (Join-Path $Folder 'requests.json') (@{ v = 1; requests = @(); books = @(); gone = @('book1')
+      boxes = @{ transcribe = @($GEMINI, $GROK); review = @() } } | ConvertTo-Json -Depth 5)
+  $script:Calls = @()
+  Same (Work 'grok') '' 'a deleted book gets no job'
+  Same @($script:Calls).Count 0 'and no request'
 }
 
 Test 'claims: two workers never take the same job' {

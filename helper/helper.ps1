@@ -6,10 +6,12 @@
 # places through the folders «كتب», «مراجعة» and «أحكام» (docs/helper-boxes-plan.md).
 # Windows PowerShell 5.1: no ?? or ?: operators.
 
-$HelperVersion = '2026-10-21.7'
+$HelperVersion = '2026-10-21.8'
 $BooksName = 'كتب'
 $ReviewsName = 'مراجعة'
 $VerdictsName = 'أحكام'
+# What a model writes for a page with no text (as helperbox.EMPTY).
+$Empty = '[[EMPTY]]'
 $PageTimeoutSec = 20 * 60
 # Readings are quick; settling and judging need a closer look.
 $ReadEffort = 'low'
@@ -317,7 +319,9 @@ $RefusalPattern = '(?i)(copyright|can.?t (help|assist|transcribe|reproduce|provi
 $Claims = Join-Path $Local 'claims'
 
 function Get-Boxes($reqs) {
-  $out = @{ transcribe = @(); review = @(); times = @{}; reviews = $null }
+  $out = @{ transcribe = @(); review = @(); times = @{}; reviews = $null; gone = @() }
+  # Books the user deleted before they were finished: their folders are left alone.
+  if ($reqs -and $reqs.gone) { $out.gone = @(@($reqs.gone) | Where-Object { $_ } | ForEach-Object { [string]$_ }) }
   # The books open for review, as the script lists them ($null from an older script: every folder).
   if ($reqs -and $null -ne $reqs.reviews) { $out.reviews = @(@($reqs.reviews) | Where-Object { $_ } | ForEach-Object { [string]$_ }) }
   if ($reqs -and $reqs.boxes) {
@@ -543,11 +547,13 @@ function Get-DiffSpans([string]$a, [string]$b) {
 
 # --- Transcription: books in «كتب», with book.json from the conversion run ---
 
-function Get-TranscribeBooks {
+function Get-TranscribeBooks($boxes) {
   $root = Join-Path $Folder $BooksName
   $out = @()
   if (-not (Test-Path -LiteralPath $root)) { return }
   foreach ($d in @(Get-ChildItem -LiteralPath $root -Directory | Sort-Object CreationTimeUtc)) {
+    # Deleted by the user, even while Drive for desktop has not yet removed the folder here.
+    if ($boxes -and @($boxes.gone) -contains $d.Name) { continue }
     $book = Read-Json (Join-Path $d.FullName 'book.json')
     if (-not $book) { continue }
     $need = @(@($book.need) | Where-Object { $null -ne $_ } | ForEach-Object { [int]$_ })
@@ -573,12 +579,16 @@ function Get-PageFiles($book, [int]$page) {
   if ($book.names[(Page-Name $page 'jpg')]) { $s.img = Join-Path $book.dir (Page-Name $page 'jpg') }
   $s.first = $null
   if ($s.a -and $s.a.text) { $s.first = $s.a } elseif ($s.ha -and $s.ha.text) { $s.first = $s.ha }
+  # "[[EMPTY]]" as the second reading of a page the first reading found words on is not one
+  # (the run never takes it): the page still needs a second reading.
+  if ($s.hb -and ([string]$s.hb.text).Trim() -eq $Empty -and $s.first -and ([string]$s.first.text).Trim() -ne $Empty) { $s.hb = $null }
   $s.settled = [bool]($s.first -and $s.hb -and $s.final -and [string]$s.final.a_sha -eq (Text-Sha ([string]$s.first.text)) -and
     [string]$s.final.b_sha -eq (Text-Sha ([string]$s.hb.text)))
   # Read twice here (two models) and settled before the free model's reading arrived (a run
   # whose Drive token ran out sends its readings only with the next run): done, the run
   # takes this pair as it is (helperbox.own_pair).
   if (-not $s.settled -and $s.ha -and $s.ha.text -and $s.hb -and $s.hb.text -and $s.final -and
+    ([string]$s.ha.text).Trim() -ne $Empty -and ([string]$s.hb.text).Trim() -ne $Empty -and
     [string]$s.ha.model -ne [string]$s.hb.model -and [string]$s.final.a_sha -eq (Text-Sha ([string]$s.ha.text)) -and
     [string]$s.final.b_sha -eq (Text-Sha ([string]$s.hb.text))) { $s.settled = $true }
   return $s
@@ -657,6 +667,8 @@ function Test-Quota($r) {
 function Word-Count([string]$text) { return (Norm-Words $text).Length }
 
 function Test-Refusal([string]$text, [string]$first) {
+  # "[[EMPTY]]" for a page another model found words on is not a reading of it.
+  if ($text.Trim() -eq $Empty) { return [bool]($first.Trim() -and $first.Trim() -ne $Empty -and (Word-Count $first) -gt 0) }
   $n = Word-Count $text
   if ($n -lt 80 -and $text -match $RefusalPattern) { return $true }
   # Far shorter than the other reading of the page: not a reading of it.
@@ -734,11 +746,15 @@ function Invoke-TranscribeJob($job, [string]$exe, [string]$work, $boxes) {
   if (Test-Quota $r) { Rest-Chip $chip; return }
   $first = ''
   if ($s.first) { $first = [string]$s.first.text }
-  if ($job.kind -eq 'settle') { $first = [string]$s.hb.text }
+  if ($job.kind -eq 'settle' -or ($job.kind -eq 'readA' -and $s.hb)) { $first = [string]$s.hb.text }
   $refused = $r.code -eq 0 -and $text -and (Test-Refusal $text $first)
   if (-not $refused -and ($r.code -ne 0 -or -not $text -or $r.timedOut)) {
     $why = if ($r.timedOut) { 'انتهى الوقت' } elseif (-not $text) { 'رد فارغ' } else { "خطأ $($r.code)" }
     if (-not (Fail-Job $job $why)) { return }
+    # A tool error (signed out, network down, a wrong model name) says nothing about the page:
+    # the model rests (Fail-Job) and comes back to it. Only a page that times out or gets
+    # nothing twice goes to the other models.
+    if ($r.code -ne 0 -and -not $r.timedOut) { return }
     $refused = $true
   }
   if ($refused) {
@@ -935,6 +951,8 @@ function Invoke-JudgeJob($job, [string]$exe, [string]$work, $titles) {
   if ($null -eq $verdicts) {
     $why = if ($r.timedOut) { 'انتهى الوقت' } elseif ($r.code -ne 0) { "خطأ $($r.code)" } else { 'رد غير مفهوم' }
     if (-not (Fail-Job @{ chip = $chip; kind = 'judge'; book = $job.book; page = $p } $why)) { return }
+    # A tool error says nothing about the places: the model rests and comes back to them.
+    if ($r.code -ne 0 -and -not $r.timedOut) { return }
     # Twice: this model leaves these places to the others (or to the user).
     $verdicts = @{}
     foreach ($it in $job.items) { $verdicts[[string]$it.id] = @{ verdict = 'unsure'; text = '' } }
@@ -1026,7 +1044,7 @@ function Find-BoxJob([string]$tool, $boxes, $found, [int]$turn) {
     $chip = $mine[($turn + $i) % $mine.Count]
     if (-not (Chip-Ready $states[$chip]) -or (Chip-Window $boxes $chip)) { continue }
     if ($boxes.transcribe -contains $chip) {
-      if ($null -eq $books) { $books = @(Get-TranscribeBooks) }
+      if ($null -eq $books) { $books = @(Get-TranscribeBooks $boxes) }
       $job = Find-TranscribeJob $chip $books (@(Ready-Chips $boxes.transcribe $found $states $boxes).Count)
       if ($job) { return $job }
     }

@@ -146,6 +146,16 @@ class HelperPipeline(PipelineBase):
         self.assertNotIn("كاقية", md)
         self.assertEqual(fake.calls, [])
 
+    def test_a_page_every_model_refused_to_settle_goes_back_to_gemini(self):
+        free = {"gemini-3.5-flash-lite": lambda p, n: answer(WRONG),
+                "gemini-3.1-flash-lite": lambda p, n: answer(TRUE)}
+        self.run_helper(free, pages="30")
+        self.helper_files(30, b=TRUE)
+        self.drive.put("p0030.skip.json", {"page": 30, "reason": "refused", "models": [CHIP, OTHER]})
+        code, st, md, fake = self.run_helper(free, pages="30")
+        self.assertNotIn(30, st.get("pages_helper", []), st)
+        self.assertIn("reconcile", [k for _, k in fake.calls], "Gemini settles it")
+
     def test_agreeing_readings_need_no_settled_text(self):
         free = {"gemini-3.5-flash-lite": lambda p, n: answer(TRUE),
                 "gemini-3.1-flash-lite": lambda p, n: answer(TRUE)}

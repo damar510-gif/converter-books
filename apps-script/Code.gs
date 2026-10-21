@@ -356,7 +356,9 @@ function getStatus() {
     // The last ten, leaving out the books the user deleted.
     var shown = [];
     finishedJobs_(jobs).forEach(function (j) {
-      if (shown.length < 10 && !isParked_(j) && !bookGone_(j.fileId, j.epubId)) shown.push(j);
+      if (shown.length >= 10 || isParked_(j)) return;
+      if ((j.epubId && !fileAlive_(j.epubId)) || (!j.final && !fileAlive_(j.fileId))) return;
+      shown.push(j);
     });
     out.recent = shown.map(function (j) {
       return {
@@ -624,6 +626,7 @@ function runTick_() {
 
   var ctx = { cfg: cfg, folders: getFolders_(), jobs: loadJobs_(), dispatched: 0 };
   var notes = [];
+  dropGoneBooks_(ctx);
 
   var active = activeJob_(ctx.jobs);
   if (active) {
@@ -1229,6 +1232,48 @@ function bookGone_(id, epubId) {
   return !fileAlive_(id) || (!!epubId && !fileAlive_(epubId));
 }
 
+/**
+ * Books the user deleted (the original in the trash) before they were finished: no more
+ * runs, the helper's models stop on them (their folder goes, and requests.json lists them
+ * in "gone"), and they leave the page. Seen at two checks in a row, so a passing Drive
+ * error never drops a book.
+ */
+function dropGoneBooks_(ctx) {
+  var gone = [];
+  var changed = false;
+  Object.keys(ctx.jobs).forEach(function (id) {
+    var j = ctx.jobs[id];
+    // Review and improvement rounds are of delivered books: their original may go (orig-gone).
+    if (!j || !(isActive_(j) || isParked_(j)) || j.humanRound || j.refining) return;
+    if (!fileTrashed_(id)) {
+      if (j.goneSeen) { delete j.goneSeen; changed = true; }
+      return;
+    }
+    if (!j.goneSeen) { j.goneSeen = now_().toISOString(); changed = true; return; }
+    gone.push(id);
+  });
+  gone.forEach(function (id) {
+    dropBookFolder_(id);
+    delete ctx.jobs[id];
+  });
+  if (changed || gone.length) saveJobs_(ctx.jobs);
+  if (!gone.length) return;
+  Logger.log('books deleted by the user: ' + gone.join(', '));
+  var props = props_();
+  var old = parseJson_(props.getProperty('HELPER_GONE'));
+  props.setProperty('HELPER_GONE', JSON.stringify((Array.isArray(old) ? old : []).concat(gone).slice(-30)));
+  if (props.getProperty('HELPER_INSTALL_ID')) writeRequests_();
+}
+
+/** The file is in the trash or deleted for good (a Drive error is not taken for either). */
+function fileTrashed_(id) {
+  try {
+    return DriveApp.getFileById(id).isTrashed();
+  } catch (err) {
+    return /not found|no item with the given id/i.test(String(err && err.message ? err.message : err));
+  }
+}
+
 /** The Drive file exists and is not in the trash. */
 function fileAlive_(id) {
   try {
@@ -1673,6 +1718,8 @@ function deliver_(ctx, job, s, incomplete) {
 }
 
 function giveUp_(ctx, job, reason) {
+  // An improvement round of a delivered book: the book stays as it was delivered.
+  if (job.refining) return refineFailed_(ctx, job, reason);
   if (!job.noteId) {
     var note = [
       'الكتاب: ' + job.name,
@@ -1707,6 +1754,25 @@ function giveUp_(ctx, job, reason) {
     'المجلد: ' + ctx.folders.problem.getUrl()
   ]);
   return 'problem';
+}
+
+/**
+ * An improvement round that failed or was lost: the delivered book and its files stay as
+ * they were, with no problem email; another round can come on a later day.
+ */
+function refineFailed_(ctx, job, why) {
+  Logger.log('improvement round of ' + job.fileId + ' did not finish: ' + why);
+  job.stage = 'delivered';
+  job.refining = false;
+  job.epubId = job.oldEpubId || job.epubId || '';
+  job.reportId = job.oldReportId || job.reportId || '';
+  job.oldEpubId = '';
+  job.oldReportId = '';
+  job.pausedDay = '';
+  job.failStreak = 0;
+  if (job.unsureBefore !== undefined) job.unsure = job.unsureBefore;
+  saveJobs_(ctx.jobs);
+  return 'improvement round failed (' + why + ')';
 }
 
 function mailPaused_(job) {
@@ -2146,7 +2212,7 @@ function verdictsFile_(fileId) {
  * no run has applied yet: a review round applies them, with no model request.
  */
 function helperJudgeNext_(ctx) {
-  if (!helperBoxes_().review.length) return '';
+  // Finished verdicts are applied whatever the box holds now (emptying it must not lose them).
   var pick = null;
   reviewIds_().forEach(function (id) {
     var rv = loadRv_(id);
@@ -2289,6 +2355,8 @@ function writeRequests_() {
     requests: helperRequests_(),
     boxes: helperBoxes_(),
     reviews: reviews,
+    // Books the user deleted before they were finished: the helper's models leave them.
+    gone: (function (g) { return Array.isArray(g) ? g : []; })(parseJson_(props_().getProperty('HELPER_GONE'))),
     books: Object.keys(jobs).map(function (id) {
       var j = jobs[id];
       return j ? { id: id, title: j.title || '', stage: j.stage || '', unsure: j.unsure || 0 } : null;
@@ -2588,7 +2656,7 @@ function pruneJobs_(jobs) {
     ['name', 'driveName', 'resultDir', 'dispatchedAt', 'createdAt', 'pausedDay', 'pausedAt',
       'pendingCount', 'noteId', 'pauseMailed', 'pagesDone', 'pagesTotal', 'pauses',
       'judgeDay', 'judgeRounds', 'judgeMailed', 'rvDonePrev', 'downloadFails',
-      'helperAt', 'helperMovedAt', 'helperFinished', 'helperPages', 'helperDoneSeen', 'helperOff',
+      'helperAt', 'helperMovedAt', 'helperFinished', 'helperPages', 'helperDoneSeen', 'helperOff', 'goneSeen',
       'readerDay', 'readerWaits', 'readerMailed']
       .forEach(function (k) { delete j[k]; });
     if (j.lastError) j.lastError = shorten_(j.lastError, 120);
