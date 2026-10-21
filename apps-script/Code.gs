@@ -589,6 +589,10 @@ function setHelperBoxes(json) {
     try {
       boxes.at = now_().toISOString();
       props_().setProperty('HELPER_BOXES', JSON.stringify(boxes));
+      // A model put in the review box starts within a minute: what it must not review
+      // (a book deleted, or closed, since the last check) goes first.
+      var reviews = boxes.review.length ? helperSub_(CONFIG.HELPER_REVIEWS, false) : null;
+      if (reviews) dropHelperReviews_(reviews);
       writeRequests_();
     } finally {
       lock.releaseLock();
@@ -2166,32 +2170,41 @@ function helperJudgeNext_(ctx) {
 /**
  * With models in the review box: the open places of delivered books (review/ in the
  * results branch) are copied for the helper into "مراجعة/<fileId>", a few files per
- * check, and the folders of books with nothing open are removed.
+ * check. The folders of books with nothing open, or deleted, go at every check, also
+ * while the box is empty: a model put in it later must not start on them.
  */
 function syncHelperReviews_(cfg) {
-  if (!helperBoxes_().review.length) return;
-  var parent = helperSub_(CONFIG.HELPER_REVIEWS, true);
+  var boxed = helperBoxes_().review.length > 0;
+  var parent = helperSub_(CONFIG.HELPER_REVIEWS, boxed);
   if (!parent) return;
+  var open = dropHelperReviews_(parent);
+  if (!boxed) return;
   var jobs = loadJobs_();
-  var open = {};
-  reviewIds_().forEach(function (id) {
-    var rv = loadRv_(id);
-    // A book the user deleted is not reviewed: its folder goes below.
-    if (rv && rv.o > 0 && !rv.x && !bookGone_(id, rv.e)) open[id] = rv;
-  });
-  // A folder goes once nothing is open (a round running on the book keeps it, and the
-  // verdicts in it).
-  var it = parent.getFolders();
-  while (it.hasNext()) {
-    var f = it.next();
-    if (!f.isTrashed() && !open[f.getName()]) f.setTrashed(true);
-  }
   var budget = CONFIG.HELPER_REVIEW_FILES;
   Object.keys(open).forEach(function (id) {
     var j = jobs[id];
     // Copied from a delivered book only: a running round is about to change its places.
     if (budget > 0 && (!j || j.stage === 'delivered')) budget -= syncReviewFolder_(cfg, id, open[id], parent, budget);
   });
+}
+
+/**
+ * Removes the helper's folders of books with nothing open, or that the user deleted (a
+ * round running on a book keeps its folder, and the verdicts in it). Returns the books
+ * open for review: {fileId: rv}.
+ */
+function dropHelperReviews_(parent) {
+  var open = {};
+  reviewIds_().forEach(function (id) {
+    var rv = loadRv_(id);
+    if (rv && rv.o > 0 && !rv.x && !bookGone_(id, rv.e)) open[id] = rv;
+  });
+  var it = parent.getFolders();
+  while (it.hasNext()) {
+    var f = it.next();
+    if (!f.isTrashed() && !open[f.getName()]) f.setTrashed(true);
+  }
+  return open;
 }
 
 /** One book's items.json and place images; returns how many files it fetched. */
