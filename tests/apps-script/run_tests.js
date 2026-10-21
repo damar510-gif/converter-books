@@ -1037,6 +1037,7 @@ test('paused: no restart on the same Pacific day (even after Riyadh midnight), r
   assert.strictEqual(s.active.paused, true);
   assert.strictEqual(s.active.resumeAt, '2026-10-20T07:00:00.000Z');
   assert.strictEqual(s.active.pagesDone, 300);
+  assert.strictEqual(s.active.fileId, f.id);   // the page finds the helper's progress by it
 
   env.clock = Date.parse('2026-10-20T03:00:00Z');   // Riyadh 06:00 on the 20th, Pacific still the 19th
   tick(env);

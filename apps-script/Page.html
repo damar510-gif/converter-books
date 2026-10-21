@@ -317,6 +317,9 @@
         if (a.lastError) {
           now.appendChild(el('div', 'note warn', 'تعذّر بدء التحويل على GitHub، وسأحاول مرة أخرى تلقائياً. (' + a.lastError + ')'));
         }
+      } else if (a.paused && helperOn(s, a)) {
+        now.appendChild(el('div', '', 'نماذجك على جهازك تعمل عليه الآن. النموذج المجاني وحده متوقف حتى الغد (انتهت حصته).'));
+        now.appendChild(el('div', '', 'يعود النموذج المجاني نحو ' + when(a.resumeAt) + '، أو قبل ذلك حين تنهي نماذجك صفحاتها. ما أُنجز محفوظ.'));
       } else if (a.paused) {
         now.appendChild(el('div', '', 'متوقف حتى الغد: انتهت حصة القراءة المجانية لهذا اليوم.'));
         now.appendChild(el('div', '', 'يكمل تلقائياً نحو ' + when(a.resumeAt) + '. ما أُنجز محفوظ.'));
@@ -324,11 +327,20 @@
         now.appendChild(el('div', '', 'قيد التحويل منذ ' + duration(a.minutes) +
           (a.attempts > 1 ? ' (المحاولة رقم ' + a.attempts + ')' : '') + '.'));
       }
-      if (a.pagesTotal) {
-        now.appendChild(el('div', 'muted', 'أُنجزت ' + a.pagesDone + ' من ' + a.pagesTotal + ' صفحة حتى آخر توقف.'));
+      // The helper's models finish pages between runs; the run adds them to the book later.
+      var hp = helperProgress(s, a);
+      var done = a.pagesDone, total = a.pagesTotal;
+      if (hp && hp.finished > done) {
+        done = hp.finished;
+        total = hp.need;
+        now.appendChild(el('div', 'muted', 'أنجزت نماذجك ' + done + ' من ' + total + ' صفحة، وتُضاف إلى الكتاب في التشغيل القادم.'));
+      } else if (total) {
+        now.appendChild(el('div', 'muted', 'أُنجزت ' + done + ' من ' + total + ' صفحة حتى آخر توقف.'));
+      }
+      if (total) {
         var bar = el('div', 'bar');
         var fill = el('span');
-        fill.style.width = Math.min(100, Math.round(100 * a.pagesDone / a.pagesTotal)) + '%';
+        fill.style.width = Math.min(100, Math.round(100 * done / total)) + '%';
         bar.appendChild(fill);
         now.appendChild(bar);
       }
@@ -425,13 +437,27 @@
     return bar;
   }
 
+  // What the helper's models have finished of a book: {need, finished}, or null.
+  function helperProgress(s, a) {
+    var p = s.helper && s.helper.progress && a.fileId ? s.helper.progress[a.fileId] : null;
+    return p && p.need ? p : null;
+  }
+
+  // The helper's models are working on the book now: pages left, and a model at work.
+  function helperOn(s, a) {
+    var p = helperProgress(s, a), h = s.helper || {};
+    if (!p || p.finished >= p.need || !h.connected) return false;
+    return Object.keys(h.chips || {}).some(function (id) { return h.chips[id].state === 'working'; });
+  }
+
   // The day at a glance: what runs, what waits, what needs the user.
   function renderPills(s) {
     var box = document.getElementById('pills');
     box.textContent = '';
     var add = function (cls, text) { box.appendChild(el('span', 'pill' + (cls ? ' ' + cls : ''), text)); };
     var a = s.active;
-    if (a) add(a.paused ? 'warn' : 'ok', (a.paused ? 'متوقف حتى الغد: «' : 'يُحوَّل الآن: «') + a.title + '»');
+    if (a && a.paused && helperOn(s, a)) add('ok', 'نماذجك تعمل على: «' + a.title + '»');
+    else if (a) add(a.paused ? 'warn' : 'ok', (a.paused ? 'متوقف حتى الغد: «' : 'يُحوَّل الآن: «') + a.title + '»');
     else add('', 'لا يوجد تحويل الآن');
     if (s.queued) add('', 'في «1- جديد»: ' + s.queued);
     if (s.parked && s.parked.length) add('', 'ينتظر في «2- قيد التحويل»: ' + s.parked.length);

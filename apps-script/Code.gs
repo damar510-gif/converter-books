@@ -311,6 +311,7 @@ function getStatus() {
       var since = a.dispatchedAt || a.createdAt || '';
       out.active = {
         title: a.title,
+        fileId: a.fileId,
         stage: a.stage,
         attempts: a.attempts || 0,
         since: since,
