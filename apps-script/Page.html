@@ -1428,6 +1428,9 @@
       image(page.img, function (src) {
         if (!RV || RV.flat[RV.at] !== cur) return;
         if (!src) { hint.textContent = 'تعذّر تحميل الصورة.'; return; }
+        // A page already loaded comes back at once, before this screen is on the page: the
+        // place is framed again once the image is laid out, or the view stays at its top.
+        img.onload = function () { if (RV && RV.flat[RV.at] === cur) view(zoom, holder, page, it, full); };
         img.src = src;
         hint.textContent = it.kind === 'page' ? 'لم أجد موضعاً محدداً في هذه الصفحة؛ قارنها كلها بالأصل.'
           : it.located ? 'الموضع في المربع الأحمر.' : 'لم أحدد الموضع بدقة: ابحث عنه في الصفحة.';
