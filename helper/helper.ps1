@@ -6,7 +6,7 @@
 # places through the folders «كتب», «مراجعة» and «أحكام» (docs/helper-boxes-plan.md).
 # Windows PowerShell 5.1: no ?? or ?: operators.
 
-$HelperVersion = '2026-10-22.1'
+$HelperVersion = '2026-10-22.2'
 $BooksName = 'كتب'
 $ReviewsName = 'مراجعة'
 $VerdictsName = 'أحكام'
@@ -568,15 +568,18 @@ function Get-TranscribeBooks($boxes) {
 
 # One page's files: a (the free model's reading), ha, hb, final, skip, img; first = the
 # reading the settled text is made on; settled = a settled text made on these readings.
+# b (the free models' second reading, sent when no Flash model could settle the page)
+# stands in for hb: the page is settled on it, not read again.
 function Get-PageFiles($book, [int]$page) {
   $s = @{ page = $page }
-  foreach ($k in 'a', 'ha', 'hb', 'final', 'skip') {
+  foreach ($k in 'a', 'b', 'ha', 'hb', 'final', 'skip') {
     $name = Page-Name $page "$k.json"
     $s[$k] = $null
     if ($book.names[$name]) { $s[$k] = Read-Json (Join-Path $book.dir $name) }
   }
   $s.img = $null
   if ($book.names[(Page-Name $page 'jpg')]) { $s.img = Join-Path $book.dir (Page-Name $page 'jpg') }
+  if (-not $s.hb -and $s.b -and $s.b.text -and $s.a -and $s.a.text) { $s.hb = $s.b }
   $s.first = $null
   if ($s.a -and $s.a.text) { $s.first = $s.a } elseif ($s.ha -and $s.ha.text) { $s.first = $s.ha }
   # "[[EMPTY]]" as the second reading of a page the first reading found words on is not one

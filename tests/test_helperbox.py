@@ -102,18 +102,19 @@ class HelperPipeline(PipelineBase):
 
     def test_the_free_models_take_the_end_of_the_book_and_the_helpers_models_its_start(self):
         free = {"gemini-3.5-flash-lite": lambda p, n: answer(TRUE if "النسخة (أ)" in p else WRONG),
-                "gemini-3.1-flash-lite": lambda p, n: answer(TRUE)}
-        code, st, md, fake = self.run_helper(free)
+                "gemini-3.1-flash-lite": lambda p, n: answer(TRUE),
+                "gemini-3.8-flash": lambda p, n: answer(TRUE)}
+        code, st, md, fake = self.run_helper(free, extra=("--extra-models", "gemini-3.8-flash"))
         self.assertEqual(code, 5)
         self.assertEqual((st["state"], st["waiting_for"]), ("paused", "helper"))
-        # Page 31 (the later half) was read twice and settled by the free models; page 30 was
+        # Page 31 (the later half): read by the two Lite readers, settled by Flash; page 30
         # not read at all: it is the helper's models'.
         self.assertEqual(st["pages_helper"], [30])
         self.assertEqual((st["free_done"], st["free_left"]), (1, False))
-        self.assertEqual(asked(fake), ["read", "read", "reconcile"])
+        self.assertEqual([(m, k) for m, k in fake.calls if k != "cover"],
+                         [("gemini-3.5-flash-lite", "read"), ("gemini-3.1-flash-lite", "read"), ("gemini-3.8-flash", "reconcile")])
         rec = self.records()[31]
-        self.assertEqual((rec["a"]["model"], rec["b"]["model"], rec["check"]["state"]),
-                         ("gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "reconciled"))
+        self.assertEqual((rec["check"]["state"], rec["check"]["model"]), ("reconciled", "gemini-3.8-flash"))
         self.assertNotIn(30, self.records())
         book = self.drive.json("book.json")
         self.assertEqual((book["need"], book["need_a"], book["lite_out"]), ([30], [30], False))
@@ -123,9 +124,30 @@ class HelperPipeline(PipelineBase):
         self.assertNotIn("p0031.a.json", self.drive.files)
         # A second run asks nothing more of the free models and sends no image again.
         sent = dict(self.drive.files)
-        code, st, md, fake = self.run_helper(free)
+        code, st, md, fake = self.run_helper(free, extra=("--extra-models", "gemini-3.8-flash"))
         self.assertEqual((code, asked(fake)), (5, []))
         self.assertEqual(self.drive.files["p0030.jpg"]["modifiedTime"], sent["p0030.jpg"]["modifiedTime"])
+
+    def test_lite_never_settles_while_the_helpers_models_are_on(self):
+        free = {"gemini-3.5-flash-lite": lambda p, n: answer(WRONG),
+                "gemini-3.1-flash-lite": lambda p, n: answer(TRUE)}
+        code, st, md, fake = self.run_helper(free)
+        self.assertEqual(code, 5)
+        self.assertNotIn("reconcile", asked(fake))
+        self.assertEqual(st["pages_helper"], [30, 31])
+        # Both free readings of page 31 go to the helper's models, which settle on them.
+        self.assertEqual(self.drive.json("p0031.a.json")["text"], WRONG.strip())
+        self.assertEqual(self.drive.json("p0031.b.json")["model"], "gemini-3.1-flash-lite")
+        self.drive.put("p0031.final.json", {"page": 31, "model": CHIP, "text": TRUE,
+                                            "a_sha": helperbox.sha(WRONG.strip()), "b_sha": helperbox.sha(TRUE.strip())})
+        code, st, md, fake = self.run_helper(free)
+        rec = self.records()[31]
+        self.assertEqual((rec["b"]["model"], rec["check"]["state"], rec["check"]["model"]),
+                         ("gemini-3.1-flash-lite", "reconciled", CHIP))
+        self.assertNotIn("reconcile", asked(fake))
+        # With the helper's models off, Lite settles again.
+        code, st, md, fake = self.run_helper(free, mode="import")
+        self.assertIn("reconcile", asked(fake))
 
     def test_the_free_models_go_on_right_away_while_they_have_quota(self):
         free = {"gemini-3.5-flash-lite": lambda p, n: answer(TRUE),
@@ -148,10 +170,11 @@ class HelperPipeline(PipelineBase):
         self.assertEqual(self.drive.json("book.json")["need"], [28, 29, 30, 31])
 
     def test_the_free_models_use_a_second_reading_the_helpers_models_gave(self):
-        free = {"gemini-3.5-flash-lite": lambda p, n: answer(TRUE if "النسخة (أ)" in p else WRONG),
-                "gemini-3.1-flash-lite": lambda p, n: answer(TRUE)}
+        free = {"gemini-3.5-flash-lite": lambda p, n: answer(WRONG),
+                "gemini-3.1-flash-lite": lambda p, n: answer(TRUE),
+                "gemini-3.8-flash": lambda p, n: answer(TRUE)}
         self.drive.put("p0031.hb.json", {"page": 31, "model": CHIP, "text": TRUE})
-        code, st, md, fake = self.run_helper(free)
+        code, st, md, fake = self.run_helper(free, extra=("--extra-models", "gemini-3.8-flash"))
         rec = self.records()[31]
         self.assertEqual((rec["a"]["model"], rec["b"]["model"]), ("gemini-3.5-flash-lite", CHIP))
         self.assertEqual(rec["check"]["state"], "reconciled")

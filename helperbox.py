@@ -4,8 +4,10 @@ through the book's folder in Drive: see docs/helper-boxes-plan.md and docs/helpe
 The run's own Drive token (about an hour, from the Drive inbox script) is the only
 credential, and the helper is never called directly: it works on the files.
 
-From the run:    book.json, pNNNN.jpg (the page image) and pNNNN.a.json (the main reader's
-                 text, with the lines Tesseract saw that it may have dropped).
+From the run:    book.json, pNNNN.jpg (the page image), pNNNN.a.json (the main reader's
+                 text, with the lines Tesseract saw that it may have dropped) and pNNNN.b.json
+                 (the free second reading of a page no Flash model could settle: the helper's
+                 models settle on it instead of reading the page again).
 From the helper: pNNNN.ha.json (a first reading, when the free readers cannot give one),
                  pNNNN.hb.json (the second reading), pNNNN.final.json (its settled text,
                  made on the two readings named by a_sha and b_sha) and pNNNN.skip.json
@@ -254,11 +256,11 @@ class HelperBox:
             self.note(f"could not write {name} ({e})")
             return False
 
-    def put_readings(self, payloads):
-        """{page: payload} as pNNNN.a.json; returns the pages written."""
+    def put_readings(self, payloads, kind="a"):
+        """{page: payload} as pNNNN.a.json (or pNNNN.b.json); returns the pages written."""
         def one(item):
             page, payload = item
-            return page if self.put_json(f"p{page:04d}.a.json", payload) else None
+            return page if self.put_json(f"p{page:04d}.{kind}.json", payload) else None
 
         with ThreadPoolExecutor(max_workers=8) as tp:
             return {p for p in tp.map(one, sorted(payloads.items())) if p}
@@ -334,8 +336,10 @@ def merge(rec, outs, page_no, check_version):
             rec["b"] = b
             rec.pop("check", None)
             changed = True
+    # Settled on the record's two readings, whoever gave the second (the helper's models, or
+    # the free models when no Flash model could settle the page).
     b = rec.get("b") or {}
-    good = has_text(fin) and b.get("via") == "helper" and fin.get("a_sha") == reading_sha(rec["a"]) \
+    good = has_text(fin) and b.get("status") == "ok" and fin.get("a_sha") == reading_sha(rec["a"]) \
         and fin.get("b_sha") == reading_sha(b)
     if good:
         final = {"model": str(fin.get("model") or b.get("model", "")), "text": fin["text"]}
