@@ -512,7 +512,6 @@
         </div>
         <div class="acts">
           <button id="check" class="btn btn-gold" type="button"><span data-ic="refresh"></span><span>افحص الآن</span><kbd>F</kbd></button>
-          <button id="judge" class="btn" type="button"><span data-ic="scale"></span><span>اعرض على الحكّام الآن</span><kbd>J</kbd></button>
         </div>
       </header>
 
@@ -840,11 +839,30 @@
     return { kind: 'run', label: 'يُحوَّل الآن' };
   }
 
-  // The helper's models finish pages between runs; the run adds them to the book later.
+  // A book the helper's models work on without a run now (s.working).
+  function workingState(s, w) {
+    if (!(s.helper || {}).connected) return { kind: 'hold', label: 'ينتظر جهازك' };
+    return helperOn(s, w) ? { kind: 'run', label: 'نماذجك تعمل عليه' } : { kind: 'hold', label: 'ينتظر نماذجك' };
+  }
+
+  // The whole book's pages; helper: those the helper's models finished since the last run
+  // (already counted in done; the next run adds them to the book).
   function activePages(s, a) {
-    var hp = helperProgress(s, a);
-    if (hp && hp.finished > a.pagesDone) return { done: hp.finished, total: hp.need, helper: true };
-    return { done: a.pagesDone, total: a.pagesTotal, helper: false };
+    return { done: a.pagesDone, total: a.pagesTotal, helper: a.helperDone || 0 };
+  }
+
+  function progress(p) {
+    var prog = el('div', 'prog');
+    var n = el('div', 'prog-n');
+    n.appendChild(el('b', '', String(p.done)));
+    n.appendChild(el('span', '', 'من ' + p.total + ' صفحة'));
+    n.appendChild(el('em', '', pct(p.done, p.total) + '%'));
+    prog.appendChild(n);
+    prog.appendChild(meter(p.done, p.total));
+    prog.appendChild(el('div', 'prog-s', p.helper
+      ? 'منها ' + p.helper + ' صفحة أنهتها نماذجك منذ آخر تشغيل، وتُضاف إلى الكتاب في التشغيل القادم.'
+      : 'أُنجزت ' + p.done + ' من ' + p.total + ' صفحة حتى آخر توقف.'));
+    return prog;
   }
 
   // What the helper's models have finished of a book: {need, finished}, or null.
@@ -880,17 +898,18 @@
     return n;
   }
 
-  // The book being converted.
+  // The book being converted, and the books the helper's models work on.
   function renderNow(s) {
     var box = document.getElementById('now');
     var a = s.active;
+    var books = (s.working || []).slice();
     var top = el('div', 'hero-top');
     var eb = el('div', 'hero-eb');
     eb.appendChild(icon('book'));
     eb.appendChild(el('span', '', 'الآن'));
     top.appendChild(eb);
     box.appendChild(top);
-    if (!a) {
+    if (!a && !books.length) {
       box.appendChild(el('div', 'hero-title', 'لا يوجد كتاب قيد التحويل.'));
       box.appendChild(el('div', 'hero-lines', s.queued ? 'يبدأ الكتاب التالي في الفحص القادم.'
         : 'ضع ملف PDF أو DOCX أو TXT في مجلد «1- جديد»، فيبدأ تحويله خلال عشر دقائق.'));
@@ -901,6 +920,32 @@
       }
       return;
     }
+    if (a) renderActive(s, a, box, top);
+    else renderWorking(s, books.shift(), box, top);
+    if (!books.length) return;
+    var h3 = el('div', 'h3');
+    h3.appendChild(icon('cpu'));
+    h3.appendChild(el('span', '', 'ونماذجك تعمل أيضاً على'));
+    box.appendChild(h3);
+    var list = el('ul', 'rows');
+    books.forEach(function (w) {
+      var state = workingState(s, w);
+      var li = el('li', 'rw');
+      var ic = el('div', 'rw-ic is-' + (state.kind === 'run' ? 'ok' : 'hold'));
+      ic.appendChild(icon('cpu'));
+      li.appendChild(ic);
+      var b = el('div', 'rw-b');
+      b.appendChild(el('div', 'rw-t', '«' + w.title + '»'));
+      if (w.total) b.appendChild(el('div', 'rw-m', 'أُنجزت ' + w.done + ' من ' + w.total + ' صفحة.'));
+      li.appendChild(b);
+      li.appendChild(st(state.kind, state.label));
+      if (w.total) li.appendChild(meter(w.done, w.total));
+      list.appendChild(li);
+    });
+    box.appendChild(list);
+  }
+
+  function renderActive(s, a, box, top) {
     var state = activeState(s, a);
     top.appendChild(st(state.kind, state.label));
     box.appendChild(el('div', 'hero-title', '«' + a.title + '»'));
@@ -909,8 +954,8 @@
     if (a.stage === 'queued') {
       line('ينتظر بدء التحويل.');
     } else if (a.paused && helperOn(s, a)) {
-      line('نماذجك على جهازك تعمل عليه الآن. النموذج المجاني وحده متوقف حتى الغد (انتهت حصته).');
-      line('يعود النموذج المجاني نحو ' + when(a.resumeAt) + '، أو قبل ذلك حين تنهي نماذجك صفحاتها. ما أُنجز محفوظ.');
+      line('نماذجك على جهازك تعمل عليه الآن، والنماذج المجانية متوقفة حتى يتجدد رصيدها.');
+      line('تعود النماذج المجانية نحو ' + when(a.resumeAt) + '، أو قبل ذلك حين تنهي نماذجك صفحاتها. ما أُنجز محفوظ.');
     } else if (a.paused) {
       line('متوقف حتى الغد: انتهت حصة القراءة المجانية لهذا اليوم.');
       line('يكمل تلقائياً نحو ' + when(a.resumeAt) + '. ما أُنجز محفوظ.');
@@ -923,19 +968,7 @@
     }
 
     var p = activePages(s, a);
-    if (p.total) {
-      var prog = el('div', 'prog');
-      var n = el('div', 'prog-n');
-      n.appendChild(el('b', '', String(p.done)));
-      n.appendChild(el('span', '', 'من ' + p.total + ' صفحة'));
-      n.appendChild(el('em', '', pct(p.done, p.total) + '%'));
-      prog.appendChild(n);
-      prog.appendChild(meter(p.done, p.total));
-      prog.appendChild(el('div', 'prog-s', p.helper
-        ? 'أنجزت نماذجك ' + p.done + ' من ' + p.total + ' صفحة، وتُضاف إلى الكتاب في التشغيل القادم.'
-        : 'أُنجزت ' + p.done + ' من ' + p.total + ' صفحة حتى آخر توقف.'));
-      box.appendChild(prog);
-    }
+    if (p.total) box.appendChild(progress(p));
 
     var facts = el('dl', 'facts');
     var any = false;
@@ -948,6 +981,23 @@
     if (a.attempts > 1) fact('المحاولة', 'رقم ' + a.attempts);
     if (a.paused) fact('يعود المجاني', when(a.resumeAt));
     if (any) box.appendChild(facts);
+  }
+
+  // No run now: the helper's models work on the book from its start, and the free models
+  // come back to its end at the next check or once their quota renews.
+  function renderWorking(s, w, box, top) {
+    var state = workingState(s, w);
+    top.appendChild(st(state.kind, state.label));
+    box.appendChild(el('div', 'hero-title', '«' + w.title + '»'));
+    var lines = el('div', 'hero-lines');
+    var line = function (t) { lines.appendChild(el('div', '', t)); };
+    line(state.kind === 'run' ? 'نماذجك على جهازك تعمل عليه الآن من أول الكتاب.'
+      : (s.helper || {}).connected ? 'لا يعمل عليه أي من نماذجك الآن: ترتاح، أو لم يبقَ لها فيه عمل.'
+      : 'جهازك غير متصل، فلا تعمل نماذجك عليه الآن.');
+    line(w.freeAt ? 'تعود إليه النماذج المجانية من آخره نحو ' + when(w.freeAt) + '، حين يتجدد رصيدها.'
+      : 'تعود إليه النماذج المجانية من آخره في الفحص القادم.');
+    box.appendChild(lines);
+    if (w.total) box.appendChild(progress({ done: w.done, total: w.total, helper: w.helperDone }));
   }
 
   // Books waiting: in «1- جديد», and parked in «2- قيد التحويل».
@@ -977,22 +1027,19 @@
     h3.appendChild(el('span', '', 'ينتظر في «2- قيد التحويل» دون أن يوقف غيره'));
     box.appendChild(h3);
     var list = el('ul', 'rows');
+    // The books the helper's models work on are under «الآن»; these wait for a free reader
+    // (or, parked by an older version for the judges, are delivered at the next check).
     parked.forEach(function (p) {
       var li = el('li', 'rw');
-      var busy = p.stage === 'helper' && s.helper && s.helper.connected && working(s.helper) > 0;
-      var ic = el('div', 'rw-ic is-' + (busy ? 'ok' : 'hold'));
-      ic.appendChild(icon(p.stage === 'helper' ? 'cpu' : p.stage === 'readerWait' ? 'book' : 'scale'));
+      var ic = el('div', 'rw-ic is-hold');
+      ic.appendChild(icon('book'));
       li.appendChild(ic);
       var b = el('div', 'rw-b');
       b.appendChild(el('div', 'rw-t', '«' + p.title + '»'));
-      b.appendChild(el('div', 'rw-m', p.stage === 'helper'
-        ? 'ينتظر نماذجك على الجهاز' + (p.need ? ': أنهت ' + p.finished + ' من ' + p.need + ' صفحة.' : '.')
-        : p.stage === 'readerWait' ? 'ينتظر تجدد رصيد القارئ الثاني، ثم يكمل قبل غيره.'
-        : 'ينتظر الحكّام حتى يتجدد رصيدهم.'));
+      b.appendChild(el('div', 'rw-m', p.stage === 'readerWait' ? 'ينتظر تجدد رصيد القارئ الثاني، ثم يكمل قبل غيره.'
+        : 'يُسلَّم في الفحص القادم.'));
       li.appendChild(b);
-      li.appendChild(st(busy ? 'run' : 'hold', busy ? 'نماذجك تعمل عليه'
-        : p.stage === 'helper' ? 'ينتظر نماذجك' : p.stage === 'readerWait' ? 'ينتظر القارئ الثاني' : 'ينتظر الحكّام'));
-      if (p.stage === 'helper' && p.need) li.appendChild(meter(p.finished, p.need));
+      li.appendChild(st('hold', p.stage === 'readerWait' ? 'ينتظر القارئ الثاني' : 'يُسلَّم قريباً'));
       list.appendChild(li);
     });
     box.appendChild(list);
@@ -1064,9 +1111,9 @@
       b.addEventListener('click', function () { jump(target); });
       box.appendChild(b);
     };
-    var a = s.active;
-    if (a) {
-      var state = activeState(s, a), p = activePages(s, a);
+    var a = s.active, wb = (s.working || [])[0];
+    if (a || wb) {
+      var state = a ? activeState(s, a) : workingState(s, wb), p = a ? activePages(s, a) : { done: wb.done, total: wb.total };
       add('now', state.kind, 'book', 'الكتاب الحالي', p.total ? String(pct(p.done, p.total)) : '—', p.total ? '%' : '',
         state.label + (p.total ? ' · ' + p.done + ' من ' + p.total : ''));
     } else {
@@ -1097,8 +1144,8 @@
 
   function renderNav(s) {
     var h = s.helper;
-    var a = s.active;
-    var p = a ? activePages(s, a) : null;
+    var a = s.active, wb = (s.working || [])[0];
+    var p = a ? activePages(s, a) : wb ? { done: wb.done, total: wb.total } : null;
     var n = places(s);
     var w = working(h);
     var items = [
@@ -1160,7 +1207,7 @@
   }, { passive: true });
 
   // ------------------------------------------------------------------------
-  // Refresh, check now, judges now.
+  // Refresh, check now.
   // ------------------------------------------------------------------------
   // One getStatus at a time; what waits for it runs when it is back.
   var REFRESHING = null;
@@ -1206,29 +1253,6 @@
         setMsg('تعذّر الفحص: ' + errText(err));
       })
       .tick();
-  });
-
-  // Unsure pages go to the judges today, using what is left of their daily quota.
-  document.getElementById('judge').addEventListener('click', function () {
-    var btn = this;
-    btn.disabled = true;
-    setMsg('جارٍ الطلب…');
-    google.script.run
-      .withSuccessHandler(function (result) {
-        refresh(function () {
-          btn.disabled = false;
-          setMsg(result === 'busy' ? 'يوجد فحص يعمل الآن، أعد المحاولة بعد دقيقة.'
-            : result === 'nothing to judge' ? 'لا يوجد كتاب فيه صفحات مشكوك فيها تنتظر الحكّام.'
-            : /(judging|refining) [\w-]+: dispatched/.test(result) ? 'بدأت مراجعة الحكّام. تصلك رسالة حين تنتهي الجولة.'
-            : 'تبدأ المراجعة بعد الكتاب الجاري تحويله أو الكتاب الجديد، تلقائياً.',
-            /dispatched/.test(result) ? 'ok' : 'info');
-        });
-      })
-      .withFailureHandler(function (err) {
-        btn.disabled = false;
-        setMsg('تعذّر الطلب: ' + errText(err));
-      })
-      .judgeNow();
   });
 
   // Keep the page current while it is open (not during a review or while typing), and when the user comes back to it.
@@ -1836,8 +1860,8 @@
   var DRAFT = {};
   var SECTIONS = [
     { key: 'transcribe', title: 'التفريغ',
-      note: 'يقرأ النموذج المجاني الصفحة مرة، ونماذجك تقرؤها ثانيةً وتحسم الخلاف. إن نفد المجاني قامت نماذجك بالعمل كله.',
-      empty: 'فارغ: النموذج المجاني يعمل وحده.' },
+      note: 'نماذجك تعمل على الكتاب من أوله والنماذج المجانية من آخره، معاً. كل صفحة تقرؤها قراءتان من نموذجين مختلفين ثم يُحسم الخلاف.',
+      empty: 'فارغ: النماذج المجانية تعمل وحدها.' },
     { key: 'review', title: 'مراجعة المشكوك فيه',
       note: 'نماذجك تحكم على مواضع الشك. التصحيح الكبير لا يُطبَّق إلا إذا اتفق عليه نموذجان، وإجابتك تغلب دائماً.',
       empty: 'فارغ: المواضع تبقى لك.' }
@@ -2249,7 +2273,7 @@
     openModal('المظهر', body);
   }
 
-  var KEYS_HOME = [['F', 'افحص الآن'], ['J', 'اعرض على الحكّام الآن'], ['R', 'حدّث الصفحة'], ['V', 'افتح أول مراجعة'],
+  var KEYS_HOME = [['F', 'افحص الآن'], ['R', 'حدّث الصفحة'], ['V', 'افتح أول مراجعة'],
     ['1 – 6', 'انتقل إلى قسم'], ['T', 'المظهر'], ['?', 'الاختصارات']];
   var KEYS_REVIEW = [['1', 'القراءة صحيحة'], ['2', 'صحّح'], ['3', 'كل ما بقي في الصفحة صحيح'], ['←', 'تخطَّ'], ['→', 'السابق'],
     ['Z', 'الصفحة كاملة أو الموضع'], ['Ctrl+Enter', 'احفظ التصحيح'], ['Esc', 'ألغِ التصحيح أو ارجع']];
@@ -2311,7 +2335,6 @@
     }
     var click = function (id) { var b = document.getElementById(id); if (b && !b.disabled) b.click(); };
     if (code === 'KeyF') click('check');
-    else if (code === 'KeyJ') click('judge');
     else if (code === 'KeyR') refresh(function () { setMsg('حُدّثت الصفحة.'); });
     else if (code === 'KeyT') showThemes();
     else if (code === 'KeyV') {

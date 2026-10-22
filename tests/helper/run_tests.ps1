@@ -163,6 +163,23 @@ Test 'transcription: with the free quota out, two models give the two readings, 
   Same (Read-PageFile $dir 3 'final').a_sha (Text-Sha $RIGHT) 'on the first reading of Grok'
 }
 
+Test 'transcription: a page every model now in the box refused goes back, even when the box changed after the refusals' {
+  Set-Boxes @($CLAUDE, $GEMINI, $GROK) @()
+  $dir = Make-Book 'book1' @(5) @() $false @{ 5 = $RIGHT }
+  $script:Answer = { param($tool, $model, $kind, $task) @{ text = 'عذراً، لا أستطيع نسخ هذه الصفحة.' } }
+  Same (Work 'claude').kind 'readB' 'Claude refused'
+  Same (Work 'agy').kind 'readB' 'Gemini refused'
+  Check (-not (Test-Path -LiteralPath (Join-Path $dir (Page-Name 5 'skip.json')))) 'Grok may still read it'
+  # The user takes Grok out of the box: nobody left would take the page.
+  Set-Boxes @($CLAUDE, $GEMINI) @()
+  Same (Work 'claude') '' 'not Claude'
+  Same (Work 'agy') '' 'not Gemini'
+  $boxes = Get-Boxes (Read-Json (Join-Path $Folder 'requests.json'))
+  $progress = Get-BookProgress $boxes (Get-Tools)
+  Same (Read-PageFile $dir 5 'skip').reason 'refused' 'handed back to the free models'
+  Same "$($progress.book1.finished)/$($progress.book1.need)" '1/1' 'the book is finished for the helper'
+}
+
 Test 'transcription: a refused page goes to another model, and back to the free way when every model refused' {
   Set-Boxes @($CLAUDE, $GEMINI) @()
   $dir = Make-Book 'book1' @(5) @() $false @{ 5 = $RIGHT }

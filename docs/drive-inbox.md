@@ -15,7 +15,7 @@ Created by `setup()` under one root folder `تحويل الكتب`:
 | `3- جاهز` | Finished EPUBs, with their reports. |
 | `4- الأصل` | Original files of finished books. |
 | `5- مشكلة` | Books that failed, each with a short note. |
-| `6- مكتمل` | Delivered books whose refinement is over (no unsure page left, or the judges stopped improving them), with their reports. |
+| `6- مكتمل` | Delivered books with no unsure page left (after the user's review or their own models' verdicts), with their reports. |
 
 The answers the user gives on the status page (see "Results" below) are kept in
 `تحويل الكتب/بيانات المراجعة/review-<fileId>.json`, created on first use.
@@ -32,7 +32,7 @@ The answers the user gives on the status page (see "Results" below) are kept in
 | `drive_file_name` | Original file name (keeps the extension). |
 | `result_dir` | `drive-<fileId>`. |
 | `title` | Book title (the file name without its extension). |
-| `review` | Optional. The Drive ID of the book's answers file, so the run applies the user's answers; with `:only` appended (or `:only` alone) the run only applies the answers and rebuilds the book from saved pages, with no reading, settling or judging request. |
+| `review` | Optional. The Drive ID of the book's answers file, so the run applies the user's answers; with `:only` appended (or `:only` alone) the run only applies the answers and rebuilds the book from saved pages, with no reading or settling request. |
 | `helper` | Optional. The book's folder for the helper on the user's computer (`بيانات المساعد/كتب/<fileId>`), with `:transcribe` (the models in the user's box give the second reading and settle; the free model reads each page once) or `:import` (their work so far is used, the free model does the rest). See docs/helper-boxes-plan.md. |
 | `judge` | Optional. The Drive ID of `بيانات المساعد/أحكام/<fileId>.json`, the helper models' verdicts on the unsure places. The run adds them to `review/judge-answers.json` and applies them like the user's answers (the user's own answer wins). |
 
@@ -51,9 +51,9 @@ The workflow writes to branch `results`, folder `<result_dir>/`:
   with one JPEG per page (`review/pNNNN-<hash>.jpg`, the places framed and numbered;
   boxes are in the JPEG's pixels). `answers_seen` is the time of the latest answer the
   run used: an answer saved later hides its place until the next run.
-- `review/judge-answers.json` (optional): answers a judge model gave when the user asked
-  for one, in the same form as the user's; every run applies them, and the user's own
-  answer to the same place wins.
+- `review/judge-answers.json` (optional): the verdicts of the user's own models (the
+  helper's review box), in the same form as the user's answers; every run applies them,
+  and the user's own answer to the same place wins.
 - `review/review-applied.json` (what the run did with each answer: `kept`, `applied`,
   `already` or `conflict`) and `review/answers.json` (the answers file it used).
 
@@ -108,9 +108,9 @@ Read the files with `GET /repos/{repo}/contents/<path>?ref=results` and the head
 |---|---|
 | `done` | Every page was read. Some may be listed in `pages_unsure`: the two readings disagreed and the difference could not be settled, or a line seems to be missing. Those pages are still in the book, and the report shows the words in question. |
 | `paused` | The day's reading quota ran out (`pages_waiting`). Progress is saved. Start the same book again after midnight Pacific time; `quota_day` is the Pacific date the quota ran out. |
-| `paused` + `"waiting_for": "judges"` | Every page is read and checked, but some unsure pages (`pages_judging`) still wait for a judge whose quota ran out. The script parks the book in «2- قيد التحويل», starts the next book, and runs this one again first after midnight Pacific time (`quota_day`). |
-| `paused` + `"waiting_for": "reader"` | One free reader's daily quota is used up and the other (`readers_left`) still has some; the pages in `pages_waiting` only need a second reading from the reader that is out (a page's two readings never come from one model). The script parks the book (`stage: 'readerWait'`), starts the next book with the reader that is left, and runs the parked books first, oldest first, after midnight Pacific time (`quota_day`). With both readers out the state is plain `paused` and the book keeps its turn. |
-| `paused` + `"waiting_for": "helper"` | Read once by the free model; the pages in `pages_helper` wait for the helper's models (second reading and settling). The script parks the book (`stage: 'helper'`) and starts the next one; it runs this one again when the helper reports its pages finished, or with `:import` when the user empties the box, the computer is away for an hour, or the helper has not moved for six hours. |
+| `paused` + `"waiting_for": "judges"` | Older versions only (no free model judges any more): the script delivers the book; a book an older script parked for the judges runs once more and is delivered. |
+| `paused` + `"waiting_for": "reader"` | Some free readers' daily quota is used up and others (`readers_left`) still have some; the pages in `pages_waiting` only need a second reading that only the readers now out could give (a page's two readings never come from one model). The script parks the book (`stage: 'readerWait'`), starts the next book with the readers left, and runs the parked books first, oldest first, after midnight Pacific time (`quota_day`). With every reader out the state is plain `paused` and the book keeps its turn. |
+| `paused` + `"waiting_for": "helper"` | The pages in `pages_helper` are with the helper's models (they go from the start of the book; the free models took their share, `free_done` pages, from its end). The script parks the book (`stage: 'helper'`, shown under «الآن») and runs it again: at once when `free_left` (the free models stopped for time with quota left), on a later Pacific day than `quota_day` (their quota renewed), when the helper reports its pages finished, or with `:import` when the user empties the box, the computer is away for an hour, or the helper has not moved for six hours. |
 | `incomplete` | Some pages could not be read (`pages_missing`), or their check hit temporary API errors (`pages_retry`). The EPUB exists. Starting the same book again retries only those pages. |
 | `failed` | The run crashed; the EPUB may be missing. |
 

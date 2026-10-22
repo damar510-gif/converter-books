@@ -54,7 +54,7 @@ class ResolveModels(unittest.TestCase):
         got = c.resolve_models(pool, ["gemini-3.8-flash", "gemini-3-flash", "gemini-2.5-flash", "gemini-9-flash"])
         self.assertEqual(got, ["gemini-3.8-flash", "gemini-3-flash-preview", "gemini-2.5-flash", "gemini-9-flash"])
 
-    def test_new_gemini_models_join_the_judges(self):
+    def test_new_gemini_models_join_the_free_models(self):
         names = ("gemini-4-pro-preview", "gemini-3.9-flash", "gemini-3.9-flash-lite", "gemini-3.8-flash",
                  "gemini-3-flash-preview", "gemini-3.9-flash-image", "gemma-5-27b-it", "gemini-2.0-flash",
                  "gemini-3.9-flash-preview-09-2026", "gemini-3.6-pro", "gemini-nano-3")
@@ -64,7 +64,7 @@ class ResolveModels(unittest.TestCase):
         got = c.resolve_models(pool, ["gemini-3.8-flash", "gemini-3.7-flash", "gemini-3-flash", "gemini-2.5-flash"])
         self.assertEqual(got, ["gemini-4-pro-preview", "gemini-3.9-flash", "gemini-3.8-flash", "gemini-3.7-flash",
                                "gemini-3.6-pro", "gemini-3-flash-preview", "gemini-2.5-flash"])
-        self.assertEqual(pool.added_judges, ["gemini-4-pro-preview", "gemini-3.9-flash", "gemini-3.6-pro"])
+        self.assertEqual(pool.added_models, ["gemini-4-pro-preview", "gemini-3.9-flash", "gemini-3.6-pro"])
 
     def test_model_without_free_quota_is_skipped_at_once(self):
         calls = []
@@ -119,13 +119,14 @@ class PipelineBase(unittest.TestCase):
         c.time.sleep = self._sleep
 
     def run_book(self, behaviour, pages="30-31", extra=()):
+        """extra: more converter options; the Flash models are left out unless a test names them."""
         fake = FakeModels(behaviour)
         c.genai.Client = lambda **kw: pytypes.SimpleNamespace(models=fake)
         out = os.path.join(self.tmp, "book.epub")
         status = os.path.join(self.tmp, "status.json")
         sys.argv = ["converter.py", PDF, "-o", out, "--pages", pages, "--work-dir", os.path.join(self.tmp, "work"),
                     "--report", os.path.join(self.tmp, "report.md"), "--status", status, "--rpm", "6000",
-                    "--keep-markdown", *extra]
+                    "--keep-markdown", "--extra-models", "", *extra]
         with self.assertRaises(SystemExit) as exit_:
             c.main()
         with open(status, encoding="utf-8") as f:
@@ -175,7 +176,7 @@ class Pipeline(PipelineBase):
         code, st, md, fake = self.run_book({
             "gemini-3.5-flash-lite": lambda p, n: answer("كلام قصير" if "النسخة (أ)" in p else WRONG),
             "gemini-3.1-flash-lite": lambda p, n: answer("كلام قصير" if "النسخة (أ)" in p else TRUE),
-        }, pages="30", extra=("--arbiter-models", ""))
+        }, pages="30")
         self.assertEqual(code, 0)
         rec = self.records()[30]
         self.assertIn(rec["check"]["state"], ("kept", "unsure"))
@@ -292,35 +293,43 @@ class Pipeline(PipelineBase):
         self.assertEqual((check["state"], check["model"]), ("reconciled", "gemini-3.5-flash-lite"))
         self.assertNotIn("كاقية", md)
 
-    def test_unsure_page_goes_to_arbiter_and_notice_in_book(self):
-        # The two Lite models cannot settle (their answer is too short), the arbiter can.
+    def test_unsure_page_is_delivered_with_its_notice_and_no_judge_is_asked(self):
+        # The two Lite models cannot settle (their answer is too short): the page stays unsure
+        # for the user's own models or the user; no free model judges it.
+        never = lambda p, n: self.fail("no free model judges an unsure page")
         code, st, md, fake = self.run_book({
             "gemini-3.5-flash-lite": lambda p, n: answer("قصير" if "النسخة (أ)" in p else WRONG),
             "gemini-3.1-flash-lite": lambda p, n: answer("قصير" if "النسخة (أ)" in p else TRUE),
-            # One request left today on the strongest judge; the next judge cannot settle.
-            "gemini-3.8-flash": lambda p, n: answer(TRUE) if n == 1 else (_ for _ in ()).throw(
-                Exception("429 RESOURCE_EXHAUSTED GenerateRequestsPerDayPerProjectPerModel-FreeTier")),
-            "gemini-3.7-flash": lambda p, n: answer("قصير"),
-        }, pages="30-31", extra=("--arbiter-limit", "1"))
-        recs = self.records()
-        self.assertEqual(recs[30]["check"]["state"], "reconciled")
-        self.assertEqual(recs[30]["check"]["arbiter"], "gemini-3.8-flash: settled")
-        # Page 31 was over today's arbiter limit: still unsure, and the book says so.
-        self.assertEqual(recs[31]["check"]["state"], "unsure")
-        self.assertIn("قراءة الصفحة 31 من الأصل غير مؤكدة", md)
-        # Reading is done; only the judges are missing: the book waits for them ("judging").
-        self.assertEqual(code, 4)
-        self.assertEqual(st["state"], "paused")
-        self.assertEqual(st["waiting_for"], "judges")
-        self.assertEqual(st["pages_judging"], [31])
-        code, st, md, fake = self.run_book({
-            "gemini-3.5-flash-lite": lambda p, n: answer(WRONG),
-            "gemini-3.1-flash-lite": lambda p, n: answer(TRUE),
-            "gemini-3.8-flash": lambda p, n: answer(TRUE),
-        }, pages="30-31")
+            "gemini-3.8-flash": never,
+        }, pages="30-31", extra=("--extra-models", "gemini-3.8-flash"))
         self.assertEqual(code, 0, st)
-        self.assertEqual(self.records()[31]["check"]["state"], "reconciled")
-        self.assertNotIn("قراءة الصفحة 30 من الأصل غير مؤكدة", md)
+        self.assertEqual((st["state"], st["pages_unsure"]), ("done", [30, 31]))
+        self.assertNotIn("pages_judging", st)
+        self.assertEqual({r["check"]["state"] for r in self.records().values()}, {"unsure"})
+        self.assertIn("قراءة الصفحة 31 من الأصل غير مؤكدة", md)
+
+    def test_flash_models_read_and_settle_once_both_lite_readers_are_out(self):
+        def gone(p, n):
+            raise Exception("429 RESOURCE_EXHAUSTED GenerateRequestsPerDayPerProjectPerModel-FreeTier")
+        code, st, md, fake = self.run_book({
+            "gemini-3.5-flash-lite": gone,
+            "gemini-3.1-flash-lite": gone,
+            "gemini-3.8-flash": lambda p, n: answer(TRUE if "النسخة (أ)" in p else WRONG),
+            "gemini-3.7-flash": lambda p, n: answer(TRUE),
+        }, pages="30", extra=("--extra-models", "gemini-3.8-flash,gemini-3.7-flash"))
+        self.assertEqual(code, 0, st)
+        rec = self.records()[30]
+        self.assertEqual((rec["a"]["model"], rec["b"]["model"]), ("gemini-3.8-flash", "gemini-3.7-flash"))
+        self.assertEqual((rec["check"]["state"], rec["check"]["model"]), ("reconciled", "gemini-3.8-flash"))
+        self.assertNotIn("كاقية", md)
+        # With quota left, Lite reads first and the Flash models are not asked at all.
+        shutil.rmtree(os.path.join(self.tmp, "work"))
+        code, st, md, fake = self.run_book({
+            "gemini-3.5-flash-lite": lambda p, n: answer(TRUE),
+            "gemini-3.1-flash-lite": lambda p, n: answer(TRUE),
+        }, pages="30", extra=("--extra-models", "gemini-3.8-flash,gemini-3.7-flash"))
+        self.assertEqual(code, 0, st)
+        self.assertEqual({m for m, _ in fake.calls}, {"gemini-3.5-flash-lite", "gemini-3.1-flash-lite"})
 
     def test_cover_is_picked_from_the_first_pages(self):
         def lite(p, n):
@@ -339,7 +348,7 @@ class Pipeline(PipelineBase):
         code, st, md, fake = self.run_book({
             "gemini-3.5-flash-lite": lambda p, n: answer("قصير" if "النسخة (أ)" in p else WRONG),
             "gemini-3.1-flash-lite": lambda p, n: answer("قصير" if "النسخة (أ)" in p else TRUE),
-        }, pages="30", extra=("--arbiter-models", "", "--review-out", out))
+        }, pages="30", extra=("--review-out", out))
         with open(os.path.join(out, "items.json"), encoding="utf-8") as f:
             return code, st, md, json.load(f)
 

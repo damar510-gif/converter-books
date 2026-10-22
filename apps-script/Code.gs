@@ -48,7 +48,6 @@ var CONFIG = {
   MAX_LOST_ATTEMPTS: 3,
   // A book that is still "paused" after this many daily restarts is reported as a problem.
   MAX_PAUSES: 30,
-  MAX_REFINES: 15,
   MAX_FINISHED_JOBS: 50,
   // Script Properties allow about 9 KB per value. Long Arabic names take 2 bytes per
   // letter, so old finished jobs are dropped until JOBS fits in this many bytes.
@@ -241,48 +240,6 @@ function tick() {
   return result;
 }
 
-/**
- * Run by hand from the editor (choose judgeNow, then Run): the judges see the unsure
- * pages today instead of waiting for the next day, for delivered books and parked
- * ones alike. Useful when some of today's judge quota is still unused.
- */
-function judgeNow() {
-  var lock = LockService.getScriptLock();
-  if (!lock.tryLock(30000)) {
-    Logger.log('مشغول بفحص آخر، أعد المحاولة بعد دقيقة.');
-    return 'busy';
-  }
-  var count = 0;
-  try {
-    var jobs = loadJobs_();
-    var ctx = { cfg: config_(), folders: getFolders_(), jobs: jobs, dispatched: 0 };
-    Object.keys(jobs).forEach(function (id) {
-      var j = jobs[id];
-      if (!j) return;
-      if (j.stage === 'delivered' && !j.refineDone && j.unsure === undefined) backfill_(ctx, j);
-      if (j.stage === 'judging') {
-        j.judgeDay = '';
-        count++;
-      } else if (j.stage === 'delivered' && !j.refineDone && j.unsure > 0) {
-        j.refineDay = '';
-        count++;
-      }
-    });
-    saveJobs_(jobs);
-  } finally {
-    lock.releaseLock();
-  }
-  if (!count) {
-    Logger.log('لا يوجد كتاب فيه صفحات مشكوك فيها تنتظر الحكّام.');
-    return 'nothing to judge';
-  }
-  var result = tick();
-  Logger.log(/(judging|refining) [\w-]+: dispatched/.test(result)
-    ? 'بدأت مراجعة الحكّام الآن. تصلك رسالة حين تنتهي الجولة.'
-    : 'لم تبدأ الآن: يوجد كتاب قيد التحويل أو كتاب جديد، فتبدأ بعده تلقائياً. (' + result + ')');
-  return result;
-}
-
 /** Status for the web page, as a JSON string (google.script.run cannot return Dates). */
 function getStatus() {
   try {
@@ -344,13 +301,37 @@ function getStatus() {
     out.reviews = reviewSummaries_(jobs);
     if (out.setUp && cfg.token) out.helper = helperInfo_(now);
 
-    // Books waiting in "2- قيد التحويل" for the judges or the helper's models.
+    // The pages of a book the helper's models finished since its last run left them theirs:
+    // they join the book at its next run, and count as done on the page meanwhile.
     var hs = out.helper && out.helper.progress ? out.helper.progress : {};
-    out.parked = Object.keys(jobs).map(function (id) { return jobs[id]; })
+    var helperDone = function (j) {
+      var p = hs[j.fileId];
+      return p && Date.parse(p.bookAt) >= Date.parse(j.dispatchedAt || '') ? Math.min(p.need, p.finished) : 0;
+    };
+    if (out.active) {
+      out.active.helperDone = helperDone(a);
+      out.active.pagesDone = Math.min(out.active.pagesTotal || Infinity, out.active.pagesDone + out.active.helperDone);
+    }
+    // Books in "2- قيد التحويل" without a run: those the helper's models work on are current
+    // books (shown under «الآن» with the whole book's progress); the others wait.
+    var today = pacificDay_(now);
+    out.working = [];
+    out.parked = [];
+    Object.keys(jobs).map(function (id) { return jobs[id]; })
       .filter(function (j) { return j && isParked_(j); })
-      .map(function (j) {
-        var p = hs[j.fileId] || {};
-        return { title: j.title, stage: j.stage, need: Number(p.need) || 0, finished: Number(p.finished) || 0 };
+      .sort(function (x, y) { return String(x.helperAt || x.createdAt) < String(y.helperAt || y.createdAt) ? -1 : 1; })
+      .forEach(function (j) {
+        if (j.stage !== 'helper') {
+          out.parked.push({ title: j.title, stage: j.stage });
+          return;
+        }
+        var total = Number(j.pagesTotal) || 0;
+        var done = helperDone(j);
+        // The free models come back to it at the next check, or once their quota renews.
+        var soon = !!j.freeLeft || String(j.freeDay || '') < today;
+        out.working.push({ title: j.title, fileId: j.fileId, total: total, helperDone: done,
+          done: total ? Math.min(total, (Number(j.pagesDone) || 0) + done) : 0,
+          freeAt: soon ? '' : pacificMidnightAfter_(j.freeDay).toISOString() });
       });
 
     // The last ten, leaving out the books the user deleted.
@@ -635,21 +616,16 @@ function runTick_() {
   // A finished job frees the slot, so the next book can start in the same check.
   if (!activeJob_(ctx.jobs) && ctx.dispatched === 0) {
     // The user's answers first (a quick round with no model request), then the verdicts
-    // of the helper's models (the same kind of round), then books parked for a reader
-    // whose quota has renewed (oldest first), then parked books back to the judges on a
-    // new day (their quota is separate and small), then books the helper finished, then
-    // new books, then improvement rounds.
+    // of the user's own models (the same kind of round), then books parked for a reader
+    // whose quota has renewed (oldest first), then books an older version parked for the
+    // judges (delivered now), then books the helper's models work on (the free models'
+    // share, or what the helper's models finished), then new books.
     var applied = applyNext_(ctx) || helperJudgeNext_(ctx);
-    var judged = applied || resumeReaderNext_(ctx) || judgeNext_(ctx) || helperNext_(ctx);
-    var started = judged || startNext_(ctx);
+    var resumed = applied || resumeReaderNext_(ctx) || judgeNext_(ctx) || helperNext_(ctx);
+    var started = resumed || startNext_(ctx);
     notes.push(started);
-    // Nothing new to convert: use the day's judge quota on a finished book's unsure pages.
-    if (started === 'idle') {
-      var refined = refineNext_(ctx);
-      notes.push(refined);
-      // Still nothing: prepare the review of a finished book delivered before it existed.
-      if (refined === 'idle') notes.push(prepareNext_(ctx));
-    }
+    // Nothing new to convert: prepare the review of a finished book delivered before it existed.
+    if (started === 'idle') notes.push(prepareNext_(ctx));
   }
   rememberExpiry_();
   return notes.join('; ');
@@ -661,7 +637,7 @@ function advanceJob_(ctx, job) {
     return dispatch_(ctx, job, job.pendingCount !== false);
   }
 
-  // A review round never pauses, waits for the judges or gives the book up.
+  // A review round never pauses or gives the book up.
   if (job.humanRound) return advanceReview_(ctx, job);
 
   // Paused for the Gemini quota: the run has finished; wait for a new Pacific day.
@@ -684,9 +660,11 @@ function handleStatus_(ctx, job, s) {
   if (s.state !== 'failed') job.failStreak = 0;
   delete job.helperOff;
 
-  // Waiting only for the judges, the helper or one reader is written as "paused" for older scripts.
+  // Waiting only for the helper or one reader is written as "paused" for older scripts. A run
+  // of an older version waiting for the free judges: the book is delivered, its unsure pages
+  // go to the user's own models and the user.
   var waiting = s.state === 'paused' ? String(s.waiting_for || '') : '';
-  var state = waiting === 'judges' ? 'judging' : waiting === 'helper' ? 'helper'
+  var state = waiting === 'judges' ? 'done' : waiting === 'helper' ? 'helper'
     : waiting === 'reader' ? 'readerWait' : s.state;
   switch (state) {
     case 'done':
@@ -716,30 +694,6 @@ function handleStatus_(ctx, job, s) {
       }
       return resumeIfNewDay_(ctx, job);
 
-    case 'judging':
-      // Read and checked; only the judges' quota is missing. The book stays parked in
-      // "2- قيد التحويل" without holding the slot, so the next book can use the readers'
-      // quota; judgeNext_ brings it back to the judges on a later Pacific day.
-      // A refinement round is different: its book is already delivered, so what the
-      // judges did today replaces it now, and the next round continues tomorrow.
-      if (job.refining) return deliver_(ctx, job, s, false);
-      job.stage = 'judging';
-      job.judgeDay = isDay_(s.quota_day) ? s.quota_day : pacificDay_(new Date(Date.parse(s.updated_at)));
-      job.judgeRounds = (job.judgeRounds || 0) + 1;
-      if (job.judgeRounds > CONFIG.MAX_PAUSES) return deliver_(ctx, job, s, false);
-      saveJobs_(ctx.jobs);
-      if (!job.judgeMailed) {
-        job.judgeMailed = true;
-        saveJobs_(ctx.jobs);
-        sendMail_('ينتظر الحكّام: ' + job.title, [
-          'اكتملت قراءة «' + job.title + '»، وبقيت ' + pageList_(s.pages_judging).length +
-            ' صفحة مشكوك فيها تنتظر الحكّام، فقد انتهى رصيدهم اليوم.',
-          'يبقى الكتاب في «' + CONFIG.FOLDERS.working + '»، ويبدأ الكتاب التالي الآن.',
-          'بعد تجدد رصيد الحكّام تُعرض عليهم صفحاته أولاً، ثم يصلك الكتاب في «' + CONFIG.FOLDERS.ready + '».'
-        ]);
-      }
-      return 'judging (parked)';
-
     case 'readerWait':
       // One free reader's quota is used up and the other still has some: the pages wait
       // only for second readings from the reader that is out. The book waits without
@@ -767,14 +721,18 @@ function handleStatus_(ctx, job, s) {
       return 'reader wait (parked)';
 
     case 'helper':
-      // Read once by the free model; the helper's models on the user's computer give the
-      // second reading and settle the pages. The book waits without holding the slot, so
-      // the free model starts the next book; helperNext_ brings it back.
+      // The pages left are with the helper's models on the user's computer (from the start
+      // of the book); the free models took their share from its end. The book waits without
+      // a run; helperNext_ brings it back: right away when the free models still have quota
+      // (free_left), on the next Pacific day when theirs is renewed, or when the helper's
+      // models finished their pages.
       job.stage = 'helper';
       job.helperAt = now_().toISOString();
       job.helperMovedAt = job.helperAt;
       job.helperFinished = 0;
       job.helperPages = pageList_(s.pages_helper).length;
+      job.freeLeft = !!s.free_left;
+      job.freeDay = s.free_left ? '' : isDay_(s.quota_day) ? s.quota_day : pacificDay_(new Date(Date.parse(s.updated_at)));
       delete job.helperDoneSeen;
       saveJobs_(ctx.jobs);
       return 'helper (parked)';
@@ -858,93 +816,6 @@ function startNext_(ctx) {
   return 'idle (files could not be moved)';
 }
 
-/**
- * Runs a delivered book again (once per Pacific day) so the stronger "judge" models
- * look at its unsure pages; nothing is read again. Stops for a book when a round
- * no longer lowers its count of unsure pages.
- */
-function refineNext_(ctx) {
-  var today = pacificDay_(now_());
-  var pick = null;
-  finishedJobs_(ctx.jobs).forEach(function (j) {
-    if (j.stage === 'delivered' && !j.refineDone && j.unsure === undefined) backfill_(ctx, j);
-    if (j.stage !== 'delivered' || j.refineDone || !(j.unsure > 0) || j.refineDay === today) return;
-    if ((j.refines || 0) >= CONFIG.MAX_REFINES) {
-      stopRefining_(ctx, j);
-      return;
-    }
-    if (!pick || String(j.finishedAt) < String(pick.finishedAt)) pick = j;
-  });
-  if (!pick) return 'idle';
-  // Finished jobs are stored without these fields (see pruneJobs_); rebuild them.
-  pick.resultDir = 'drive-' + pick.fileId;
-  try {
-    if (bookGone_(pick.fileId, pick.epubId)) throw new Error('gone');
-    var again = newJob_(DriveApp.getFileById(pick.fileId));
-    pick.name = again.name;
-    if (again.driveName) pick.driveName = again.driveName;
-  } catch (err) {
-    // The original was deleted from "4- الأصل", or the EPUB: nothing left to improve.
-    pick.refineDone = true;
-    saveJobs_(ctx.jobs);
-    return 'idle (book gone: ' + pick.fileId + ')';
-  }
-  pick.refineDay = today;
-  pick.refines = (pick.refines || 0) + 1;
-  pick.refining = true;
-  pick.unsureBefore = pick.unsure;
-  // The new EPUB and report replace the old ones once the round is delivered.
-  pick.oldEpubId = pick.epubId || '';
-  pick.oldReportId = pick.reportId || '';
-  pick.epubId = '';
-  pick.reportId = '';
-  // Queued (not delivered) before saving, so pruneJobs_ keeps the fields set above.
-  pick.stage = 'queued';
-  pick.pendingCount = false;
-  saveJobs_(ctx.jobs);
-  return 'refining ' + pick.fileId + ': ' + dispatch_(ctx, pick, false);
-}
-
-/**
- * Books delivered by an older script have no count of unsure pages (and may have lost
- * their report's id): read them back from the results branch and the ready folder.
- */
-function backfill_(ctx, job) {
-  var r = gh_(ctx.cfg, 'get', contentsPath_(ctx.cfg, 'drive-' + job.fileId + '/status.json'), null, GH_RAW);
-  if (r.code !== 200) return;
-  var s = parseJson_(ghText_(r));
-  if (!s || typeof s !== 'object') return;
-  job.unsure = pageList_(s.pages_unsure).length;
-  if (!job.reportId && job.title) {
-    var it = ctx.folders.ready.getFilesByName(job.title + ' - تقرير.txt');
-    while (it.hasNext()) {
-      var f = it.next();
-      if (!f.isTrashed()) { job.reportId = f.getId(); break; }
-    }
-  }
-  saveJobs_(ctx.jobs);
-}
-
-/**
- * The book will not change any more: its EPUB and report move to "6- مكتمل".
- * With mail, the user is told which pages (if any) are still unsure.
- */
-/**
- * The judges cannot improve the book any more, but pages are still unsure: no more
- * improvement rounds, and the book stays in "3- جاهز" until the user's review brings
- * its unsure pages to none (only then it is finished, see finalize_).
- */
-function stopRefining_(ctx, job) {
-  job.refineDone = true;
-  saveJobs_(ctx.jobs);
-  var rv = loadRv_(job.fileId);
-  sendMail_('انتهت مراجعة النماذج: ' + job.title, [
-    'لم تعد النماذج تحسّن «' + job.title + '» أكثر.',
-    'بقيت ' + job.unsure + ' صفحة مشكوكاً فيها' + (job.unsureList ? ' (' + job.unsureList + ')' : '') +
-      '، فيبقى الكتاب في «' + CONFIG.FOLDERS.ready + '» حتى تراجعها، ثم يُنقل إلى «' + CONFIG.FOLDERS.final + '».'
-  ].concat(reviewLines_(job, rv)));
-}
-
 /** No page is unsure any more: the book moves to "6- مكتمل" and will not change. */
 function finalize_(ctx, job, mail) {
   job.refineDone = true;
@@ -990,14 +861,15 @@ function resumeReaderNext_(ctx) {
   return 'reader renewed ' + pick.fileId + ': ' + dispatch_(ctx, pick, false);
 }
 
-/** Dispatches the oldest parked book whose judges' quota has renewed, or returns ''. */
+/**
+ * A book an older version parked for the free judges: run once more, so it is delivered and
+ * its unsure pages go to the user's own models and the user. Returns '' when there is none.
+ */
 function judgeNext_(ctx) {
-  var today = pacificDay_(now_());
   var pick = null;
   Object.keys(ctx.jobs).forEach(function (id) {
     var j = ctx.jobs[id];
-    if (j && j.stage === 'judging' && String(j.judgeDay || '') < today &&
-        (!pick || String(j.judgeDay || '') < String(pick.judgeDay || ''))) pick = j;
+    if (j && j.stage === 'judging' && (!pick || String(j.judgeDay || '') < String(pick.judgeDay || ''))) pick = j;
   });
   if (!pick) return '';
   pick.stage = 'queued';
@@ -1352,7 +1224,7 @@ function applyNext_(ctx) {
 function prepareNext_(ctx) {
   var pick = null;
   finishedJobs_(ctx.jobs).forEach(function (j) {
-    if (j.stage !== 'delivered' || !j.refineDone || !(j.unsure > 0) || loadRv_(j.fileId)) return;
+    if (j.stage !== 'delivered' || j.refining || !(j.unsure > 0) || loadRv_(j.fileId)) return;
     if (!pick || String(j.finishedAt) < String(pick.finishedAt)) pick = j;
   });
   if (!pick) return 'idle';
@@ -1640,7 +1512,8 @@ function deliver_(ctx, job, s, incomplete) {
   var rv = updateRv_(job, s);
 
   if (job.refining) {
-    // A refinement round: the new files replace the old ones.
+    // An improvement round an older version started (the free judges are gone): the new
+    // files replace the old ones, and no other round follows.
     [job.oldEpubId, job.oldReportId].forEach(function (id) {
       if (!id) return;
       try { DriveApp.getFileById(id).setTrashed(true); } catch (err) { Logger.log('trash ' + id + ': ' + err); }
@@ -1649,42 +1522,16 @@ function deliver_(ctx, job, s, incomplete) {
     job.refining = false;
     job.oldEpubId = '';
     job.oldReportId = '';
-    // A round cut short by the judges' quota is not a sign the book cannot improve.
-    var cutShort = pageList_(s.pages_judging).length > 0;
     job.unsureList = shorten_(compressPages_(unsure), 300);
     if (!unsure.length) {
       finalize_(ctx, job, true);
       return 'refined and final (' + before + ' -> 0)';
     }
-    if (unsure.length >= before && !cutShort) {
-      stopRefining_(ctx, job);
-      return 'refined, judges done (' + before + ' -> ' + unsure.length + ')';
-    }
-    if (cutShort && unsure.length >= before) {
-      // Nothing was judged (no quota left): this round does not count toward MAX_REFINES.
-      job.refines = Math.max(0, (job.refines || 0) - 1);
-    }
     saveJobs_(ctx.jobs);
-    if (cutShort && unsure.length >= before) {
-      sendMail_('ينتظر الحكّام: ' + job.title, [
-        'لم يبقَ اليوم رصيد للحكّام لمراجعة «' + job.title + '»، ولم يتغير شيء.',
-        'تكمل المراجعة تلقائياً في يوم قادم.'
-      ]);
-    }
-    if (unsure.length < before) {
-      sendMail_('تحسّن: ' + job.title, [
-        'راجعت النماذج الأقوى صفحات مشكوكاً فيها في «' + job.title + '».',
-        'الصفحات المشكوك فيها نزلت من ' + before + ' إلى ' + unsure.length + '.',
-        'النسخة الجديدة حلّت محل القديمة: ' + url,
-        unsure.length ? 'ستستمر المراجعة في الأيام القادمة إن بقي ما يمكن تحسينه.' : 'لم تبقَ صفحات مشكوك فيها.'
-      ].concat(reviewLines_(job, rv)));
-    }
     return 'refined (' + before + ' -> ' + unsure.length + ')';
   }
 
   job.finishedAt = now_().toISOString();
-  // The judges already saw this book today; improvement rounds start tomorrow.
-  job.refineDay = pacificDay_(now_());
   var folderName = CONFIG.FOLDERS.ready;
   if (!unsure.length && !incomplete) {
     finalize_(ctx, job, false);
@@ -1996,7 +1843,7 @@ function helperInfo_(now) {
     Object.keys(books).slice(0, 50).forEach(function (id) {
       var b = books[id];
       if (FILE_ID_RE.test(id) && b && typeof b === 'object') {
-        info.progress[id] = { need: Number(b.need) || 0, finished: Number(b.finished) || 0 };
+        info.progress[id] = { need: Number(b.need) || 0, finished: Number(b.finished) || 0, bookAt: String(b.book_at || '') };
       }
     });
     if (!info.line) info.error = 'لم أستطع تجهيز ملف التثبيت بعد، أعد فتح الصفحة بعد دقائق.';
@@ -2115,9 +1962,11 @@ function helperDoneFor_(ctx, job) {
 }
 
 /**
- * A book parked for the helper runs again when the helper has finished its pages; or,
- * with the free model doing the rest, when the helper is off (the box was emptied, or the
- * computer has not been seen for an hour) or has not moved for hours.
+ * A book parked for the helper runs again when the helper has finished its pages; for the
+ * free models' share while they have quota (the last run stopped with quota left, or their
+ * quota renewed on a new Pacific day); or, with the free models doing the rest, when the
+ * helper is off (the box was emptied, or the computer has not been seen for an hour) or has
+ * not moved for hours.
  */
 function helperNext_(ctx) {
   var parked = Object.keys(ctx.jobs).map(function (id) { return ctx.jobs[id]; })
@@ -2127,6 +1976,7 @@ function helperNext_(ctx) {
   var status = helperStatusOf_(ctx);
   var on = helperTranscribes_(status);
   var now = now_().getTime();
+  var today = pacificDay_(now_());
   for (var i = 0; i < parked.length; i++) {
     var j = parked[i];
     var p = helperProgress_(status, j.fileId);
@@ -2137,12 +1987,14 @@ function helperNext_(ctx) {
     }
     var why = !on ? 'helper off'
       : helperDoneFor_(ctx, j) ? 'helper done'
-      : now - Date.parse(j.helperMovedAt || j.helperAt) > CONFIG.HELPER_STALL_MS ? 'helper stalled' : '';
+      : now - Date.parse(j.helperMovedAt || j.helperAt) > CONFIG.HELPER_STALL_MS ? 'helper stalled'
+      : j.freeLeft ? 'free models'
+      : String(j.freeDay || '') < today ? 'free quota renewed' : '';
     if (!why) continue;
     j.stage = 'queued';
     j.pendingCount = false;
-    // Off or stalled: the free model does the rest (transcribing would only park it again).
-    if (why !== 'helper done') j.helperOff = true;
+    // Off or stalled: the free models do the rest (transcribing would only park it again).
+    if (why === 'helper off' || why === 'helper stalled') j.helperOff = true;
     saveJobs_(ctx.jobs);
     return 'helper ' + j.fileId + ' (' + why + '): ' + dispatch_(ctx, j, false);
   }
@@ -2625,7 +2477,7 @@ function isActive_(job) {
   return job.stage === 'queued' || job.stage === 'running';
 }
 
-/** Waiting in "2- قيد التحويل" without holding the slot: for the judges, the helper or a reader. */
+/** Waiting in "2- قيد التحويل" without holding the slot: for the helper's models, a reader, or (older versions) the judges. */
 function isParked_(job) {
   return job.stage === 'judging' || job.stage === 'helper' || job.stage === 'readerWait';
 }
@@ -2657,6 +2509,7 @@ function pruneJobs_(jobs) {
       'pendingCount', 'noteId', 'pauseMailed', 'pagesDone', 'pagesTotal', 'pauses',
       'judgeDay', 'judgeRounds', 'judgeMailed', 'rvDonePrev', 'downloadFails',
       'helperAt', 'helperMovedAt', 'helperFinished', 'helperPages', 'helperDoneSeen', 'helperOff', 'goneSeen',
+      'freeLeft', 'freeDay',
       'readerDay', 'readerWaits', 'readerMailed']
       .forEach(function (k) { delete j[k]; });
     if (j.lastError) j.lastError = shorten_(j.lastError, 120);
