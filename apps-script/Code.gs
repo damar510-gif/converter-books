@@ -84,6 +84,9 @@ var CONFIG = {
   HELPER_BOOKS: 'كتب',
   HELPER_REVIEWS: 'مراجعة',
   HELPER_VERDICTS: 'أحكام',
+  // In each book's «مراجعة» folder: the places the user answered that no run carried yet,
+  // which the review box's models leave alone.
+  HELPER_ANSWERED: 'answered.json',
   // A book waiting for the helper goes on with the free model when the computer has not
   // been seen for this long, or when the helper has not moved for this long.
   HELPER_GONE_MS: 60 * 60 * 1000,
@@ -397,6 +400,13 @@ function getReview(fileId) {
       if (!(String(a.at || '') > seen)) return;
       hidden[id] = true;
       if (a.kind === 'rest') (a.ids || []).forEach(function (x) { hidden[x] = true; });
+    });
+    // Places the user's models settled are not the user's to do again: the next run applies them.
+    var verdicts = verdictsFile_(fileId);
+    var settled = verdicts ? parseJson_(verdicts.getBlob().getDataAsString('UTF-8')) : null;
+    var byModels = settled && settled.answers && typeof settled.answers === 'object' ? settled.answers : {};
+    Object.keys(byModels).forEach(function (id) {
+      if (byModels[id] && String(byModels[id].at || '') > seen) hidden[id] = true;
     });
     var pages = (Array.isArray(data.pages) ? data.pages : []).map(function (p) {
       var items = (Array.isArray(p.items) ? p.items : []).filter(function (it) { return !hidden[it.id]; });
@@ -2118,7 +2128,38 @@ function syncHelperReviews_(cfg) {
     var j = jobs[id];
     // Copied from a delivered book only: a running round is about to change its places.
     if (budget > 0 && (!j || j.stage === 'delivered')) budget -= syncReviewFolder_(cfg, id, open[id], parent, budget);
+    syncAnswered_(id, open[id], parent);
   });
+}
+
+/**
+ * The places the user answered (saved, sent or not) that no run carried yet, for the models
+ * in the review box: they skip them, as the user skips what they settled (getReview).
+ * Written into the book's «مراجعة» folder when it changes.
+ */
+function syncAnswered_(id, rv, parent) {
+  var folder = liveFolder_(parent, id);
+  if (!folder) return;
+  var answers = rv.a ? readAnswers_(answersFile_(id, rv, false)) : {};
+  var seen = String(rv.seen || '');
+  var ids = [];
+  var last = '';
+  Object.keys(answers).forEach(function (k) {
+    var a = answers[k];
+    var at = String((a && a.at) || '');
+    if (!(at > seen)) return;
+    if (at > last) last = at;
+    if (a.kind === 'rest') ids = ids.concat(a.ids || []);
+    else ids.push(k);
+  });
+  var key = ids.length + '|' + last;
+  var have = liveFiles_(folder, CONFIG.HELPER_ANSWERED);
+  if (have.length && rv.an === key) return;
+  var text = JSON.stringify({ v: 1, at: now_().toISOString(), ids: ids });
+  if (have.length) have[0].setContent(text);
+  else folder.createFile(CONFIG.HELPER_ANSWERED, text, 'application/json');
+  rv.an = key;
+  saveRv_(id, rv);
 }
 
 /**

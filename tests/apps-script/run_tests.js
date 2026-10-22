@@ -2347,7 +2347,7 @@ test('review: with models in the review box the places are copied for the helper
   tick(env);
   const dir = sub(env, sub(env, helperFolder(env), 'مراجعة'), f.id);
   assert.ok(dir, 'review folder for the book');
-  assert.deepStrictEqual(liveIn(env, dir).map((x) => x.name).sort(), ['items.json', 'p0003-0123456789.jpg']);
+  assert.deepStrictEqual(liveIn(env, dir).map((x) => x.name).sort(), ['answered.json', 'items.json', 'p0003-0123456789.jpg']);
   const copied = liveIn(env, dir).find((x) => x.name === 'items.json').id;
   minutes(env, 10);
   tick(env);
@@ -2389,6 +2389,59 @@ test('review: with models in the review box the places are copied for the helper
   minutes(env, 10);
   tick(env);
   assert.strictEqual(sub(env, sub(env, helperFolder(env), 'مراجعة'), f.id), undefined);
+});
+
+test('review: the user and the models in the review box never do the same place twice', () => {
+  const env = boxesEnv({ transcribe: [], review: [GEMINI] });
+  const { f, items: placed } = deliverWithPlaces(env, 'معا.pdf', 4);
+  const items = placed.pages[0].items;
+  minutes(env, 10);
+  tick(env);
+  const dir = sub(env, sub(env, helperFolder(env), 'مراجعة'), f.id);
+  const answered = () => {
+    const x = liveIn(env, dir).filter((y) => y.name === 'answered.json');
+    assert.ok(x.length <= 1, 'one answered.json');
+    return x.length ? JSON.parse(x[0].content.toString('utf8')).ids : null;
+  };
+  assert.deepStrictEqual(answered(), [], 'nothing answered yet');
+
+  // The user answers from the end of the book, without sending: the models are told at the next check.
+  JSON.parse(env.ctx.saveAnswers(f.id, JSON.stringify({ [items[3].id]: answerFor(items[3], 'keep') })));
+  const rest = 'p3-rest-abc';
+  JSON.parse(env.ctx.saveAnswers(f.id, JSON.stringify({ [rest]: { kind: 'rest', page: 3, verdict: 'keep',
+    ids: [items[2].id], fps: [items[2].fp] } })));
+  minutes(env, 10);
+  tick(env);
+  assert.deepStrictEqual(answered().sort(), [items[2].id, items[3].id].sort());
+  const file = liveIn(env, dir).find((y) => y.name === 'answered.json');
+  const at = file.updated;
+  minutes(env, 10);
+  tick(env);
+  assert.strictEqual(liveIn(env, dir).find((y) => y.name === 'answered.json').updated, at, 'not written again unchanged');
+  assert.strictEqual(env.gh.dispatches.filter((d) => d.body.inputs.review).length, 0, 'and no run for it');
+
+  // The models settled the first place: the user does not see it; the second, which they
+  // left to the user, stays with the user's own unanswered places.
+  const verdicts = helperFolder(env).createFolder('أحكام');
+  verdicts.createFile(f.id + '.json', JSON.stringify({ v: 1, fileId: f.id, done: false, answers: {
+    [items[0].id]: Object.assign(answerFor(items[0], 'keep'), { at: iso(env.clock), by: [GEMINI] }) } }), 'application/json');
+  let r = JSON.parse(env.ctx.getReview(f.id));
+  assert.deepStrictEqual(r.pages[0].items.map((x) => x.id), [items[1].id]);
+
+  // A run carried both (answers_seen is the latest answer it had): a place still open after it
+  // (a verdict that could not be applied) is shown again, and the models are told nothing is new.
+  const later = reviewItems(4, 3, iso(env.clock));
+  putItems(env, f.id, later);
+  writeStatus(env, f.id, 'done', { epub: 'b.epub', pages_unsure: [3], review_items: 4, review_seen: iso(env.clock) });
+  writeEpub(env, f.id, 'b.epub', Buffer.from('PK again'));
+  const rv = JSON.parse(env.props.get('RV_' + f.id));
+  rv.seen = iso(env.clock);
+  env.props.set('RV_' + f.id, JSON.stringify(rv));
+  minutes(env, 10);
+  tick(env);
+  r = JSON.parse(env.ctx.getReview(f.id));
+  assert.deepStrictEqual(r.pages[0].items.map((x) => x.id), items.map((x) => x.id));
+  assert.deepStrictEqual(answered(), []);
 });
 
 test('a book the user deleted: off the page, not reviewed by the models, not improved', () => {

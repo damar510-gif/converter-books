@@ -20,7 +20,7 @@ or key there, and the helper never calls a Google or GitHub API.
 | `probe.txt` | helper | Each tool's `--help`/`--version` and a one-word headless answer, rewritten when the helper's version or the set of tools changes: read it to fix the command lines in `helper.ps1`. |
 | `نتائج/<date> <kind> <model>/` | helper (until 2026-10-21) | The trials of the six test pages: `pNNN.md` per page, `log.txt`, `meta.json`, and `مقارنة.md`. The trial button is gone. |
 | `كتب/<fileId>/` | Apps Script makes it; the run and the helper fill it | Transcription by the models in the boxes: see "Boxes" below. |
-| `مراجعة/<fileId>/` | Apps Script (copy of `drive-<fileId>/review/` in the results branch) | `items.json` and the place images; the helper adds `j-<model>-pNNNN.json` (each model's verdicts). |
+| `مراجعة/<fileId>/` | Apps Script (copy of `drive-<fileId>/review/` in the results branch) | `items.json` and the place images; the helper adds `j-<model>-pNNNN.json` (each model's verdicts). Apps Script also writes `answered.json` (`{v, at, ids}`, each check when it changes): the places the user answered (saved, sent or not) that no run carried yet; the models skip them. The other way round, the review screen hides the places in `أحكام/<fileId>.json` that no run carried yet. |
 | `أحكام/<fileId>.json` | helper | The models' verdicts as answers (the user's answer form), kept and added to; `done` when no model in the box has anything left to judge. |
 
 `requests.json` also carries `boxes: {transcribe: [ids], review: [ids]}` (ids are

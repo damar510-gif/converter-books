@@ -378,6 +378,28 @@ Test 'review: only the books the script lists; a book that leaves while judged k
   Same (& $verdictFiles) 1 'verdict kept'
 }
 
+Test 'review: the places the user already answered are left to the user' {
+  Set-Boxes @() @($GEMINI)
+  $dir = Join-Path (Join-Path $Folder $ReviewsName) 'book1'
+  New-Item -ItemType Directory -Force -Path $dir | Out-Null
+  [IO.File]::WriteAllBytes((Join-Path $dir 'p0003-0123456789.jpg'), [byte[]](0xff, 0xd8))
+  [IO.File]::WriteAllBytes((Join-Path $dir 'p0005-0123456789.jpg'), [byte[]](0xff, 0xd8))
+  $place = { param($id, $n) @{ id = $id; n = $n; kind = 'diff'; fp = "diff|$n"; before = 'قبل '; core = 'كلمة'; after = ' بعد'; pos = 10 * $n
+      options = @(@{ label = 'other'; text = 'كلمه' }) } }
+  Write-Utf8 (Join-Path $dir 'items.json') (@{ v = 1; generated_at = 'x'; pages = @(
+      @{ page = 3; base = 'b'; img = 'p0003-0123456789.jpg'; items = @((& $place 'p3-0000000001' 1), (& $place 'p3-0000000002' 2)) },
+      @{ page = 5; base = 'b'; img = 'p0005-0123456789.jpg'; items = @((& $place 'p5-0000000001' 1)) }) } | ConvertTo-Json -Depth 8)
+  Write-Utf8 (Join-Path $dir 'answered.json') (@{ v = 1; ids = @('p3-0000000001', 'p5-0000000001') } | ConvertTo-Json)
+  $script:Answer = { param($tool, $model, $kind, $task) @{ text = '[{"n":2,"verdict":"keep"}]' } }
+  $job = Work 'agy'
+  Same (@($job.items | ForEach-Object { $_.id }) -join ',') 'p3-0000000002' 'only the place the user did not answer'
+  Same (Work 'agy') '' 'page 5, all answered by the user, is not judged'
+  Update-Verdicts (Get-Boxes (Read-Json (Join-Path $Folder 'requests.json'))) (Get-Tools) (All-Chips)
+  $v = Read-Json (Join-Path (Join-Path $Folder $VerdictsName) 'book1.json')
+  Same (@($v.answers.PSObject.Properties.Name) -join ',') 'p3-0000000002' 'one answer'
+  Same $v.done 'True' 'done without the user''s places'
+}
+
 Test 'review: when two models disagree on a risky place, it stays for the user' {
   Set-Boxes @() @($GEMINI, $GROK)
   $dir = Join-Path (Join-Path $Folder $ReviewsName) 'book1'
