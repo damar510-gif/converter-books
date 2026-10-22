@@ -823,7 +823,11 @@ function Get-ReviewBooks($boxes) {
     if (-not (Review-Listed $boxes $d.Name)) { continue }
     $items = Read-Json (Join-Path $d.FullName 'items.json')
     if (-not $items) { continue }
-    $out += @{ id = $d.Name; dir = $d.FullName; at = (Iso-Of $items.generated_at); pages = @($items.pages | Where-Object { $_ }) }
+    # The places the user answered (answered.json from the script): the user's, not the models'.
+    $answered = @{}
+    $user = Read-Json (Join-Path $d.FullName 'answered.json')
+    if ($user) { foreach ($x in @($user.ids | Where-Object { $_ })) { $answered[[string]$x] = $true } }
+    $out += @{ id = $d.Name; dir = $d.FullName; at = (Iso-Of $items.generated_at); pages = @($items.pages | Where-Object { $_ }); answered = $answered }
   }
   return $out
 }
@@ -890,6 +894,7 @@ function Find-ReviewJob([string]$chip, $books) {
       if (-not $pg.img -or -not (Test-Path -LiteralPath $img)) { continue }
       $todo = @()
       foreach ($it in @($pg.items | Where-Object { $_ })) {
+        if ($book.answered -and $book.answered.ContainsKey([string]$it.id)) { continue }
         $vs = $verdicts[[string]$it.id]
         if (-not $vs) { $vs = @() }
         if (Item-Needs $it $vs $chip) { $todo += $it }
@@ -1025,6 +1030,7 @@ function Update-Verdicts($boxes, $found, $states) {
       foreach ($it in @($pg.items | Where-Object { $_ })) {
         if ([string]$it.kind -eq 'page') { continue }
         $id = [string]$it.id
+        if ($book.answered -and $book.answered.ContainsKey($id)) { continue }
         $vs = $verdicts[$id]
         if (-not $vs) { $vs = @() }
         foreach ($c in $ready) { if (Item-Needs $it $vs $c) { $open++; break } }
