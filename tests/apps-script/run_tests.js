@@ -1867,6 +1867,9 @@ test('the review screen: one place at a time, each button gives the right answer
   // Every place of the page is listed, so the rest can be checked before «كل ما بقي … صحيح».
   const body = P.byId['rv-body'].textContent;
   assert.ok(/مواضع هذه الصفحة \(3\)/.test(body) && /سطر قد يكون ساقطاً/.test(body) && /كلمة3/.test(body), body);
+  // «آخر صفحة» opens the first place of the last page (here the only page).
+  P.click(P.button('آخر صفحة'));
+  assert.ok(/الموضع 1 من 3/.test(P.byId['rv-count'].textContent));
   const img = P.pending('getReviewImage');
   assert.strictEqual(img.length, 1, 'one image for the page, asked once');
   assert.deepStrictEqual(img[0].args, [id, 'p0003-0123456789.jpg']);
