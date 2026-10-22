@@ -439,7 +439,7 @@
   .zoom { position: relative; height: 40vh; overflow: auto; border: 1px solid var(--line-soft); border-radius: 4px; background: #fff; }
   .zoom .page { position: relative; }
   .zoom img { display: block; width: 100%; height: auto; }
-  .frame { position: absolute; border: 3px solid #d93025; border-radius: 4px; box-shadow: 0 0 0 2px #fff, 0 0 0 4000px rgba(0,0,0,.07); }
+  .frame { position: absolute; box-sizing: border-box; border: 2px solid #1565c0; border-radius: 3px; pointer-events: none; }
   .pic-u { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin-top: 8px;
     font-size: 12.5px; color: var(--mute); }
   .rv-side .h3:first-child { margin-top: 0; padding-top: 0; border-top: 0; }
@@ -1433,7 +1433,7 @@
         img.onload = function () { if (RV && RV.flat[RV.at] === cur) view(zoom, holder, page, it, full); };
         img.src = src;
         hint.textContent = it.kind === 'page' ? 'لم أجد موضعاً محدداً في هذه الصفحة؛ قارنها كلها بالأصل.'
-          : it.located ? 'الموضع في المربع الأحمر.' : 'لم أحدد الموضع بدقة: ابحث عنه في الصفحة.';
+          : it.located ? 'الموضع في الإطار الأزرق.' : 'لم أحدد الموضع بدقة: ابحث عنه في الصفحة.';
         view(zoom, holder, page, it, full);
       });
     }
@@ -1499,12 +1499,14 @@
     var scale = w / Math.max(1, col[1] - col[0]);
     holder.style.width = Math.round(page.w * scale) + 'px';
     (holder.frames || []).forEach(function (f) { f.style.display = 'none'; });
+    // A thin line just outside the place, with nothing over the words (and no shade around,
+    // which piled up over the lines of a place spanning several).
     holder.frames = (it.boxes || []).map(function (b) {
       var f = el('div', 'frame');
-      f.style.left = Math.round(b[0] * scale - 5) + 'px';
-      f.style.top = Math.round(b[1] * scale - 5) + 'px';
-      f.style.width = Math.round((b[2] - b[0]) * scale + 10) + 'px';
-      f.style.height = Math.round((b[3] - b[1]) * scale + 10) + 'px';
+      f.style.left = Math.round(b[0] * scale - 2) + 'px';
+      f.style.top = Math.round(b[1] * scale - 2) + 'px';
+      f.style.width = Math.round((b[2] - b[0]) * scale + 4) + 'px';
+      f.style.height = Math.round((b[3] - b[1]) * scale + 4) + 'px';
       holder.appendChild(f);
       return f;
     });

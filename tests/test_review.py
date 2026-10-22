@@ -436,6 +436,12 @@ class Images(unittest.TestCase):
         self.assertTrue(all(v <= 1200 for b in page["items"][0]["boxes"] for v in b))
         # Same page and places: same name.
         self.assertEqual(review.image_name(5, png, pages[0]["items"]), page["img"])
+        # Nothing is laid over the words: inside a frame the page stays as it was (white here).
+        x0, y0, x1, y1 = page["items"][0]["boxes"][0]
+        inside = jpeg.pixel((x0 + x1) // 2, (y0 + y1) // 2)
+        self.assertTrue(all(v >= 245 for v in inside), inside)
+        red = [jpeg.pixel(x, (y0 + y1) // 2) for x in range(x0 - 1, x0 + 2)]
+        self.assertTrue(any(r > 150 and g < 120 and b < 120 for r, g, b in red), red)
         # Without the page image there are no boxes to show.
         pages, _ = review.build([rec], {5: data})
         review.write(self.tmp, pages, {}, "كتاب", "abc", [rec], "", {})

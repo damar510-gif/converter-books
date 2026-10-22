@@ -698,10 +698,12 @@ def scale_of(width):
 
 
 def render(png, items):
-    """JPEG of the page with every place framed and numbered."""
+    """JPEG of the page with every place framed and numbered. The frames are thin lines with
+    nothing over the words, so the reading inside stays as clear as the rest of the page."""
     import pymupdf
     pix = pymupdf.Pixmap(png)
     w, h = pix.width, pix.height
+    s = scale_of(w)
     doc = pymupdf.open()
     try:
         page = doc.new_page(width=w, height=h)
@@ -709,14 +711,13 @@ def render(png, items):
         boxed = False
         for it in items:
             for box in it.get("boxes", []):
-                page.draw_rect(pymupdf.Rect(box), color=(0.85, 0, 0), fill=(1, 0.85, 0), fill_opacity=0.25,
-                               width=1.5)
+                # About one pixel wide in the JPEG, whatever the scan's size.
+                page.draw_rect(pymupdf.Rect(box), color=(0.85, 0, 0), width=1.2 / s)
                 boxed = True
             if it.get("boxes"):
                 x0, y0, x1, _ = it["boxes"][0]
                 x = x1 + 3 if x1 + 24 < w else max(0, x0 - 24)
                 page.insert_text((x, max(16, y0 + 16)), str(it["n"]), fontsize=18, color=(0.85, 0, 0))
-        s = scale_of(w)
         out = page.get_pixmap(matrix=pymupdf.Matrix(s, s), colorspace=pymupdf.csRGB if boxed else pymupdf.csGRAY)
         return out.tobytes("jpeg", jpg_quality=JPEG_QUALITY)
     finally:
