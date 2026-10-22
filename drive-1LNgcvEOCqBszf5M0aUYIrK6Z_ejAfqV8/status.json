@@ -3,11 +3,7 @@
   "pages_total": 923,
   "pages_done": 923,
   "pages_helper": [],
-  "pages_unsure": [
-    409,
-    445,
-    621
-  ],
+  "pages_unsure": [],
   "pages_missing": [],
   "pages_waiting": [],
   "pages_retry": [],
@@ -217,14 +213,14 @@
     913
   ],
   "helper_checked": 874,
-  "review_items": 12,
-  "review_applied": 0,
-  "review_kept": 0,
+  "review_items": 0,
+  "review_applied": 2,
+  "review_kept": 10,
   "review_conflicts_new": 0,
-  "review_seen": "2026-10-22T20:12:01.496Z",
+  "review_seen": "2026-10-22T22:34:28.371Z",
   "book": "تراث الانسانية 1_k2opt",
   "epub": "تراث الانسانية 1_k2opt.epub",
-  "updated_at": "2026-10-22T22:14:55Z",
-  "run_id": 39862099421,
-  "run_number": 41
+  "updated_at": "2026-10-22T22:35:46Z",
+  "run_id": 39865972822,
+  "run_number": 42
 }
