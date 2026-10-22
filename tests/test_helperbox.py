@@ -381,6 +381,17 @@ class ToolTalk(unittest.TestCase):
         self.assertNotIn("check", apology)
 
 
+class Kept(unittest.TestCase):
+    def test_on_a_tie_the_users_model_reading_is_kept(self):
+        rec = {"page": 3, "a": {"model": "gemini-3.5-flash-lite", "text": WRONG},
+               "b": {"model": CHIP, "text": TRUE, "via": "helper", "status": "ok"}}
+        c.settle_state(rec, {}, WRONG, TRUE, [("كاقية", "كافية")], [], [])
+        self.assertEqual((rec["text"], rec["check"]["kept"]), (TRUE, "b"))
+        rec["b"].pop("via")
+        c.settle_state(rec, {}, WRONG, TRUE, [("كاقية", "كافية")], [], [])
+        self.assertEqual(rec["check"]["kept"], "a", "two free readings: the main one")
+
+
 class Fetch(unittest.TestCase):
     def test_files_already_downloaded_are_not_downloaded_again(self):
         import tempfile

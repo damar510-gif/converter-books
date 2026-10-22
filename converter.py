@@ -608,9 +608,11 @@ MAX_CHECK_ERRORS = 3
 
 
 def settle_state(rec, info, a, b, diffs, miss_a, miss_b):
-    """Settling failed: keep the reading that lost fewer lines (the main one on a
-    tie). Any disagreement nobody settled marks the page unsure."""
-    use_b = bool(b) and len(miss_b) < len(miss_a)
+    """Settling failed: keep the reading that lost fewer lines; on a tie, the one from the
+    user's own models when they gave the second (stronger than Lite, 2026-10-22), else the
+    main one. Any disagreement nobody settled marks the page unsure."""
+    use_b = bool(b) and (len(miss_b) < len(miss_a)
+                         or (len(miss_b) == len(miss_a) and (rec.get("b") or {}).get("via") == "helper"))
     rec["text"] = b if use_b else a
     left = len(miss_b) if use_b else len(miss_a)
     info["kept"] = "b" if use_b else "a"

@@ -1464,6 +1464,9 @@
     var keep = function () { answer('keep'); };
     var fix = function () { editor(cur, choices); };
     choices.appendChild(button('btn-lg btn-ok', keepText, keep, 'check', '1'));
+    var other = otherOf(it);
+    var useOther = other ? function () { answer('fix', other); } : null;
+    if (other) choices.appendChild(button('btn-lg', 'القراءة الأخرى هي الصحيحة: ' + short(plain(other), 40), useOther, 'check', '4'));
     choices.appendChild(button('btn-lg btn-gold', 'شكّك في محله — الصواب هو…', fix, 'pen', '2'));
     side.appendChild(choices);
 
@@ -1473,12 +1476,13 @@
     minor.appendChild(prev);
     minor.appendChild(button('btn-sm', 'تخطَّ', function () { go(RV.at + 1); }, 'next', '←'));
     minor.appendChild(button('btn-sm', 'كل ما بقي في هذه الصفحة صحيح', rest, 'checks', '3'));
+    if (other) minor.appendChild(button('btn-sm', 'القراءة الأخرى لكل ما بقي في الصفحة', restOther, 'checks', '5'));
     side.appendChild(minor);
     side.appendChild(pagePlaces(cur));
     if (RV.done[it.id]) side.appendChild(el('div', 'rv-note', 'أجبت عن هذا الموضع؛ إجابتك الجديدة تحل محل السابقة.'));
     grid.appendChild(side);
     body.appendChild(grid);
-    RV.keys = { keep: keep, fix: fix, rest: rest,
+    RV.keys = { keep: keep, fix: fix, rest: rest, other: useOther, restOther: other ? restOther : null,
       next: function () { go(RV.at + 1); }, prev: function () { go(RV.at - 1); },
       whole: function () { if (it.located) whole.click(); } };
     updateSend();
@@ -1582,14 +1586,35 @@
   }
 
   function answer(verdict, text) {
-    var cur = RV.flat[RV.at];
+    save(RV.flat[RV.at], verdict, text);
+    go(RV.at + 1);
+  }
+
+  function save(cur, verdict, text) {
     var it = cur.item;
     var a = { page: cur.page.page, kind: it.kind, fp: it.fp, before: it.before, core: it.core, after: it.after,
       pos: it.pos, base: cur.page.base, place: it.place || '', verdict: verdict };
     if (verdict === 'fix') a.text = String(text || '');
     enqueue(it.id, a);
     RV.done[it.id] = verdict;
-    go(RV.at + 1);
+  }
+
+  // The other reading's words at a differing place, or '' (a line that may be missing is not one).
+  function otherOf(it) {
+    var o = it.kind === 'diff' ? (it.options || []).filter(function (x) { return x.label === 'other'; })[0] : null;
+    return o && String(o.text || '').trim() ? String(o.text) : '';
+  }
+
+  // "The other reading is right" for every place of the page not answered yet that has one.
+  function restOther() {
+    var page = RV.flat[RV.at].page.page;
+    RV.flat.forEach(function (x) {
+      if (x.page.page === page && !RV.done[x.item.id] && otherOf(x.item)) save(x, 'fix', otherOf(x.item));
+    });
+    for (var k = RV.at; k < RV.flat.length; k++) {
+      if (RV.flat[k].page.page !== page || !RV.done[RV.flat[k].item.id]) return go(k);
+    }
+    go(k);
   }
 
   // "The rest of this page is right": the places of the page not answered yet.
@@ -2312,7 +2337,7 @@
 
   var KEYS_HOME = [['F', 'افحص الآن'], ['R', 'حدّث الصفحة'], ['V', 'افتح أول مراجعة'],
     ['1 – 6', 'انتقل إلى قسم'], ['T', 'المظهر'], ['?', 'الاختصارات']];
-  var KEYS_REVIEW = [['1', 'القراءة صحيحة'], ['2', 'صحّح'], ['3', 'كل ما بقي في الصفحة صحيح'], ['←', 'تخطَّ'], ['→', 'السابق'],
+  var KEYS_REVIEW = [['1', 'القراءة صحيحة'], ['2', 'صحّح'], ['3', 'كل ما بقي في الصفحة صحيح'], ['4', 'القراءة الأخرى صحيحة'], ['5', 'القراءة الأخرى لكل ما بقي'], ['←', 'تخطَّ'], ['→', 'السابق'],
     ['Z', 'الصفحة كاملة أو الموضع'], ['Ctrl+Enter', 'احفظ التصحيح'], ['Esc', 'ألغِ التصحيح أو ارجع']];
 
   function showKeys() {
@@ -2361,6 +2386,7 @@
       var k = RV.editing ? null : RV.keys;
       if (!k) return;
       var act = digit && digit[2] === '1' ? k.keep : digit && digit[2] === '2' ? k.fix : digit && digit[2] === '3' ? k.rest
+        : digit && digit[2] === '4' ? k.other : digit && digit[2] === '5' ? k.restOther
         : code === 'ArrowLeft' ? k.next : code === 'ArrowRight' ? k.prev : code === 'KeyZ' ? k.whole : null;
       if (act) { e.preventDefault(); act(); }
       return;
