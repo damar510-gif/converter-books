@@ -1951,9 +1951,12 @@
   var TIMES_OPEN = {};
   var DRAFT = {};
   var SECTIONS = [
-    { key: 'transcribe', title: 'التفريغ',
-      note: 'نماذجك تعمل على الكتاب من أوله والنماذج المجانية من آخره، معاً. كل صفحة تقرؤها قراءتان من نموذجين مختلفين ثم يُحسم الخلاف.',
-      empty: 'فارغ: النماذج المجانية تعمل وحدها.' },
+    { key: 'transcribe', title: 'القراءة',
+      note: 'نماذج هذا المربع تقرأ الصفحات فقط، من أول الكتاب، والنماذج المجانية تقرأ من آخره. كل صفحة تقرؤها قراءتان من نموذجين مختلفين.',
+      empty: 'فارغ: النماذج المجانية تقرأ كل الصفحات.' },
+    { key: 'settle', title: 'الحسم',
+      note: 'نماذج هذا المربع تحسم الخلاف بين القراءتين فقط، بعد نماذج Flash المجانية، ولا تقرأ. هو أنفع مكان لنماذجك القوية.',
+      empty: 'فارغ: النماذج المجانية تحسم (Flash ثم Lite).' },
     { key: 'review', title: 'مراجعة المشكوك فيه',
       note: 'نماذجك تحكم على مواضع الشك. التصحيح الكبير لا يُطبَّق إلا إذا اتفق عليه نموذجان، وإجابتك تغلب دائماً.',
       empty: 'فارغ: المواضع تبقى لك.' }
@@ -1974,14 +1977,14 @@
     // While a change is being saved, the page keeps showing it.
     if (!BOXES_SAVING || !BOXES) {
       var b = h.boxes || {};
-      BOXES = { transcribe: (b.transcribe || []).slice(), review: (b.review || []).slice(),
+      BOXES = { transcribe: (b.transcribe || []).slice(), settle: (b.settle || []).slice(), review: (b.review || []).slice(),
         times: JSON.parse(JSON.stringify(b.times || {})) };
     }
     box.appendChild(cardHead('cpu', 'نماذجك على الجهاز', st(h.connected ? 'ok' : 'bad', h.connected ? 'جهازك متصل' : 'جهازك غير متصل')));
     box.appendChild(el('div', 'sub', 'نماذج اشتراكاتك تعمل حين يكون عندك فائض: انقل النموذج إلى «تعمل الآن» فيبدأ، وأوقفه متى شئت.'));
     if (!h.connected) {
       box.appendChild(note('hold', 'جهازك غير متصل الآن، فلا يعمل أي نموذج حتى تفتحه.' +
-        (BOXES.transcribe.length ? ' إن طال الغياب أكمل النموذج المجاني الكتب وحده.' : '')));
+        (BOXES.transcribe.length || BOXES.settle.length ? ' إن طال الغياب أكمل النموذج المجاني الكتب وحده.' : '')));
     }
     var models = h.models || [];
     if (!models.length) {
@@ -2219,7 +2222,8 @@
   }
 
   function copyBoxes(b) {
-    return { transcribe: b.transcribe.slice(), review: b.review.slice(), times: JSON.parse(JSON.stringify(b.times || {})) };
+    return { transcribe: b.transcribe.slice(), settle: (b.settle || []).slice(), review: b.review.slice(),
+      times: JSON.parse(JSON.stringify(b.times || {})) };
   }
 
   function moveChip(sec, id, toOn) {

@@ -6,7 +6,7 @@
 # places through the folders «كتب», «مراجعة» and «أحكام» (docs/helper-boxes-plan.md).
 # Windows PowerShell 5.1: no ?? or ?: operators.
 
-$HelperVersion = '2026-10-22.3'
+$HelperVersion = '2026-10-22.4'
 $BooksName = 'كتب'
 $ReviewsName = 'مراجعة'
 $VerdictsName = 'أحكام'
@@ -339,13 +339,15 @@ $RefusalPattern = '(?i)(copyright|can.?t (help|assist|transcribe|reproduce|provi
 $Claims = Join-Path $Local 'claims'
 
 function Get-Boxes($reqs) {
-  $out = @{ transcribe = @(); review = @(); times = @{}; reviews = $null; gone = @() }
+  $out = @{ transcribe = @(); settle = @(); review = @(); times = @{}; reviews = $null; gone = @() }
   # Books the user deleted before they were finished: their folders are left alone.
   if ($reqs -and $reqs.gone) { $out.gone = @(@($reqs.gone) | Where-Object { $_ } | ForEach-Object { [string]$_ }) }
   # The books open for review, as the script lists them ($null from an older script: every folder).
   if ($reqs -and $null -ne $reqs.reviews) { $out.reviews = @(@($reqs.reviews) | Where-Object { $_ } | ForEach-Object { [string]$_ }) }
   if ($reqs -and $reqs.boxes) {
-    foreach ($k in 'transcribe', 'review') {
+    # An older script has no settling box: its reading models settle too.
+    $out.settleSet = @($reqs.boxes.PSObject.Properties.Name) -contains 'settle'
+    foreach ($k in 'transcribe', 'settle', 'review') {
       $out[$k] = @(@($reqs.boxes.$k) | Where-Object { $_ -and ([string]$_) -match $ChipPattern } | ForEach-Object { [string]$_ })
     }
     # When each model may work, set on the page: {start, stop} ('' = now / never).
@@ -620,8 +622,15 @@ function Get-PageFiles($book, [int]$page) {
 # The next transcription job for this model: settle a page, then give second readings,
 # then first readings (only when the free model ran out and another model can give the
 # second). The two readings of a page always come from two different models.
-function Find-TranscribeJob([string]$chip, $books, [int]$readyCount) {
-  foreach ($kind in 'settle', 'readB', 'readA') {
+# The models whose turn a page is: the settling box once it has both readings, else the
+# reading box (an older script has no settling box: its reading models settle too).
+function Stage-Box($boxes, $s) {
+  if ($s.first -and $s.hb) { if ($boxes.settleSet) { return @($boxes.settle) } else { return @($boxes.transcribe) } }
+  return @($boxes.transcribe)
+}
+
+function Find-TranscribeJob([string]$chip, $books, [int]$readyCount, $kinds = @('settle', 'readB', 'readA')) {
+  foreach ($kind in $kinds) {
     if ($kind -eq 'readA' -and $readyCount -lt 2) { continue }
     foreach ($book in $books) {
       $refused = Get-Refused $book.id
@@ -785,7 +794,7 @@ function Invoke-TranscribeJob($job, [string]$exe, [string]$work, $boxes) {
   if ($refused) {
     Add-Refused $book.id $p $chip
     $all = Get-Refused $book.id
-    $left = @(@($boxes.transcribe) | Where-Object { @($all[$p]) -notcontains $_ })
+    $left = @(@(Stage-Box $boxes $s) | Where-Object { @($all[$p]) -notcontains $_ })
     if (-not $left.Count) {
       Write-PageFile $book $p 'skip' @{ page = $p; reason = 'refused'; models = @($all[$p]); at = (Now-Iso) }
     }
@@ -1060,7 +1069,7 @@ function Invoke-BoxJob($job, [string]$exe, $boxes, $titles) {
 
 # The next job for one of this tool's models in the boxes, taking them in turn.
 function Find-BoxJob([string]$tool, $boxes, $found, [int]$turn) {
-  $mine = @(@($boxes.transcribe) + @($boxes.review) | Where-Object { (Chip-Tool $_) -eq $tool } | Select-Object -Unique)
+  $mine = @(@($boxes.transcribe) + @($boxes.settle) + @($boxes.review) | Where-Object { (Chip-Tool $_) -eq $tool } | Select-Object -Unique)
   if (-not $mine.Count) { return $null }
   $states = All-Chips
   $books = $null
@@ -1068,9 +1077,14 @@ function Find-BoxJob([string]$tool, $boxes, $found, [int]$turn) {
   for ($i = 0; $i -lt $mine.Count; $i++) {
     $chip = $mine[($turn + $i) % $mine.Count]
     if (-not (Chip-Ready $states[$chip]) -or (Chip-Window $boxes $chip)) { continue }
-    if ($boxes.transcribe -contains $chip) {
+    # The reading box's models read; the settling box's models settle (an older script has
+    # no settling box: then the reading models settle too).
+    $kinds = @()
+    if ($boxes.transcribe -contains $chip) { $kinds += @('readB', 'readA'); if (-not $boxes.settleSet) { $kinds = @('settle') + $kinds } }
+    if ($boxes.settle -contains $chip) { $kinds = @('settle') + $kinds }
+    if ($kinds.Count) {
       if ($null -eq $books) { $books = @(Get-TranscribeBooks $boxes) }
-      $job = Find-TranscribeJob $chip $books (@(Ready-Chips $boxes.transcribe $found $states $boxes).Count)
+      $job = Find-TranscribeJob $chip $books (@(Ready-Chips $boxes.transcribe $found $states $boxes).Count) $kinds
       if ($job) { return $job }
     }
     if ($boxes.review -contains $chip) {
@@ -1094,7 +1108,7 @@ function Invoke-BoxWorker([string]$tool) {
     Update-Path
     $found = Get-Tools
     $boxes = Get-Boxes (Read-Json (Join-Path $Folder 'requests.json'))
-    $mine = @(@($boxes.transcribe) + @($boxes.review) | Where-Object { (Chip-Tool $_) -eq $tool } | Select-Object -Unique)
+    $mine = @(@($boxes.transcribe) + @($boxes.settle) + @($boxes.review) | Where-Object { (Chip-Tool $_) -eq $tool } | Select-Object -Unique)
     if (-not $found[$tool] -or -not $mine.Count) { break }
     $job = Find-BoxJob $tool $boxes $found $turn
     $turn++
@@ -1120,7 +1134,7 @@ function Invoke-BoxWorker([string]$tool) {
 # One worker per tool with models in the boxes (each runs until it has worked half an
 # hour, then the next cycle starts a fresh one with the newest program).
 function Start-BoxWorkers($boxes, $found) {
-  $tools = @(@($boxes.transcribe) + @($boxes.review) | ForEach-Object { Chip-Tool $_ } | Select-Object -Unique)
+  $tools = @(@($boxes.transcribe) + @($boxes.settle) + @($boxes.review) | ForEach-Object { Chip-Tool $_ } | Select-Object -Unique)
   foreach ($tool in $tools) {
     if (-not $found[$tool]) { continue }
     $info = Read-Json (Join-Path $Jobs "box-$tool.json")
@@ -1136,14 +1150,14 @@ function Start-BoxWorkers($boxes, $found) {
 # (skip.json). Checked against the box as it is now: a page refused while another model was
 # still in the box, which then left it, would otherwise wait for no one.
 function Hand-Back-Refused($book, $boxes, $found) {
-  $box = @(@($boxes.transcribe) | Where-Object { $found[(Chip-Tool $_)] })
-  if (-not $box.Count) { return }
   $refused = Get-Refused $book.id
   foreach ($p in $book.need) {
     $skip = Page-Name $p 'skip.json'
     if (-not $refused.ContainsKey($p) -or $book.names[$skip]) { continue }
-    if (@($box | Where-Object { @($refused[$p]) -notcontains $_ }).Count) { continue }
-    if ((Get-PageFiles $book $p).settled) { continue }
+    $s = Get-PageFiles $book $p
+    if ($s.settled) { continue }
+    $box = @(@(Stage-Box $boxes $s) | Where-Object { $found[(Chip-Tool $_)] })
+    if (-not $box.Count -or @($box | Where-Object { @($refused[$p]) -notcontains $_ }).Count) { continue }
     Write-PageFile $book $p 'skip' @{ page = $p; reason = 'refused'; models = @($refused[$p]); at = (Now-Iso) }
     $book.names[$skip] = $true
     Write-Log "every model in the box refused p$p of $($book.id): handed back"
@@ -1212,7 +1226,7 @@ function Write-Status($found, $state, $running, $boxes) {
   $chips = [ordered]@{}
   if ($boxes) {
     $states = All-Chips
-    foreach ($c in @(@($boxes.transcribe) + @($boxes.review) | Select-Object -Unique)) {
+    foreach ($c in @(@($boxes.transcribe) + @($boxes.settle) + @($boxes.review) | Select-Object -Unique)) {
       $st = $states[$c]
       $window = Chip-Window $boxes $c
       if (-not $found[(Chip-Tool $c)]) { $chips[$c] = @{ state = 'failing'; text = 'برنامجه غير موجود على الجهاز' } }

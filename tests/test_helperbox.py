@@ -183,6 +183,34 @@ class HelperPipeline(PipelineBase):
         self.assertEqual(asked(fake).count("reconcile"), 1)
         self.assertNotIn("كاقية", md)
 
+    def test_settling_only_the_free_models_read_every_page_and_the_helpers_models_settle(self):
+        free = {"gemini-3.5-flash-lite": lambda p, n: answer(WRONG),
+                "gemini-3.1-flash-lite": lambda p, n: answer(TRUE)}
+        code, st, md, fake = self.run_helper(free, mode="settle")
+        self.assertEqual(code, 5)
+        self.assertEqual(asked(fake), ["read"] * 4, "both pages read twice, settled by no Lite")
+        self.assertEqual(st["pages_helper"], [30, 31])
+        self.assertEqual(self.drive.json("book.json")["need"], [30, 31])
+        for page in (30, 31):
+            self.assertEqual(self.drive.json(f"p{page:04d}.b.json")["text"], TRUE.strip())
+            self.drive.put(f"p{page:04d}.final.json", {"page": page, "model": CHIP, "text": TRUE,
+                                                        "a_sha": helperbox.sha(WRONG.strip()), "b_sha": helperbox.sha(TRUE.strip())})
+        code, st, md, fake = self.run_helper(free, mode="settle")
+        self.assertEqual(code, 0, st)
+        self.assertEqual({r["check"]["model"] for r in self.records().values()}, {CHIP})
+        self.assertEqual(asked(fake), [])
+
+    def test_reading_only_the_helpers_models_read_and_the_free_models_settle(self):
+        free = {"gemini-3.5-flash-lite": lambda p, n: answer(TRUE if "النسخة (أ)" in p else WRONG),
+                "gemini-3.1-flash-lite": lambda p, n: answer(TRUE)}
+        self.helper_files(30, ha=WRONG, b=TRUE)
+        code, st, md, fake = self.run_helper(free, mode="read", pages="30")
+        self.assertEqual(code, 0, st)
+        rec = self.records()[30]
+        self.assertEqual((rec["a"]["model"], rec["b"]["model"], rec["check"]["state"]), (OTHER, CHIP, "reconciled"))
+        self.assertIn("reconcile", asked(fake), "Lite settles: the helper's models only read")
+        self.assertNotIn("read", asked(fake))
+
     def test_the_helpers_settled_text_is_checked_and_used(self):
         free = {"gemini-3.5-flash-lite": lambda p, n: answer(WRONG),
                 "gemini-3.1-flash-lite": lambda p, n: answer(TRUE)}

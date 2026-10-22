@@ -43,9 +43,11 @@ function Reset-World {
   $script:Log = @()
 }
 
-function Set-Boxes($transcribe, $review) {
+function Set-Boxes($transcribe, $review, $settle = $null) {
+  $boxes = @{ transcribe = @($transcribe); review = @($review) }
+  if ($null -ne $settle) { $boxes.settle = @($settle) }
   Write-Utf8 (Join-Path $Folder 'requests.json') (@{ v = 1; requests = @(); books = @(@{ id = 'book1'; title = 'كتاب الاختبار' })
-      boxes = @{ transcribe = @($transcribe); review = @($review) } } | ConvertTo-Json -Depth 5)
+      boxes = $boxes } | ConvertTo-Json -Depth 5)
 }
 
 function Make-Book([string]$id, $need, $needA, [bool]$liteOut, $readings) {
@@ -161,6 +163,17 @@ Test 'transcription: with the free quota out, two models give the two readings, 
   $job = Work 'agy'
   Same $job.kind 'settle' 'then it is settled'
   Same (Read-PageFile $dir 3 'final').a_sha (Text-Sha $RIGHT) 'on the first reading of Grok'
+}
+
+Test 'boxes: the reading box only reads, the settling box only settles' {
+  Set-Boxes @($GROK) @() @($GEMINI)
+  $dir = Make-Book 'book1' @(4) @() $false @{ 4 = $WRONG }
+  $script:Answer = { param($tool, $model, $kind, $task) @{ text = $RIGHT } }
+  Same (Work 'agy') '' 'the settling model does not read'
+  Same (Work 'grok').kind 'readB' 'the reading model reads'
+  Same (Work 'grok') '' 'and does not settle'
+  Same (Work 'agy').kind 'settle' 'the settling model settles'
+  Same (Read-PageFile $dir 4 'final').model $GEMINI 'by Gemini'
 }
 
 Test 'a tool writing about task.md is no reading; its words before the page go; task.md has a BOM' {
