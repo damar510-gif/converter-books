@@ -559,14 +559,14 @@ function setHelperBoxes(json) {
     if (!r || typeof r !== 'object' || Array.isArray(r)) return JSON.stringify({ ok: false, error: 'طلب غير مفهوم' });
     var boxes = {};
     var bad = false;
-    ['transcribe', 'review'].forEach(function (k) {
+    ['transcribe', 'settle', 'review'].forEach(function (k) {
       var list = Array.isArray(r[k]) ? r[k].map(String) : [];
       if (list.length > CONFIG.HELPER_MAX_CHIPS || list.some(function (id) { return !CHIP_RE.test(id); })) bad = true;
       boxes[k] = list.filter(function (id, i) { return list.indexOf(id) === i; });
     });
     if (bad) return JSON.stringify({ ok: false, error: 'نموذج غير معروف' });
     // When each model may work: {id: {start, stop}} (times; '' = now / never).
-    boxes.times = cleanTimes_(r.times, boxes.transcribe.concat(boxes.review));
+    boxes.times = cleanTimes_(r.times, boxes.transcribe.concat(boxes.settle, boxes.review));
     var lock = LockService.getUserLock();
     if (!lock.tryLock(20000)) return JSON.stringify({ ok: false, error: 'مشغول، أعد المحاولة بعد دقيقة.' });
     try {
@@ -1880,7 +1880,11 @@ function helperTick_() {
 // The boxes: models the user put to work from the page (docs/helper-boxes-plan.md)
 // ----------------------------------------------------------------------------
 
-/** {transcribe: [ids], review: [ids]}: the models in the left box of each section. */
+/**
+ * {transcribe: [ids], settle: [ids], review: [ids]}: the models in the left box of each
+ * section. transcribe = the reading box (they only read), settle = the settling box (they
+ * only settle), review = the unsure places.
+ */
 function helperBoxes_() {
   var v = parseJson_(props_().getProperty('HELPER_BOXES')) || {};
   var clean = function (list) {
@@ -1888,8 +1892,8 @@ function helperBoxes_() {
     return list.filter(function (id, i) { return CHIP_RE.test(id) && list.indexOf(id) === i; })
       .slice(0, CONFIG.HELPER_MAX_CHIPS);
   };
-  var out = { transcribe: clean(v.transcribe), review: clean(v.review) };
-  out.times = cleanTimes_(v.times, out.transcribe.concat(out.review));
+  var out = { transcribe: clean(v.transcribe), settle: clean(v.settle), review: clean(v.review) };
+  out.times = cleanTimes_(v.times, out.transcribe.concat(out.settle, out.review));
   return out;
 }
 
@@ -1916,12 +1920,18 @@ function helperStatusOf_(ctx) {
 }
 
 /**
- * True when the helper's models give the second readings: some of the models in the box
- * are on the computer, and the helper was seen within the hour.
+ * What the helper's models do on books: {read, settle} (or false when nothing): some models
+ * of the reading or settling box are on the computer, and the helper was seen within the hour.
  */
-function helperTranscribes_(status) {
+function helperWork_(status) {
+  var read = helperTranscribes_(status, 'transcribe'), settle = helperTranscribes_(status, 'settle');
+  return read || settle ? { read: read, settle: settle } : false;
+}
+
+/** True when some models of this box (the reading box by default) can work now. */
+function helperTranscribes_(status, key) {
   var all = helperBoxes_();
-  var boxes = all.transcribe;
+  var boxes = key === 'settle' ? all.settle : key === 'any' ? all.transcribe.concat(all.settle) : all.transcribe;
   var at = status ? Date.parse(status.at) : NaN;
   if (!boxes.length || !isFinite(at) || now_().getTime() - at > CONFIG.HELPER_GONE_MS) return false;
   var found = (Array.isArray(status.models) ? status.models : []).map(function (m) { return m && String(m.id); });
@@ -1974,7 +1984,7 @@ function helperNext_(ctx) {
     .sort(function (a, b) { return String(a.helperAt) < String(b.helperAt) ? -1 : 1; });
   if (!parked.length) return '';
   var status = helperStatusOf_(ctx);
-  var on = helperTranscribes_(status);
+  var on = !!helperWork_(status);
   var now = now_().getTime();
   var today = pacificDay_(now_());
   for (var i = 0; i < parked.length; i++) {
@@ -2002,15 +2012,17 @@ function helperNext_(ctx) {
 }
 
 /**
- * The run's helper input: the book's folder, with ":transcribe" when the helper's models
- * give the second readings (the folder is made then), or ":import" so their work so far
- * is used. Nothing for review and improvement rounds, which read nothing.
+ * The run's helper input: the book's folder, with ":transcribe" (the helper's models read
+ * and settle), ":read" (they only read) or ":settle" (they only settle; the free models read
+ * every page) when they work on books (the folder is made then), or ":import" so their work
+ * so far is used. Nothing for review and improvement rounds, which read nothing.
  */
 function helperInput_(ctx, job) {
   if (job.humanRound || job.refining || !props_().getProperty('HELPER_INSTALL_ID')) return '';
-  var on = extOf_(job.driveName || job.name) === 'pdf' && !job.helperOff && helperTranscribes_(helperStatusOf_(ctx));
-  var f = bookFolder_(job.fileId, on);
-  return f ? f.getId() + (on ? ':transcribe' : ':import') : '';
+  var work = extOf_(job.driveName || job.name) === 'pdf' && !job.helperOff && helperWork_(helperStatusOf_(ctx));
+  var f = bookFolder_(job.fileId, !!work);
+  if (!f) return '';
+  return f.getId() + (!work ? ':import' : work.read && work.settle ? ':transcribe' : work.read ? ':read' : ':settle');
 }
 
 /** A folder in the helper's folder ("كتب", "مراجعة", "أحكام"), made when create is true. */

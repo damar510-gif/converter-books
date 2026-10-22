@@ -2141,14 +2141,14 @@ test('boxes: the page saves the models of each box; requests.json carries them; 
   const bad = JSON.parse(env.ctx.setHelperBoxes(JSON.stringify({ transcribe: ['rm|-rf'], review: [] })));
   assert.strictEqual(bad.ok, false);
   const r = JSON.parse(env.ctx.setHelperBoxes(JSON.stringify({ transcribe: [GEMINI, GROK, GEMINI], review: [GROK] })));
-  assert.deepStrictEqual(r.boxes, { transcribe: [GEMINI, GROK], review: [GROK], times: {} });
-  assert.deepStrictEqual(requestsFile(env).boxes, { transcribe: [GEMINI, GROK], review: [GROK], times: {} });
+  assert.deepStrictEqual(r.boxes, { transcribe: [GEMINI, GROK], settle: [], review: [GROK], times: {} });
+  assert.deepStrictEqual(requestsFile(env).boxes, { transcribe: [GEMINI, GROK], settle: [], review: [GROK], times: {} });
   assert.strictEqual(env.userLockHeld, false);
   writeHelperStatus(env, { models: MODELS.concat([{ id: 'bad id', label: 'x' }]),
     chips: { [GEMINI]: { state: 'working', text: 'يقرأ ص 3' }, [GROK]: { state: 'odd', text: 'x' } } });
   const h = status(env).helper;
   assert.deepStrictEqual(h.models.map((m) => m.id), [GEMINI, GROK]);
-  assert.deepStrictEqual(h.boxes, { transcribe: [GEMINI, GROK], review: [GROK], times: {} });
+  assert.deepStrictEqual(h.boxes, { transcribe: [GEMINI, GROK], settle: [], review: [GROK], times: {} });
   assert.deepStrictEqual(h.chips[GEMINI], { state: 'working', text: 'يقرأ ص 3' });
   assert.strictEqual(h.chips[GROK].state, 'idle');
 });
@@ -2159,7 +2159,7 @@ test('transcribe: with models in the box the run gets the book folder; the book 
   tick(env);
   const folderA = bookFolderOf(env, a.id);
   assert.ok(folderA, 'book folder made under كتب');
-  assert.strictEqual(lastDispatch(env).body.inputs.helper, folderA.id + ':transcribe');
+  assert.strictEqual(lastDispatch(env).body.inputs.helper, folderA.id + ':read');
   assert.strictEqual(lastDispatch(env).body.inputs.judge, undefined);
 
   const b = addBook(env, 'ثان.pdf');
@@ -2191,7 +2191,7 @@ test('transcribe: with models in the box the run gets the book folder; the book 
   tick(env);
   assert.strictEqual(env.gh.dispatches.length, 3);
   assert.strictEqual(lastDispatch(env).body.inputs.drive_file_id, a.id);
-  assert.strictEqual(lastDispatch(env).body.inputs.helper, folderA.id + ':transcribe');
+  assert.strictEqual(lastDispatch(env).body.inputs.helper, folderA.id + ':read');
 
   minutes(env, 10);
   writeStatus(env, a.id, 'done', { epub: 'أول.epub' });
@@ -2243,14 +2243,14 @@ test('transcribe: the free models come back to the book while the helper works o
   }
   assert.strictEqual(env.gh.dispatches.length, 2);
   assert.ok(formatDate(env.clock, 'America/Los_Angeles', 'yyyy-MM-dd') > parkedDay, 'not before their quota renews');
-  assert.strictEqual(lastDispatch(env).body.inputs.helper, folderA.id + ':transcribe');
+  assert.strictEqual(lastDispatch(env).body.inputs.helper, folderA.id + ':read');
   // They stopped for time with quota left: the next run starts in the same check.
   minutes(env, 40);
   writeStatus(env, a.id, 'paused', { waiting_for: 'helper', epub: 'كبير.epub', pages_total: 923, pages_done: 400,
     pages_helper: [60, 61], free_left: true });
   tick(env);
   assert.strictEqual(env.gh.dispatches.length, 3);
-  assert.strictEqual(lastDispatch(env).body.inputs.helper, folderA.id + ':transcribe');
+  assert.strictEqual(lastDispatch(env).body.inputs.helper, folderA.id + ':read');
 });
 
 test('transcribe: an empty box, a computer away for an hour, or a helper that stopped moving hands the book to the free model', () => {
@@ -2335,7 +2335,7 @@ test('transcribe: no helper, no box or not a PDF: runs as before; a book paused 
   writeHelperStatus(env3, { models: MODELS, books: { [f.id]: { need: 3, finished: 3, book_at: bookAt } } });
   tick(env3);
   assert.strictEqual(env3.gh.dispatches.length, 2, 'resumed the same day');
-  assert.ok(/:transcribe$/.test(lastDispatch(env3).body.inputs.helper));
+  assert.ok(/:read$/.test(lastDispatch(env3).body.inputs.helper));
 });
 
 test('review: with models in the review box the places are copied for the helper, and its finished verdicts are applied in a round', () => {
@@ -2485,7 +2485,7 @@ test('the page: models move between the boxes with a tap (or a drag), are saved,
   const boxes = page.byId.boxes;
   assert.strictEqual(boxes.hidden, false);
   const sections = boxes.kids.filter((k) => k.className === 'bx');
-  assert.strictEqual(sections.length, 2);
+  assert.strictEqual(sections.length, 3, 'reading, settling, review');
   const pair = (sec) => sec.kids.find((k) => k.className === 'pair');
   const chipIn = (box, text) => {
     for (const k of box.kids || []) {
@@ -2500,12 +2500,13 @@ test('the page: models move between the boxes with a tap (or a drag), are saved,
   assert.ok(/Grok 4\.7/.test(offT.textContent) && /يستنفد الحدود/.test(offT.textContent));
   assert.deepStrictEqual(offT.kids.filter((k) => k.className === 'grp').map((g) => g.kids[0].textContent),
     ['Grok Build', 'Antigravity'], 'in rows under the name of their program');
-  assert.ok(/فارغ: المواضع تبقى لك/.test(pair(sections[1]).kids[1].textContent));
+  assert.ok(/فارغ: النماذج المجانية تحسم/.test(pair(sections[1]).kids[1].textContent));
+  assert.ok(/فارغ: المواضع تبقى لك/.test(pair(sections[2]).kids[1].textContent));
 
   // A tap on Grok in the right box puts it to work.
   page.click(chipIn(offT, 'Grok 4.7'));
   const call = page.pending('setHelperBoxes')[0];
-  assert.deepStrictEqual(JSON.parse(call.args[0]), { transcribe: [GEMINI, GROK], review: [], times: {} });
+  assert.deepStrictEqual(JSON.parse(call.args[0]), { transcribe: [GEMINI, GROK], settle: [], review: [], times: {} });
   let now = pair(boxes.kids.filter((k) => k.className === 'bx')[0]).kids[1];
   assert.ok(/Grok 4\.7/.test(now.textContent), 'shown in the left box at once');
   page.answer(call, env.ctx.setHelperBoxes(call.args[0]));
@@ -2550,8 +2551,12 @@ test('the page: models move between the boxes with a tap (or a drag), are saved,
   assert.ok(/Gemini 3\.8 Flash/.test(now.textContent), now.textContent);
   assert.ok(/تعذّر الحفظ/.test(page.byId.toasts.textContent));
 
-  // A drop on the left box of the review section.
-  const reviewOn = pair(boxes.kids.filter((k) => k.className === 'bx')[1]).kids[1];
+  // A drop on the left box of the settling section, then of the review section.
+  const settleOn = pair(boxes.kids.filter((k) => k.className === 'bx')[1]).kids[1];
+  settleOn.handlers.drop[0]({ preventDefault() {}, dataTransfer: { getData: () => JSON.stringify({ id: GEMINI }) } });
+  assert.deepStrictEqual(JSON.parse(page.pending('setHelperBoxes')[0].args[0]).settle, [GEMINI]);
+  page.fail(page.pending('setHelperBoxes')[0], 'offline');
+  const reviewOn = pair(boxes.kids.filter((k) => k.className === 'bx')[2]).kids[1];
   reviewOn.handlers.drop[0]({ preventDefault() {}, dataTransfer: { getData: () => JSON.stringify({ id: GEMINI }) } });
   assert.deepStrictEqual(JSON.parse(page.pending('setHelperBoxes')[0].args[0]).review, [GEMINI]);
 });

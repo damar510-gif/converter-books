@@ -126,13 +126,16 @@ class Drive:
 
 
 class HelperBox:
-    """One book's folder. spec is "<folder id>:transcribe" (the helper's models give the
-    second reading and settle the page) or "<folder id>:import" (their work so far is used,
-    and the free readers do the rest)."""
+    """One book's folder. spec is "<folder id>:<mode>": "transcribe" (the helper's models read
+    and settle), "read" (they only read), "settle" (they only settle: the free models read
+    every page) or "import" (their work so far is used, and the free models do the rest)."""
 
-    def __init__(self, folder, transcribe, drive, cache_dir):
+    def __init__(self, folder, transcribe, drive, cache_dir, reads=None, settles=None):
         self.folder = folder
+        # The helper's models work on the book: they read (reads), settle (settles), or both.
         self.transcribe = transcribe
+        self.reads = transcribe if reads is None else reads
+        self.settles = transcribe if settles is None else settles
         self.drive = drive
         self.dir = os.path.join(cache_dir, "helper")
         os.makedirs(self.dir, exist_ok=True)
@@ -148,7 +151,8 @@ class HelperBox:
         if not FOLDER_ID.match(folder) or not token:
             print("Helper folder ignored: " + ("no Drive token" if not token else "bad folder id"))
             return None
-        return cls(folder, mode == "transcribe", Drive(token), cache_dir)
+        reads, settles = mode in ("transcribe", "read"), mode in ("transcribe", "settle")
+        return cls(folder, reads or settles, Drive(token), cache_dir, reads, settles)
 
     def note(self, text):
         with self.lock:
