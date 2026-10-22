@@ -498,6 +498,39 @@ def save_record(cache_dir, rec):
     os.replace(path + ".tmp", path)
 
 
+def scrub(rec, drop):
+    """What a tool on the user's computer wrote around the page ("I'll read `task.md` …") goes
+    from a saved record (helperbox.clean_text). drop: a helper reading that is no page text at
+    all (an apology about its files) goes too, so the page is read or settled again; never in
+    a review round, which reads nothing. Returns True when the record changed."""
+    before = json.dumps(rec, ensure_ascii=False, sort_keys=True)
+    for key in ("a", "b"):
+        r = rec.get(key)
+        if not r or r.get("via") != "helper":
+            continue
+        r["text"] = helperbox.clean_text(r.get("text", ""))
+        if drop and not helperbox.usable(r["text"]):
+            if key == "a":
+                keep = {k: rec[k] for k in ("page", "hskip", "ink", "spread") if k in rec}
+                rec.clear()
+                rec.update(keep, status="pending")
+                return True
+            for k in ("b", "check", "hfinal"):
+                rec.pop(k, None)
+    if rec.get("hfinal"):
+        rec["hfinal"]["text"] = helperbox.clean_text(rec["hfinal"]["text"])
+        if drop and not helperbox.usable(rec["hfinal"]["text"]):
+            rec.pop("hfinal")
+            rec.pop("check", None)
+    if "|" in str((rec.get("check") or {}).get("model") or ""):
+        # Settled by a model on the user's computer: its text is the book's.
+        rec["text"] = helperbox.clean_text(rec.get("text", ""))
+        if drop and not helperbox.usable(rec["text"]):
+            rec["text"] = (rec.get("a") or {}).get("text", "")
+            rec.pop("check", None)
+    return json.dumps(rec, ensure_ascii=False, sort_keys=True) != before
+
+
 def text_layer_record(doc, index, cache_dir):
     """A page with its own text in the PDF needs no reading: its record, or None."""
     with PDF_LOCK:
@@ -1591,6 +1624,11 @@ def generate_epub_from_pdf(filepath, output_path, args):
         got = (review.load(path) or {}).get("answers") if path else None
         if isinstance(got, dict):
             answers.update(got)
+
+    for i in selected:
+        rec = load_record(cache_dir, i + 1, args.rescue_model)
+        if rec and not review.pin_of(rec) and scrub(rec, drop=not args.review_only):
+            save_record(cache_dir, rec)
 
     pool = None
     needs_ocr = any(len(doc[i].get_text().strip()) < MIN_TEXT_LAYER_CHARS for i in selected)
