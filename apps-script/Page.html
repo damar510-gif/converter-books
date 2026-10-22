@@ -454,6 +454,14 @@
   .choices { display: flex; flex-direction: column; gap: 10px; margin-top: 14px; }
   .minor { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 12px; }
   .rv-note { font-size: 12.5px; color: var(--mute); margin-top: 10px; }
+  .plist { list-style: none; margin: 6px 0 0; padding: 0; max-height: 34vh; overflow: auto; border: 1px solid var(--line-soft); border-radius: 4px; }
+  .plist li { display: flex; gap: 8px; align-items: baseline; padding: 6px 10px; border-top: 1px solid var(--line-soft); cursor: pointer; font-size: 15px; }
+  .plist li:first-child { border-top: 0; }
+  .plist li.on { background: rgba(201,165,92,.15); }
+  .plist .pn { flex: none; min-width: 1.6em; font-size: 12px; color: var(--gold); font-weight: 700; }
+  .plist .pt { font-family: var(--f-display); overflow-wrap: anywhere; }
+  .plist .po { font-size: 12.5px; color: var(--dim); overflow-wrap: anywhere; }
+  .plist .pd { flex: none; margin-inline-start: auto; font-size: 12px; color: var(--ok); }
   .ed-l { font-size: 13px; color: var(--dim); }
   textarea.in { width: 100%; min-height: 7em; font-family: var(--f-display); font-size: 19px; line-height: 1.9; padding: 10px 12px; resize: vertical; }
   .fills { display: flex; gap: 6px; flex-wrap: wrap; margin: 8px 0; }
@@ -1466,6 +1474,7 @@
     minor.appendChild(button('btn-sm', 'تخطَّ', function () { go(RV.at + 1); }, 'next', '←'));
     minor.appendChild(button('btn-sm', 'كل ما بقي في هذه الصفحة صحيح', rest, 'checks', '3'));
     side.appendChild(minor);
+    side.appendChild(pagePlaces(cur));
     if (RV.done[it.id]) side.appendChild(el('div', 'rv-note', 'أجبت عن هذا الموضع؛ إجابتك الجديدة تحل محل السابقة.'));
     grid.appendChild(side);
     body.appendChild(grid);
@@ -1595,6 +1604,34 @@
     var k = RV.at;
     while (k < RV.flat.length && RV.flat[k].page.page === page) k++;
     go(k);
+  }
+
+  // Every place of the page: its number in the image, what the program read and the other
+  // reading, so the rest of the page can be checked before «كل ما بقي في هذه الصفحة صحيح».
+  function pagePlaces(cur) {
+    var box = el('div');
+    var all = [];
+    RV.flat.forEach(function (x, k) { if (x.page.page === cur.page.page) all.push(k); });
+    var head = el('div', 'h3');
+    head.appendChild(icon('grid'));
+    head.appendChild(el('span', '', 'مواضع هذه الصفحة (' + all.length + ')'));
+    box.appendChild(head);
+    var list = el('ol', 'plist');
+    all.forEach(function (k) {
+      var x = RV.flat[k], it = x.item;
+      var li = el('li', k === RV.at ? 'on' : '');
+      li.appendChild(el('span', 'pn', String(it.n || '')));
+      var t = el('div');
+      t.appendChild(el('div', 'pt', it.kind === 'page' ? 'الصفحة كلها' : isGap(it) ? '▼ سطر قد يكون ساقطاً' : short(plain(it.core), 80) || '—'));
+      var other = (it.options || [])[0];
+      if (other && other.text) t.appendChild(el('div', 'po', (isGap(it) ? 'السطر: ' : 'القراءة الأخرى: ') + short(plain(other.text), 80)));
+      li.appendChild(t);
+      if (RV.done[it.id]) li.appendChild(el('span', 'pd', '✓'));
+      li.addEventListener('click', function () { go(k); });
+      list.appendChild(li);
+    });
+    box.appendChild(list);
+    return box;
   }
 
   function go(k) {
