@@ -25,10 +25,9 @@
 | صندوق Drive (Google Apps Script) | `apps-script/` (دليل الإعداد `SETUP-ar.md`) |
 | العقد بين السكربت وسير العمل | `docs/drive-inbox.md` |
 | المساعد على جهاز المستخدم (نماذج الاشتراكات) | `helper/` (العقد في `docs/helper.md`) |
-| إضافة كروم «حفظ صوت Grok» (تحفظ قراءة Grok الصوتية ملفاً؛ المساعد ينسخها إلى `%LOCALAPPDATA%\GrokAudio`) | `helper/grok-audio.js` + `helper/grok-audio-manifest.json` |
 | مقارنة النماذج (اختبار فقط) | `compare_models.py` + مُدخل `compare_models` في سير العمل |
 | مربعات النماذج (التفريغ والمراجعة بنماذج الجهاز) | `helperbox.py` + `docs/helper-boxes-plan.md` |
-| الاختبارات | `python -m unittest discover -s tests` و`node tests/apps-script/run_tests.js` و`pwsh -NoProfile -File tests/helper/run_tests.ps1` و`node tests/grok-audio/run_tests.js` (Tesseract مطلوب محلياً لبعض التجارب: `apt-get install tesseract-ocr tesseract-ocr-ara`؛ وpwsh يُنزَّل من إصدارات PowerShell على GitHub إن غاب) |
+| الاختبارات | `python -m unittest discover -s tests` و`node tests/apps-script/run_tests.js` و`pwsh -NoProfile -File tests/helper/run_tests.ps1` (Tesseract مطلوب محلياً لبعض التجارب: `apt-get install tesseract-ocr tesseract-ocr-ara`؛ وpwsh يُنزَّل من إصدارات PowerShell على GitHub إن غاب) |
 
 - **مراحل كل صفحة:**
   1. قراءة أولى `gemini-3.5-flash-lite`.
@@ -171,4 +170,4 @@
 - خطوة الحسم ترفض تصحيحات تبدو سليمة؛ الجزء الثاني من «تراث الإنسانية» نزل من 71 إلى 48 صفحة مشكوكاً فيها (2026-10-20)، أغلبها «سطر قد يكون ساقطاً» (فحص Tesseract) وبعضها «حذف كلاماً متفقاً عليه». التقرير يذكر السبب لكل صفحة: افحصه قبل تخفيف القواعد.
 - صفحات المعادلات الرياضية ضعيفة عند كل النماذج.
 - تحويل TXT/DOCX لم يُطوَّر بعد (الفهرسة فيه بقواعد بسيطة).
-- **إضافة «حفظ صوت Grok» (2026-10-21):** بُنيت وجُرّبت على صفحة تحاكي grok.com فقط؛ لم يُعرف بعد كيف يجلب Grok صوته فعلاً. إن لم تلتقط شيئاً عند المستخدم فاطلب منه نص زر «تشخيص».
+- **إضافة «حفظ صوت Grok»:** حُذفت من المشروع (2026-10-22، أُضيفت بالخطأ بقول المستخدم). المساعد يحذف نسختها من الجهاز (`%LOCALAPPDATA%\GrokAudio`) ومن «البرنامج» (`Remove-GrokAudio`).

@@ -1311,21 +1311,18 @@ function Invoke-HelperWorker([string]$id) {
   Write-Utf8 $resultFile ($result | ConvertTo-Json -Depth 5)
 }
 
-# The Chrome extension «حفظ صوت Grok» (grok-audio.js): kept in %LOCALAPPDATA%\GrokAudio,
-# the folder the user loads once in chrome://extensions; Chrome reads it again at each start.
-function Update-GrokAudio {
-  $src = Join-Path $Folder 'البرنامج'
+# The Chrome extension «حفظ صوت Grok» was taken out of the project (2026-10-22, added by
+# mistake): the copies an older helper made on this computer go.
+function Remove-GrokAudio {
+  foreach ($name in 'grok-audio.js', 'grok-audio-manifest.json') {
+    $old = Join-Path (Join-Path $Folder 'البرنامج') $name
+    if (Test-Path -LiteralPath $old) { Remove-Item -LiteralPath $old -Force -ErrorAction SilentlyContinue }
+  }
+  if (-not $env:LOCALAPPDATA) { return }
   $dest = Join-Path $env:LOCALAPPDATA 'GrokAudio'
-  $files = @{ 'grok-audio-manifest.json' = 'manifest.json'; 'grok-audio.js' = 'grok-audio.js' }
-  foreach ($name in $files.Keys) {
-    $from = Join-Path $src $name
-    if (-not (Test-Path $from)) { continue }
-    $to = Join-Path $dest $files[$name]
-    $bytes = [IO.File]::ReadAllBytes($from)
-    if ((Test-Path $to) -and ([Convert]::ToBase64String([IO.File]::ReadAllBytes($to)) -eq [Convert]::ToBase64String($bytes))) { continue }
-    New-Item -ItemType Directory -Force -Path $dest | Out-Null
-    [IO.File]::WriteAllBytes($to, $bytes)
-    Write-Log "grok audio extension: $($files[$name]) updated"
+  if (Test-Path -LiteralPath $dest) {
+    Remove-Item -LiteralPath $dest -Recurse -Force -ErrorAction SilentlyContinue
+    Write-Log 'grok audio extension removed'
   }
 }
 
@@ -1369,7 +1366,7 @@ function Invoke-HelperCycle {
   $boxes = Get-Boxes $reqs
   try { Start-BoxWorkers $boxes $found } catch { Write-Log "box workers: $_" }
   try { Update-Verdicts $boxes $found (All-Chips) } catch { Write-Log "verdicts failed: $_" }
-  try { Update-GrokAudio } catch { Write-Log "grok audio extension: $_" }
+  try { Remove-GrokAudio } catch { Write-Log "grok audio extension: $_" }
   Clear-StaleClaims
   Save-State $state
   Write-Status $found $state $running $boxes
