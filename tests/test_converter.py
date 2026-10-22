@@ -469,6 +469,16 @@ class Pipeline(PipelineBase):
         self.assertEqual({m for m, _ in fake.calls}, {"gemini-3.5-flash-lite"})
 
 
+class DashLines(unittest.TestCase):
+    def test_dash_line_never_reaches_pandoc_as_yaml_or_heading(self):
+        # Book 2_k2opt (run 38): "---" right before a footnote made pandoc fail.
+        recs = [{"page": 1, "status": "ok", "text": "نص الصفحة\n---\nStanford (W.B.), op. cit., p. 10"}]
+        md = c.assemble(recs)
+        self.assertNotRegex(md, r"(?m)^-{3,}\s*$")
+        self.assertIn("\n\n* * *\n\n", md)
+        self.assertEqual(c.safe_rules("a -- b\n- item"), "a -- b\n- item")
+
+
 class CrossCheck(unittest.TestCase):
     def test_spelling_variants_are_not_differences(self):
         ratio, diffs = crosscheck.compare("فى الكتاب الذى قرأه إبراهيم", "في الكتاب الذي قرأه ابراهيم")

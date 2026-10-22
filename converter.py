@@ -980,6 +980,13 @@ def notice_words(check, places):
     return out[:3]
 
 
+def safe_rules(md):
+    """A line of dashes from a page (a model drawing the footnote line) becomes a
+    plain rule between blank lines: pandoc otherwise reads "---" with text right
+    after it as a YAML settings block (and fails), or the line above as a heading."""
+    return re.sub(r"\n*^[ \t]*(?:-[ \t]*){3,}$\n*", "\n\n* * *\n\n", md, flags=re.M)
+
+
 def assemble(records, review_pages=None):
     """The book's Markdown. review_pages (from review.build) gives the places still open
     on each unsure page, for its notice; pages the user finished have none."""
@@ -1043,7 +1050,7 @@ def assemble(records, review_pages=None):
     if marker:
         blocks.append([marker, "body"])
     out = "\n\n".join(b for b, _ in blocks)
-    return out + ("\n\n" + "\n\n".join(defs) if defs else "") + "\n"
+    return safe_rules(out + ("\n\n" + "\n\n".join(defs) if defs else "")).strip("\n") + "\n"
 
 
 def add_page_list(epub_path):
