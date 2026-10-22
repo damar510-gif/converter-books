@@ -260,6 +260,9 @@ class ModelPool:
         self.client = genai.Client(api_key=api_key, http_options=types.HttpOptions(timeout=300_000))
         self.model = primary
         self.second = second
+        # The other free models (Flash, small daily quotas): they read and settle once the two
+        # Lite readers are out (set_extra).
+        self.extra = []
         self.rescue = rescue
         self.rpm = rpm
         self.lock = threading.Lock()
@@ -273,6 +276,18 @@ class ModelPool:
 
     def available(self, model):
         return bool(model) and model not in self.exhausted
+
+    def set_extra(self, models):
+        self.extra = [m for m in dict.fromkeys(models) if m and m not in (self.model, self.second, self.rescue)]
+
+    def readers(self, first=None):
+        """Every free reader, the two Lite models first; first: the model to try first."""
+        order = [first] if first else []
+        return [m for m in dict.fromkeys(order + [self.model, self.second] + self.extra) if m]
+
+    def free_out(self):
+        """No free reader has quota left today (Gemma only rescues refused pages)."""
+        return not any(self.available(m) for m in self.readers())
 
     def _limiter(self, model):
         with self.lock:
@@ -345,6 +360,13 @@ class ModelPool:
                 elif any(code in msg for code in ("500", "502", "503", "504")) or "unavailable" in low \
                         or "timed out" in low or "timeout" in low or "deadline" in low:
                     wait = 20 * (2 ** attempt)
+                elif "404" in msg or "not_found" in low:
+                    # A model name this account does not have: not asked again in this run.
+                    with self.lock:
+                        self.exhausted.add(model)
+                        self.missing.add(model)
+                    print(f"  {model}: not found, skipped: {msg[:160]}")
+                    raise QuotaExhausted(model) from e
                 else:
                     raise
                 print(f"  {model}: {msg[:160]} -> retry in {wait}s")
@@ -466,27 +488,31 @@ def save_record(cache_dir, rec):
     os.replace(path + ".tmp", path)
 
 
-def read_page(pool, doc, index, cache_dir, total, dual, helper=False):
+def text_layer_record(doc, index, cache_dir):
+    """A page with its own text in the PDF needs no reading: its record, or None."""
+    with PDF_LOCK:
+        layer = doc[index].get_text("text", sort=True).strip()
+    if len(layer) < MIN_TEXT_LAYER_CHARS:
+        return None
+    rec = {"page": index + 1, "status": "text-layer", "text": layer}
+    save_record(cache_dir, rec)
+    return rec
+
+
+def read_page(pool, doc, index, cache_dir, total, dual):
     """First and second reading of one page, saved to cache_dir/NNNN.json.
-    Returns the record, or None when the page has to wait for tomorrow's quota.
-    helper: the second reading is left to the helper's models (docs/helper-boxes-plan.md),
-    except on a page they handed back."""
+    Returns the record, or None when the page has to wait for tomorrow's quota."""
     page_no = index + 1
     rec = load_record(cache_dir, page_no, pool.rescue if pool else "")
     if rec and rec.get("status") in ("empty", "text-layer"):
         return rec
     page = doc[index]
     if rec is None:
-        with PDF_LOCK:
-            layer = page.get_text("text", sort=True).strip()
-        if len(layer) >= MIN_TEXT_LAYER_CHARS:
-            rec = {"page": page_no, "status": "text-layer", "text": layer}
-            save_record(cache_dir, rec)
-            return rec
+        layer = text_layer_record(doc, index, cache_dir)
+        if layer:
+            return layer
 
     handed_back = {"hskip": True} if (rec or {}).get("hskip") else {}
-    if helper and not handed_back:
-        dual = False
     need_a = rec is None or rec.get("status") != "ok"
     b = (rec or {}).get("b")
     need_b = dual and (need_a or b is None or b.get("status") in ("failed", "suspicious"))
@@ -498,8 +524,7 @@ def read_page(pool, doc, index, cache_dir, total, dual, helper=False):
     spread = pix.width > pix.height * 1.15
     prompt = OCR_PROMPT.format(spread=SPREAD_HINT if spread else "")
     if need_a:
-        status, reading, error = read_with(pool, [pool.model, pool.second], page, png, pix, prompt, ink,
-                                           rescue=pool.rescue)
+        status, reading, error = read_with(pool, pool.readers(), page, png, pix, prompt, ink, rescue=pool.rescue)
         if status == "pending":
             return None
         rec = {"page": page_no, "ink": round(ink, 4), "spread": spread, "status": status,
@@ -509,7 +534,7 @@ def read_page(pool, doc, index, cache_dir, total, dual, helper=False):
     if dual and rec["status"] == "ok":
         # The second reading comes from a different model, so its mistakes fall elsewhere.
         # Gemma may give it only when Gemini refused this page.
-        others = [m for m in (pool.second, pool.model) if m and m != rec["a"]["model"]]
+        others = [m for m in pool.readers(pool.second) if m != rec["a"]["model"]]
         rescue = pool.rescue if rec["a"].get("refused") and rec["a"]["model"] != pool.rescue else ""
         status, reading, error = read_with(pool, others, page, png, pix, prompt, ink, rescue=rescue)
         if status == "pending":
@@ -578,9 +603,10 @@ def check_page(pool, doc, rec, tess, vocab):
     rules = OCR_RULES.format(spread=SPREAD_HINT if pix.width > pix.height * 1.15 else "")
     prompt = crosscheck.reconcile_prompt(rules, a, b, diffs, list(dict.fromkeys(miss_a + miss_b)))
     answered = errored = False
-    # Use the reconciler with fewer requests so far, to spread the two daily quotas.
-    for model in sorted((m for m in (pool.model, pool.second) if pool.available(m)),
-                        key=lambda m: pool.requests.get(m, 0)):
+    # Use the Lite reconciler with fewer requests so far, to spread the two daily quotas; the
+    # other free models once both are out.
+    lite = sorted((m for m in (pool.model, pool.second) if pool.available(m)), key=lambda m: pool.requests.get(m, 0))
+    for model in lite + [m for m in pool.extra if pool.available(m)]:
         try:
             text, finish = pool.read(png, prompt, model)
         except QuotaExhausted:
@@ -755,18 +781,14 @@ def check_pages(pool, filepath, records, cache_dir, dual, workers, transcribe=Fa
     return waiting
 
 
-# Each unsure page is shown to at most this many judges.
-MAX_JUDGES = 2
+# Free models added on their own when Google offers them: Gemini Flash or Pro, version 3
+# or later. Lite, Gemma, Nano, image/audio models and dated variants never match.
+NEW_MODEL = re.compile(r"^gemini-(\d+(?:\.\d+)?)-(flash|pro)(?:-preview|-latest)?$")
 
 
-# Judges added on their own when Google offers them: Gemini Flash or Pro, version 3 or
-# later. Lite, Gemma, Nano, image/audio models and dated variants never match.
-NEW_JUDGE = re.compile(r"^gemini-(\d+(?:\.\d+)?)-(flash|pro)(?:-preview|-latest)?$")
-
-
-def judge_rank(name):
-    """(version, Pro before Flash) for ordering judges strongest first; (0,) if unknown."""
-    m = NEW_JUDGE.match(re.sub(r"-(preview|latest|exp)(-[\w-]*)?$|-\d{3}$", "", name))
+def model_rank(name):
+    """(version, Pro before Flash) for ordering models strongest first; (0,) if unknown."""
+    m = NEW_MODEL.match(re.sub(r"-(preview|latest|exp)(-[\w-]*)?$|-\d{3}$", "", name))
     if not m:
         return (0,)
     major, _, minor = m.group(1).partition(".")
@@ -774,10 +796,10 @@ def judge_rank(name):
 
 
 def resolve_models(pool, names):
-    """Maps each judge name to a model this account has. Google renames models (for
-    example "gemini-3-flash" is served as "gemini-3-flash-preview"); a name not found
-    as is takes the closest "<name>-..." model. Newer Gemini Flash/Pro models the
-    account has are added, each before the first judge older than it.
+    """Maps each name of the other free models to a model this account has. Google renames
+    models (for example "gemini-3-flash" is served as "gemini-3-flash-preview"); a name not
+    found as is takes the closest "<name>-..." model. Newer Gemini Flash/Pro models the
+    account has are added, each before the first model older than it.
     Names stay as given if listing fails."""
     try:
         have = {}
@@ -787,7 +809,7 @@ def resolve_models(pool, names):
             if name and (not actions or "generateContent" in actions):
                 have[name] = True
     except Exception as e:
-        print(f"Could not list models ({str(e)[:120]}); judges used by their given names")
+        print(f"Could not list models ({str(e)[:120]}); models used by their given names")
         return names
     if not have:
         return names
@@ -800,119 +822,31 @@ def resolve_models(pool, names):
         close = [a for a in have if a.startswith(n + "-") and not any(s in a[len(n):] for s in skip)]
         close.sort(key=lambda a: (a != n + "-preview", a != n + "-latest", len(a), a))
         if close:
-            print(f"Judge {n} is served as {close[0]}")
+            print(f"Model {n} is served as {close[0]}")
             out.append(close[0])
         else:
-            print(f"Judge {n} is not available to this account")
+            print(f"Model {n} is not available to this account")
             out.append(n)
     out = list(dict.fromkeys(out))
     base = lambda a: re.sub(r"-(preview|latest)$", "", a)
     known = {base(a) for a in out}
     added = []
     # Same rank: the plain name first (it outlives its -preview/-latest aliases).
-    for a in sorted(have, key=lambda a: (judge_rank(a), a == base(a)), reverse=True):
-        m = NEW_JUDGE.match(a)
+    for a in sorted(have, key=lambda a: (model_rank(a), a == base(a)), reverse=True):
+        m = NEW_MODEL.match(a)
         if not m or int(m.group(1).split(".")[0]) < 3 or base(a) in known:
             continue
         known.add(base(a))
-        at = next((i for i, j in enumerate(out) if judge_rank(j) < judge_rank(a)), len(out))
+        at = next((i for i, j in enumerate(out) if model_rank(j) < model_rank(a)), len(out))
         out.insert(at, a)
         added.append(a)
     if added:
-        print(f"New judges added: {', '.join(added)}")
+        print(f"New free models added: {', '.join(added)}")
         try:
-            pool.added_judges = added
+            pool.added_models = added
         except AttributeError:
             pass
     return out
-
-
-def arbitrate(pool, filepath, records, cache_dir, models, limit):
-    """Shows pages still unsure to stronger models with small daily quotas, one
-    after another as each quota runs out. A page a judge could not settle may be
-    shown to one more judge. Quota errors leave pages for the next run."""
-    todo = [r for r in records if (r.get("check") or {}).get("state") == "unsure" and not review.pin_of(r)
-            and len(r["check"].get("judges", [])) < MAX_JUDGES][:limit]
-    models = [m for m in models if m]
-    if not todo or not any(pool.available(m) for m in models):
-        return
-    print(f"Asking {', '.join(models)} about {len(todo)} unsure pages")
-    vocab = set()
-    for r in records:
-        vocab.update(norm_words(r.get("text") or ""))
-    failed = {}
-    local = open_pdf(filepath)
-    try:
-        for rec in todo:
-            judges = rec["check"].setdefault("judges", [])
-            free = [m for m in models if pool.available(m) and m not in judges]
-            if not free:
-                if not any(pool.available(m) for m in models):
-                    break
-                continue
-            a = rec["a"]["text"]
-            b_rec = rec.get("b") or {}
-            b = b_rec.get("text", "") if b_rec.get("status") == "ok" else ""
-            tess = tesseract_for(filepath, cache_dir, rec["page"])
-            miss_a = missing_lines(tess, a, vocab) if tess else []
-            miss_b = missing_lines(tess, b, vocab) if tess and b else []
-            _, diffs = crosscheck.compare(a, b) if b else (0, [])
-            png, pix = page_image(local, local[rec["page"] - 1])
-            rules = OCR_RULES.format(spread=SPREAD_HINT if pix.width > pix.height * 1.15 else "")
-            prompt = crosscheck.reconcile_prompt(rules, a, b, diffs, list(dict.fromkeys(miss_a + miss_b)))
-            model = None
-            for m in free:
-                try:
-                    text, finish = pool.read(png, prompt, m)
-                    model = m
-                    break
-                except QuotaExhausted:
-                    continue
-                except Exception as e:
-                    if "404" in str(e) or "not found" in str(e).lower():
-                        # A model name this account does not have: skip it for the run.
-                        print(f"  {m}: not found, skipped: {str(e)[:200]}")
-                        pool.exhausted.add(m)
-                        pool.missing.add(m)
-                        continue
-                    if any(x in str(e) for x in ("500", "502", "503", "504")) or "unavailable" in str(e).lower() \
-                            or "timeout" in str(e).lower() or "timed out" in str(e).lower():
-                        # Temporary trouble: the page keeps its judge slot for another model,
-                        # and a model failing like this twice is left out for the run.
-                        failed[m] = failed.get(m, 0) + 1
-                        if failed[m] >= 2:
-                            print(f"  {m}: keeps failing, skipped for this run")
-                            pool.exhausted.add(m)
-                        continue
-                    text, finish, model = "", f"error {str(e)[:100]}", m
-                    break
-            if model is None:
-                continue
-            judges.append(model)
-            text = clean_settled(text)
-            if not text or is_refusal(finish) or "MAX_TOKENS" in finish or finish.startswith("error"):
-                verdict = f"no answer: {finish[:80]}"
-            elif not crosscheck.validate_final(text, a, b):
-                verdict = "rejected: drops text the readings agree on"
-            else:
-                miss_f = missing_lines(tess, text, vocab) if tess else []
-                if len(miss_f) > min([len(miss_a)] + ([len(miss_b)] if b else [])):
-                    verdict = f"rejected: {len(miss_f)} lines missing"
-                else:
-                    # The stronger model's text is used even if a line still seems missing;
-                    # the page then stays flagged in the book.
-                    rec["text"] = text
-                    rec["check"].update(model=model, missing_final=len(miss_f),
-                                        state="unsure" if miss_f else "reconciled")
-                    verdict = "settled" if not miss_f else f"used, {len(miss_f)} lines may be missing"
-                    if miss_f:
-                        # Its text is in the book; another judge would not see more.
-                        judges.extend(["-"] * MAX_JUDGES)
-            rec["check"]["arbiter"] = f"{model}: {verdict}"
-            save_record(cache_dir, rec)
-            print(f"  judge page {rec['page']}: {rec['check']['arbiter']}")
-    finally:
-        close_pdf(local)
 
 
 FOOTNOTE_DEF = re.compile(r"^\[\^([^\]\s]+)\]:\s*(.*)$")
@@ -1217,11 +1151,11 @@ def pacific_day():
 
 
 def waiting_for_reader(pool, records, dual):
-    """When one free reader's daily quota is used up and the other still has some: the
-    pages whose only missing piece is a second reading owed by the reader that is out (a
+    """When some free readers' daily quota is used up and others still have some: the pages
+    whose only missing piece is a second reading that only readers now out could give (a
     page's two readings never come from one model). Returns (pages, readers with quota
-    left); no pages when both readers are out, or neither is."""
-    readers = [m for m in (pool.model, pool.second) if m] if pool and dual else []
+    left); no pages when every reader is out, or none is."""
+    readers = [m for m in pool.readers() if m not in pool.missing] if pool and dual else []
     left = [m for m in readers if m not in pool.exhausted]
     if not left or len(left) == len(readers):
         return set(), left
@@ -1240,15 +1174,15 @@ def summarize(records, dual, review_pages=None, applied=None, helper_wait=(), re
     review.build and review.overlay) add the review's numbers; helper_wait are the pages
     waiting for the helper's models (check_pages), reader_wait those waiting for a reader
     whose quota ran out while readers_left still have some (waiting_for_reader)."""
-    missing = [r["page"] for r in records if r["status"] in ("failed", "suspicious")]
-    retry = [r["page"] for r in records if (r.get("check") or {}).get("state") == "retry"]
-    judging = [r["page"] for r in records if r.get("judge_waiting")]
     helper = sorted(set(helper_wait))
+    # A page the helper's models still work on counts only as theirs.
+    missing = [r["page"] for r in records if r["status"] in ("failed", "suspicious") and r["page"] not in helper_wait]
+    retry = [r["page"] for r in records if (r.get("check") or {}).get("state") == "retry" and r["page"] not in helper_wait]
     # Pages the user answered about are finished, whatever the checks would say.
-    waiting = [r["page"] for r in records if r["status"] == "pending"
-               or (r["status"] == "ok" and r["page"] not in retry and r["page"] not in judging
-                   and r["page"] not in helper_wait and not review.pin_of(r)
-                   and ((r.get("check") or {}).get("v") != CHECK_VERSION or (dual and "b" not in r)))]
+    waiting = [r["page"] for r in records if r["page"] not in helper_wait
+               and (r["status"] == "pending"
+                    or (r["status"] == "ok" and r["page"] not in retry and not review.pin_of(r)
+                        and ((r.get("check") or {}).get("v") != CHECK_VERSION or (dual and "b" not in r))))]
     unsure = [r["page"] for r in records if (r.get("check") or {}).get("state") == "unsure"]
     states = {}
     for r in records:
@@ -1256,12 +1190,9 @@ def summarize(records, dual, review_pages=None, applied=None, helper_wait=(), re
         states[key] = states.get(key, 0) + 1
     # Waiting pages need tomorrow's quota; retry pages hit temporary API errors and
     # can be tried again right away.
-    # "judging": every page is read and checked, only the judges' quota is missing. The
-    # Drive inbox parks such a book and starts the next one, so the readers' quota is
-    # not left unused; the parked book returns to the judges the next day.
-    # "helper": the same for pages waiting for the helper's models on the user's computer.
-    state = ("paused" if waiting else "helper" if helper else "incomplete" if missing or retry
-             else "judging" if judging else "done")
+    # "helper": the pages left are with the helper's models on the user's computer (the free
+    # models take their share again in the next run). The Drive inbox parks such a book.
+    state = "paused" if waiting else "helper" if helper else "incomplete" if missing or retry else "done"
     # "reader": paused only for second readings owed by the reader that is out today, while
     # the other reader still has quota: the Drive inbox parks the book and starts the next
     # one with the reader that is left. With both readers out it stays "paused".
@@ -1279,7 +1210,7 @@ def summarize(records, dual, review_pages=None, applied=None, helper_wait=(), re
                                          if x)
     out = {"state": state, "pages_total": len(records),
            "pages_done": len(records) - len(missing) - len(waiting) - len(retry) - len(helper),
-           "pages_judging": judging, "pages_helper": helper,
+           "pages_helper": helper,
            "pages_unsure": unsure, "pages_missing": missing, "pages_waiting": waiting,
            "pages_retry": retry, "counts": states, "samples": samples, "reasons": reasons,
            "pages_human": [r["page"] for r in records if review.pin_of(r)],
@@ -1308,8 +1239,8 @@ def write_report(path, summary, pool, notes=()):
     lines += [f"- {label}: {counts[key]}" for key, label in names if counts.get(key)]
     if pool:
         lines += [f"- طلبات {model} في هذا التشغيل: {n}" for model, n in pool.requests.items()]
-        if getattr(pool, "added_judges", None):
-            lines.append(f"- حكّام جدد أُضيفوا تلقائياً: {'، '.join(pool.added_judges)}")
+        if getattr(pool, "added_models", None):
+            lines.append(f"- نماذج مجانية جديدة أُضيفت تلقائياً: {'، '.join(pool.added_models)}")
     if summary.get("review_applied") or summary.get("review_kept"):
         lines.append(f"- طُبّقت من مراجعتك: {summary['review_applied']} تصحيحاً و{summary['review_kept']} تأكيداً")
     if summary.get("review_conflicts_new"):
@@ -1318,16 +1249,15 @@ def write_report(path, summary, pool, notes=()):
         lines.append(f"- مواضع تنتظر مراجعتك: {summary['review_items']}")
     if summary.get("helper_checked"):
         lines.append(f"- صفحات قرأتها نماذجك على الجهاز قراءةً ثانية: {summary['helper_checked']}")
+    if summary.get("free_done"):
+        lines.append(f"- صفحات أنهتها النماذج المجانية من آخر الكتاب بجانب نماذجك: {summary['free_done']}")
     lines += [f"- {n}" for n in notes]
     if summary["state"] == "helper":
-        lines += ["", f"**القراءة الأولى اكتملت، و{len(summary['pages_helper'])} صفحة تنتظر نماذجك على الجهاز** "
-                  "(القراءة الثانية وحسم الخلاف). يكمل الكتاب حين تنتهي منها."]
+        lines += ["", f"**بقيت {len(summary['pages_helper'])} صفحة تعمل عليها نماذجك على الجهاز من أول الكتاب، "
+                  "والنماذج المجانية من آخره.** يكمل الكتاب حين تنتهي."]
     if summary["state"] == "reader":
         lines += ["", f"**نفد اليوم رصيد أحد القارئين، فتنتظر {len(summary['pages_waiting'])} صفحة قراءتها الثانية منه** "
                   "بعد تجدد رصيده. يبدأ الكتاب التالي الآن بالقارئ الآخر، ثم يكمل هذا الكتاب."]
-    if summary["state"] == "judging":
-        lines += ["", f"**القراءة اكتملت، و{len(summary['pages_judging'])} صفحة تنتظر الحكّام** "
-                  "(انتهى رصيدهم اليومي). تُعرض عليهم بعد تجدده، ثم يُسلَّم الكتاب."]
     if summary["state"] == "paused":
         lines += ["", "**توقف التشغيل لانتهاء الحد اليومي لـ Gemini.** ما أُنجز محفوظ، "
                   "وتشغيل نفس الكتاب بعد منتصف الليل (بتوقيت أمريكا الغربي) يكمل الباقي فقط."]
@@ -1357,13 +1287,13 @@ def write_status(path, summary, title, epub_name, quota_day=""):
     data = {k: v for k, v in summary.items() if k not in ("counts", "samples", "reasons")}
     data.update(book=title, epub=epub_name or "",
                 updated_at=datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"))
-    if summary["state"] in ("paused", "judging", "helper", "reader"):
+    if summary["state"] in ("paused", "helper", "reader"):
         # The Pacific date the quota ran out on; the inbox starts again the day after.
         data["quota_day"] = quota_day or pacific_day()
-    if summary["state"] in ("judging", "helper", "reader"):
+    if summary["state"] in ("helper", "reader"):
         # Written as "paused" so an older inbox script (which knows none of them) still
         # waits for the next day; the current one parks the book on waiting_for.
-        data.update(state="paused", waiting_for={"judging": "judges", "helper": "helper", "reader": "reader"}[summary["state"]])
+        data.update(state="paused", waiting_for=summary["state"])
     with open(path, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=1)
 
@@ -1435,7 +1365,7 @@ def extract_cover_from_pdf(doc, cover_path, index=0):
     return False
 
 
-EXIT_CODES = {"done": 0, "incomplete": 2, "paused": 3, "judging": 4, "helper": 5, "reader": 6}
+EXIT_CODES = {"done": 0, "incomplete": 2, "paused": 3, "helper": 5, "reader": 6}
 
 
 def load_pins(path, book_hash):
@@ -1539,16 +1469,80 @@ def send_readings(box, filepath, records, cache_dir):
     print(f"Helper: {len(sent)} readings sent")
 
 
-def tell_helper(box, args, total, recs, lite_out):
+def tell_helper(box, args, total, recs, lite_out, share=()):
     """book.json: the pages the helper's models may still work on ("need"), and those
-    without a first reading they could settle on ("need_a"). Nothing when the helper is
-    off for this run, so it stops working on the book."""
-    need = sorted(p for p, r in recs.items() if helperbox.needs_helper(r, CHECK_VERSION)) if box.transcribe else []
+    without a first reading they could settle on ("need_a"). The pages the free models take
+    in this run (share) are left out of it while the run works on them. Nothing when the
+    helper is off for this run, so it stops working on the book."""
+    need = sorted(p for p, r in recs.items() if helperbox.needs_helper(r, CHECK_VERSION) and p not in share) \
+        if box.transcribe else []
     box.put_json("book.json", {"v": 1, "title": args.title, "total": total, "need": need,
                                "need_a": [p for p in need if helperbox.needs_first_reading(recs[p])],
                                "lite_out": bool(lite_out), "at": helperbox.now(),
                                "run": os.environ.get("GITHUB_RUN_ID", "")})
     return need
+
+
+# While the helper's models work on a book, the free models start no page after this long:
+# the run's Drive token lasts about an hour, and the pages they leave must go back to the
+# helper's models (book.json) before it runs out. The Drive inbox starts the next run soon.
+FREE_PASS_SECONDS = 35 * 60
+
+
+def free_share(recs):
+    """The pages the free models take in a run while the helper's models work on the book:
+    those every model in the helper's box handed back, then the later half of the pages left
+    (the helper's models go from the start of the book), the last page first."""
+    left = sorted(p for p, r in recs.items() if helperbox.needs_helper(r, CHECK_VERSION))
+    back = sorted((p for p, r in recs.items() if r and r.get("hskip") and r.get("status") not in ("empty", "text-layer")
+                   and not review.pin_of(r) and not helperbox.settled(r, CHECK_VERSION)), reverse=True)
+    return back + sorted(left[(len(left) + 1) // 2:], reverse=True)
+
+
+def free_pass(pool, filepath, share, outs, cache_dir, total, workers, deadline, vocab):
+    """The free models' pages while the helper's models work on the book (free_share): each
+    read twice by two free models (once, when the helper's models already gave the second
+    reading), then settled like any page. No page starts after the deadline, or once every
+    free model is out for the day. Returns the pages settled."""
+    done = set()
+    lock = threading.Lock()
+
+    def one(p):
+        if time.time() > deadline or pool.free_out():
+            return
+        local = open_pdf(filepath)
+        try:
+            rec = load_record(cache_dir, p, pool.rescue)
+            hb = (outs.get(p) or {}).get("hb")
+            given = not (rec and rec.get("status") == "ok") and helperbox.has_text(hb) \
+                and hb["text"].strip() != helperbox.EMPTY
+            rec = read_page(pool, local, p - 1, cache_dir, total, dual=not given)
+            if given and rec and rec.get("status") == "ok":
+                rec, changed = helperbox.merge(rec, outs[p], p, CHECK_VERSION)
+                if changed:
+                    save_record(cache_dir, rec)
+            if not rec or rec.get("status") != "ok" or ((rec.get("b") or {}).get("status") != "ok"
+                                                        and not rec["a"].get("refused")):
+                return
+            tess = tesseract_for(filepath, cache_dir, p)
+            if from_helper(rec) and rec.get("hfinal"):
+                result = check_helper_page(rec, tess, vocab)
+            else:
+                result = check_page(pool, local, rec, tess, vocab)
+            if result == "wait":
+                return
+            save_record(cache_dir, rec)
+            c = rec.get("check") or {}
+            print(f"  free page {p}: {c.get('state')} (diffs {c.get('diffs')})")
+            if result == "done":
+                with lock:
+                    done.add(p)
+        finally:
+            close_pdf(local)
+
+    with ThreadPoolExecutor(max_workers=workers) as tp:
+        list(tp.map(one, share))
+    return done
 
 
 def generate_epub_from_pdf(filepath, output_path, args):
@@ -1559,8 +1553,8 @@ def generate_epub_from_pdf(filepath, output_path, args):
     os.makedirs(cache_dir, exist_ok=True)
     print(f"{len(doc)} pages, processing {len(selected)}; progress saved in {cache_dir}")
     pins, human, notes = load_pins(args.human, book_hash)
-    # A judge model's answers (asked for by the user) count like the user's own, but the
-    # user's answer to the same place wins.
+    # The answers of the user's own models (the helper's review box) count like the user's,
+    # but the user's answer to the same place wins.
     answers = {}
     for path in (args.judge_answers, args.answers):
         got = (review.load(path) or {}).get("answers") if path else None
@@ -1571,17 +1565,21 @@ def generate_epub_from_pdf(filepath, output_path, args):
     needs_ocr = any(len(doc[i].get_text().strip()) < MIN_TEXT_LAYER_CHARS for i in selected)
     if needs_ocr:
         pool = ModelPool(args.model, args.second_model if args.dual else "", args.rescue_model, args.rpm)
+        if not args.review_only:
+            # Every free model reads and settles: the Flash models once both Lite readers are out.
+            pool.set_extra(resolve_models(pool, [m.strip() for m in args.extra_models.split(",") if m.strip()]))
     dual = bool(pool and args.dual and args.second_model)
 
     # The helper on the user's computer (docs/helper-boxes-plan.md): its files are taken
-    # first, so the free model does not read again what its models already read.
+    # first, so the free models do not read again what its models already read.
     box = None
     if pool and dual and args.helper and not args.review_only:
         box = helperbox.HelperBox.open(args.helper, os.environ.get("DRIVE_TOKEN", ""), cache_dir)
     transcribe = bool(box and box.transcribe)
 
     def take_helper_files(recs):
-        """recs: {page: record or None}; the helper's latest files merged in and saved."""
+        """recs: {page: record or None}; the helper's latest files merged in and saved.
+        Returns the files, by page."""
         outs = box.fetch()
         for p in list(recs):
             if p in outs:
@@ -1589,7 +1587,9 @@ def generate_epub_from_pdf(filepath, output_path, args):
                 if changed:
                     recs[p] = rec
                     save_record(cache_dir, rec)
+        return outs
 
+    share, free_done = [], set()
     if box:
         start = {}
         for i in selected:
@@ -1600,10 +1600,17 @@ def generate_epub_from_pdf(filepath, output_path, args):
                 layer = len(doc[i].get_text("text", sort=True).strip())
             if rec is not None or layer < MIN_TEXT_LAYER_CHARS:
                 start[i + 1] = rec
-        take_helper_files(start)
-        need = tell_helper(box, args, len(doc), start, False)
+        outs = take_helper_files(start)
+        # With the helper's models on, the free models and they share the book: the free
+        # models take its end in this run, and the helper's models do not touch it meanwhile.
+        share = free_share(start) if transcribe else []
+        need = tell_helper(box, args, len(doc), start, False, share)
         if transcribe:
-            box.start_images(need, lambda p: page_jpeg(filepath, p))
+            box.start_images(sorted(set(need) | set(share)), lambda p: page_jpeg(filepath, p))
+            print(f"Free models: {len(share)} pages from the end of the book; the helper's models: {len(need)}")
+            free_done = free_pass(pool, filepath, share, outs, cache_dir, len(doc), args.workers,
+                                  box.drive.started + FREE_PASS_SECONDS, book_vocab([r for r in start.values() if r]))
+            print(f"Free models settled {len(free_done)} pages")
 
     def work(i):
         rec = load_record(cache_dir, i + 1, args.rescue_model)
@@ -1619,7 +1626,10 @@ def generate_epub_from_pdf(filepath, output_path, args):
         # Each worker opens its own document: PyMuPDF objects are not thread safe.
         local = open_pdf(filepath)
         try:
-            return read_page(pool, local, i, cache_dir, len(doc), dual, helper=transcribe)
+            if transcribe:
+                # The free models' pages were done above; the rest is the helper's models'.
+                return rec if rec is not None else text_layer_record(local, i, cache_dir)
+            return read_page(pool, local, i, cache_dir, len(doc), dual)
         finally:
             close_pdf(local)
 
@@ -1637,30 +1647,21 @@ def generate_epub_from_pdf(filepath, output_path, args):
     if box:
         if transcribe:
             send_readings(box, filepath, records, cache_dir)
-        # What the helper did while the free model read.
+        # What the helper did while the free models worked.
         recs = {r["page"]: r for r in records if r.get("status") not in ("text-layer", "empty")}
         take_helper_files(recs)
         records = [recs.get(r["page"], r) for r in records]
     if pool and not args.review_only:
         helper_wait = check_pages(pool, filepath, records, cache_dir, dual, args.workers, transcribe)
-        judges = [m for m in args.arbiter_models.split(",") if m]
-        if any((r.get("check") or {}).get("state") == "unsure" and not review.pin_of(r) for r in records):
-            judges = resolve_models(pool, judges)
-        # One pass per judge a page may see, so a page the first judge could not settle
-        # reaches the next one in the same run while quota is left.
-        for _ in range(MAX_JUDGES):
-            arbitrate(pool, filepath, records, cache_dir, judges, args.arbiter_limit)
-        # A book is finished only when every unsure page has been shown to the judges it can
-        # still see; pages left for tomorrow's judge quota keep the book paused.
-        for r in records:
-            c = r.get("check") or {}
-            if c.get("state") == "unsure" and len(c.get("judges", [])) < MAX_JUDGES and not review.pin_of(r) \
-                    and any(m not in pool.missing and m not in c.get("judges", []) for m in judges):
-                r["judge_waiting"] = True
+    free_left = False
     if transcribe:
-        lite_out = pool.model in pool.exhausted and (not pool.second or pool.second in pool.exhausted)
-        tell_helper(box, args, len(doc), {r["page"]: r for r in records
-                                          if r.get("status") not in ("text-layer", "empty")}, lite_out)
+        # Every page left goes back to the helper's models; the free models take their share
+        # again in the next run.
+        left = {r["page"]: r for r in records if r.get("status") not in ("text-layer", "empty")}
+        helper_wait |= {p for p, r in left.items() if helperbox.needs_helper(r, CHECK_VERSION)}
+        tell_helper(box, args, len(doc), left, pool.free_out())
+        # Worth another run right away: the free models finished pages and still have quota.
+        free_left = bool(free_done) and not pool.free_out() and bool(free_share(left))
     if box:
         box.wait_images()
         notes = notes + [f"المساعد: {n}" for n in box.notes]
@@ -1682,6 +1683,8 @@ def generate_epub_from_pdf(filepath, output_path, args):
 
     reader_wait, readers_left = waiting_for_reader(None if args.review_only else pool, records, dual)
     summary = summarize(records, dual, review_pages, applied, helper_wait, reader_wait, readers_left)
+    if transcribe:
+        summary.update(free_left=free_left, free_done=len(free_done))
     md = assemble(records, review_pages)
     if not args.pages:
         md = keep_main_headings(md, pool, cache_dir)
@@ -1747,7 +1750,7 @@ def generate_epub_from_docx(filepath, output_path, args):
 
 def plain_summary():
     return {"state": "done", "pages_total": 0, "pages_done": 0, "pages_unsure": [], "pages_missing": [],
-            "pages_waiting": [], "pages_retry": [], "pages_judging": [], "counts": {}, "samples": {}, "reasons": {}}
+            "pages_waiting": [], "pages_retry": [], "counts": {}, "samples": {}, "reasons": {}}
 
 
 def process_file(filepath, output_path, args):
@@ -1775,10 +1778,11 @@ def main():
                         help="Second, independent reader (its own daily quota)")
     parser.add_argument("--rescue-model", default=os.environ.get("GEMINI_RESCUE_MODEL") or "gemma-4-26b-a4b-it",
                         help="For pages both Gemini models refuse")
-    parser.add_argument("--arbiter-models", default=os.environ.get("GEMINI_ARBITER_MODELS")
+    parser.add_argument("--extra-models", default=os.environ.get("GEMINI_EXTRA_MODELS")
+                        or os.environ.get("GEMINI_ARBITER_MODELS")
                         or "gemini-3.8-flash,gemini-3.7-flash,gemini-3.6-flash,gemini-3-flash,gemini-2.5-flash",
-                        help="Stronger models (20 requests a day each) asked in turn about pages still unsure")
-    parser.add_argument("--arbiter-limit", type=int, default=100, help="Unsure pages sent to judges per run")
+                        help="The other free models (small daily quotas): they read and settle pages once "
+                             "both Lite readers are out")
     parser.add_argument("--single", dest="dual", action="store_false",
                         help="Read each page once (no second reading and no comparison)")
     parser.add_argument("--rpm", type=float, default=10, help="Requests per minute per Gemini model")
@@ -1788,11 +1792,11 @@ def main():
     parser.add_argument("--review-out", default="", help="Where to write the places for the user to check")
     parser.add_argument("--answers", default="", help="The user's answers (JSON from the Drive inbox)")
     parser.add_argument("--judge-answers", default="",
-                        help="A judge model's answers (same form as --answers); the user's answers win")
+                        help="The answers of the user's own models (same form as --answers); the user's answers win")
     parser.add_argument("--human", default="", help="human.json of the previous run: the pages the user answered")
     parser.add_argument("--review-only", action="store_true",
-                        help="Apply the answers and rebuild the book from saved pages only: no reading, "
-                             "settling or judging requests")
+                        help="Apply the answers and rebuild the book from saved pages only: no reading "
+                             "or settling request")
     parser.add_argument("--helper", default="",
                         help="The book's Drive folder for the helper on the user's computer, as "
                              "<folder id>:transcribe (its models give the second reading and settle) or "

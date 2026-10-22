@@ -6,7 +6,7 @@
 # places through the folders «كتب», «مراجعة» and «أحكام» (docs/helper-boxes-plan.md).
 # Windows PowerShell 5.1: no ?? or ?: operators.
 
-$HelperVersion = '2026-10-21.9'
+$HelperVersion = '2026-10-22.1'
 $BooksName = 'كتب'
 $ReviewsName = 'مراجعة'
 $VerdictsName = 'أحكام'
@@ -1107,14 +1107,33 @@ function Start-BoxWorkers($boxes, $found) {
   }
 }
 
+# A page every model now in the transcription box refused goes back to the free models
+# (skip.json). Checked against the box as it is now: a page refused while another model was
+# still in the box, which then left it, would otherwise wait for no one.
+function Hand-Back-Refused($book, $boxes, $found) {
+  $box = @(@($boxes.transcribe) | Where-Object { $found[(Chip-Tool $_)] })
+  if (-not $box.Count) { return }
+  $refused = Get-Refused $book.id
+  foreach ($p in $book.need) {
+    $skip = Page-Name $p 'skip.json'
+    if (-not $refused.ContainsKey($p) -or $book.names[$skip]) { continue }
+    if (@($box | Where-Object { @($refused[$p]) -notcontains $_ }).Count) { continue }
+    if ((Get-PageFiles $book $p).settled) { continue }
+    Write-PageFile $book $p 'skip' @{ page = $p; reason = 'refused'; models = @($refused[$p]); at = (Now-Iso) }
+    $book.names[$skip] = $true
+    Write-Log "every model in the box refused p$p of $($book.id): handed back"
+  }
+}
+
 # The helper's work on each book's pages, for the status page's script: {book: {need,
 # finished, book_at}}. Worked out again only when the book's folder changed.
-function Get-BookProgress {
+function Get-BookProgress($boxes, $found) {
   $cachePath = Join-Path $Local 'progress.json'
   $cache = Read-Json $cachePath
   $out = [ordered]@{}
   $next = @{}
   foreach ($book in @(Get-TranscribeBooks)) {
+    if ($boxes) { Hand-Back-Refused $book $boxes $found }
     $stamp = (@(Get-ChildItem -LiteralPath $book.dir -File | ForEach-Object { $_.LastWriteTimeUtc.Ticks }) |
       Measure-Object -Maximum).Maximum
     $sig = "$($book.names.Count):${stamp}:$($book.at)"
@@ -1180,7 +1199,7 @@ function Write-Status($found, $state, $running, $boxes) {
     }
   }
   $books = [ordered]@{}
-  try { $books = Get-BookProgress } catch { Write-Log "progress failed: $_" }
+  try { $books = Get-BookProgress $boxes $found } catch { Write-Log "progress failed: $_" }
   # No buttons of the helper's own for now (the trial of the six test pages is over).
   $actions = @()
   $status = [ordered]@{
@@ -1292,21 +1311,18 @@ function Invoke-HelperWorker([string]$id) {
   Write-Utf8 $resultFile ($result | ConvertTo-Json -Depth 5)
 }
 
-# The Chrome extension «حفظ صوت Grok» (grok-audio.js): kept in %LOCALAPPDATA%\GrokAudio,
-# the folder the user loads once in chrome://extensions; Chrome reads it again at each start.
-function Update-GrokAudio {
-  $src = Join-Path $Folder 'البرنامج'
+# The Chrome extension «حفظ صوت Grok» was taken out of the project (2026-10-22, added by
+# mistake): the copies an older helper made on this computer go.
+function Remove-GrokAudio {
+  foreach ($name in 'grok-audio.js', 'grok-audio-manifest.json') {
+    $old = Join-Path (Join-Path $Folder 'البرنامج') $name
+    if (Test-Path -LiteralPath $old) { Remove-Item -LiteralPath $old -Force -ErrorAction SilentlyContinue }
+  }
+  if (-not $env:LOCALAPPDATA) { return }
   $dest = Join-Path $env:LOCALAPPDATA 'GrokAudio'
-  $files = @{ 'grok-audio-manifest.json' = 'manifest.json'; 'grok-audio.js' = 'grok-audio.js' }
-  foreach ($name in $files.Keys) {
-    $from = Join-Path $src $name
-    if (-not (Test-Path $from)) { continue }
-    $to = Join-Path $dest $files[$name]
-    $bytes = [IO.File]::ReadAllBytes($from)
-    if ((Test-Path $to) -and ([Convert]::ToBase64String([IO.File]::ReadAllBytes($to)) -eq [Convert]::ToBase64String($bytes))) { continue }
-    New-Item -ItemType Directory -Force -Path $dest | Out-Null
-    [IO.File]::WriteAllBytes($to, $bytes)
-    Write-Log "grok audio extension: $($files[$name]) updated"
+  if (Test-Path -LiteralPath $dest) {
+    Remove-Item -LiteralPath $dest -Recurse -Force -ErrorAction SilentlyContinue
+    Write-Log 'grok audio extension removed'
   }
 }
 
@@ -1350,7 +1366,7 @@ function Invoke-HelperCycle {
   $boxes = Get-Boxes $reqs
   try { Start-BoxWorkers $boxes $found } catch { Write-Log "box workers: $_" }
   try { Update-Verdicts $boxes $found (All-Chips) } catch { Write-Log "verdicts failed: $_" }
-  try { Update-GrokAudio } catch { Write-Log "grok audio extension: $_" }
+  try { Remove-GrokAudio } catch { Write-Log "grok audio extension: $_" }
   Clear-StaleClaims
   Save-State $state
   Write-Status $found $state $running $boxes

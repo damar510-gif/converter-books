@@ -276,7 +276,8 @@ jobs:
           GEMINI_MODEL: ${{ vars.GEMINI_MODEL }}
           GEMINI_SECOND_MODEL: ${{ vars.GEMINI_SECOND_MODEL }}
           GEMINI_RESCUE_MODEL: ${{ vars.GEMINI_RESCUE_MODEL }}
-          GEMINI_ARBITER_MODELS: ${{ vars.GEMINI_ARBITER_MODELS }}
+          # The other free models (Flash): they read and settle once both Lite readers are out.
+          GEMINI_EXTRA_MODELS: ${{ vars.GEMINI_EXTRA_MODELS || vars.GEMINI_ARBITER_MODELS }}
           BOOK_TITLE: ${{ inputs.title }}
           BOOK_PAGES: ${{ inputs.pages }}
           HELPER: ${{ inputs.helper }}
@@ -407,9 +408,8 @@ jobs:
         run: |
           case "$CODE" in
             3) echo "Paused: today's Gemini quota is used up. Progress is saved; run the same book again tomorrow." ;;
-            4) echo "Read and checked; some unsure pages wait for tomorrow's judges. Run the same book again tomorrow." ;;
-            5) echo "Read once; the other pages wait for the helper's models on the user's computer (the Drive inbox runs the book again)." ;;
-            6) echo "One free reader's quota is used up: some pages wait for its second reading tomorrow; the next book can start with the other reader." ;;
+            5) echo "The pages left are with the helper's models on the user's computer; the free models take their share again in the next run (the Drive inbox runs the book again)." ;;
+            6) echo "Some free readers are out for today: some pages wait for their second reading tomorrow; the next book can start with the readers left." ;;
             2) echo "Some pages could not be read (see report.md). Run the same book again to retry them." ;;
             *) echo "The conversion failed (see the log above)." ;;
           esac

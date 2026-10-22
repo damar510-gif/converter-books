@@ -101,20 +101,3 @@ the models disagree on stay for the user; whole-page places are not offered to m
 A tool's error naming its limit (429, quota, usage limit…) rests the model two hours,
 doubling each time (at most 12); a page a model refused, or failed twice, goes to another.
 Each model's state is in `chips-<tool>.json` and refused pages in `refused/<fileId>/`.
-
-## The Chrome extension «حفظ صوت Grok»
-
-`helper/grok-audio.js` and `helper/grok-audio-manifest.json` are a Chrome extension that saves
-the audio of Grok's read-aloud button (grok.com) as a file. They reach the computer with the
-rest of `البرنامج/`, and each cycle the helper copies them (only when changed) to
-`%LOCALAPPDATA%\GrokAudio` as `grok-audio.js` and `manifest.json`. The user loads that folder
-once: `chrome://extensions` → «وضع المطوّر» → «تحميل إضافة غير مضغوطة». Chrome reads it again at
-each start, so an update needs nothing from the user.
-
-The script runs in the page (`world: MAIN`) and catches the audio however the page gets it:
-a fetch/XHR answering audio, base64 audio in a JSON answer whose address mentions audio/tts,
-an `<audio>` source, a MediaSource stream, or `decodeAudioData`. The panel (bottom left)
-lists the clips: save one, merge all into one file (MP3/AAC/Ogg), or save each automatically.
-How grok.com plays its audio has not been seen from here: if nothing is caught, «تشخيص»
-copies the page's recent requests (address, type, size) for fixing the script. Test:
-`node tests/grok-audio/run_tests.js` (Playwright with Chromium).

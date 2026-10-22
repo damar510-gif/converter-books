@@ -764,7 +764,7 @@ test('done: EPUB and report in جاهز, original in الأصل, email with link
   assert.strictEqual(filesIn(env, 'ready').length, 2);
 });
 
-test('refine: next day an idle inbox re-runs a book with unsure pages and replaces its EPUB', () => {
+test('no free judges: a delivered book with unsure pages is never run again; its places wait for the user and their models', () => {
   const env = readyEnv();
   const f = addBook(env, 'ب.pdf');
   tick(env);
@@ -773,75 +773,43 @@ test('refine: next day an idle inbox re-runs a book with unsure pages and replac
   writeEpub(env, f.id, 'ب.epub', Buffer.from('PK old'));
   tick(env);
   assert.strictEqual(jobs(env)[f.id].stage, 'delivered');
-  assert.strictEqual(env.gh.dispatches.length, 1, 'no refinement on the delivery day');
-  minutes(env, 10);
-  tick(env);
-  assert.strictEqual(env.gh.dispatches.length, 1);
-
-  env.clock += 24 * 3600000;
-  tick(env);
-  assert.strictEqual(env.gh.dispatches.length, 2, 'refinement round dispatched');
-  assert.strictEqual(jobs(env)[f.id].stage, 'running');
-  minutes(env, 20);
-  writeStatus(env, f.id, 'done', { epub: 'ب.epub', pages_total: 10, pages_done: 10, pages_unsure: [5] });
-  writeEpub(env, f.id, 'ب.epub', Buffer.from('PK new'));
-  const mailsBefore = env.mails.length;
-  tick(env);
-  const epubs = filesIn(env, 'ready').filter((x) => /\.epub$/.test(x.name) && !x.trashed);
-  assert.strictEqual(epubs.length, 1, 'old EPUB replaced');
-  assert.ok(epubs[0].content.equals(Buffer.from('PK new')));
-  assert.strictEqual(env.mails.length, mailsBefore + 1);
-  assert.ok(/تحسّن/.test(env.mails[env.mails.length - 1].subject));
-
-  // A round that does not lower the count ends the refinement for this book.
-  env.clock += 24 * 3600000;
-  tick(env);
-  minutes(env, 20);
-  writeStatus(env, f.id, 'done', { epub: 'ب.epub', pages_total: 10, pages_done: 10, pages_unsure: [5] });
-  writeEpub(env, f.id, 'ب.epub', Buffer.from('PK same'));
-  tick(env);
-  assert.strictEqual(jobs(env)[f.id].refineDone, true);
-  env.clock += 24 * 3600000;
-  const n = env.gh.dispatches.length;
-  tick(env);
-  assert.strictEqual(env.gh.dispatches.length, n, 'no more rounds');
+  assert.ok(names(env, 'ready').indexOf('ب.epub') >= 0, 'stays in 3- جاهز while pages are unsure');
+  for (let day = 0; day < 3; day++) {
+    env.clock += 24 * 3600000;
+    tick(env);
+  }
+  assert.strictEqual(env.gh.dispatches.length, 1, 'no improvement round');
+  assert.ok(!env.mails.some((m) => /الحكّام|تحسّن/.test(m.subject + m.body)));
 });
 
-test('judging: a book waiting for the judges is parked, the next book starts, the parked one is judged the next day', () => {
+test('judges of an older version: a run waiting for them delivers the book; a book parked for them is delivered after one more run', () => {
   const env = readyEnv();
   const a = addBook(env, 'أول.pdf');
   tick(env);
-  minutes(env, 3);
-  const b = addBook(env, 'ثان.pdf');
   minutes(env, 30);
   writeStatus(env, a.id, 'paused', { waiting_for: 'judges', epub: 'أول.epub', pages_judging: [4, 9], pages_unsure: [4, 9] });
-  tick(env);
-  assert.strictEqual(jobs(env)[a.id].stage, 'judging');
-  assert.ok(names(env, 'working').indexOf('أول.pdf') >= 0, 'parked book stays in the working folder');
-  assert.strictEqual(env.gh.dispatches.length, 2, 'the next book started right away');
-  assert.strictEqual(lastDispatch(env).body.inputs.drive_file_id, b.id);
-  assert.ok(env.mails.some((m) => /ينتظر الحكّام/.test(m.subject)));
-
-  minutes(env, 40);
-  writeStatus(env, b.id, 'done', { epub: 'ثان.epub' });
-  writeEpub(env, b.id, 'ثان.epub');
-  tick(env);
-  assert.strictEqual(jobs(env)[b.id].stage, 'delivered');
-  minutes(env, 10);
-  tick(env);
-  assert.strictEqual(env.gh.dispatches.length, 2, 'not before the judges quota renews');
-
-  env.clock += 24 * 3600000;
-  tick(env);
-  assert.strictEqual(env.gh.dispatches.length, 3);
-  assert.strictEqual(lastDispatch(env).body.inputs.drive_file_id, a.id, 'parked book first');
-  assert.strictEqual(lastDispatch(env).body.inputs.result_dir, 'drive-' + a.id);
-  minutes(env, 15);
-  writeStatus(env, a.id, 'done', { epub: 'أول.epub', pages_unsure: [9] });
   writeEpub(env, a.id, 'أول.epub');
   tick(env);
   assert.strictEqual(jobs(env)[a.id].stage, 'delivered');
   assert.ok(names(env, 'ready').indexOf('أول.epub') >= 0);
+  assert.ok(!env.mails.some((m) => /الحكّام/.test(m.subject + m.body)));
+
+  // Parked for the judges by the older script: it runs once more and is delivered.
+  const b = addBook(env, 'ثان.pdf');
+  tick(env);
+  const all = jobs(env);
+  all[b.id].stage = 'judging';
+  all[b.id].judgeDay = '2026-10-21';
+  env.props.set('JOBS', JSON.stringify(all));
+  minutes(env, 10);
+  tick(env);
+  assert.strictEqual(env.gh.dispatches.length, 3);
+  assert.strictEqual(lastDispatch(env).body.inputs.drive_file_id, b.id, 'run again at once');
+  minutes(env, 15);
+  writeStatus(env, b.id, 'done', { epub: 'ثان.epub', pages_unsure: [9] });
+  writeEpub(env, b.id, 'ثان.epub');
+  tick(env);
+  assert.strictEqual(jobs(env)[b.id].stage, 'delivered');
 });
 
 test('reader wait: a book waiting only for one reader is parked, the next starts, both come back the next day oldest first', () => {
@@ -910,79 +878,6 @@ test('reader wait: with both readers out the book keeps its turn; waiting for a 
   }
   assert.strictEqual(jobs(env2)[c.id].stage, 'problem');
   assert.ok(env2.mails.some((m) => /مشكلة في تحويل/.test(m.subject) && /القارئ الثاني/.test(m.body)));
-});
-
-test('judgeNow: the judges see a delivered book today; a round cut short by their quota delivers and goes on', () => {
-  const env = readyEnv();
-  const f = addBook(env, 'ج.pdf');
-  tick(env);
-  minutes(env, 30);
-  writeStatus(env, f.id, 'done', { epub: 'ج.epub', pages_unsure: [1, 2, 3, 4] });
-  writeEpub(env, f.id, 'ج.epub', Buffer.from('PK old'));
-  tick(env);
-  assert.strictEqual(jobs(env)[f.id].stage, 'delivered');
-  minutes(env, 10);
-  tick(env);
-  assert.strictEqual(env.gh.dispatches.length, 1, 'no round on the delivery day by itself');
-
-  env.ctx.judgeNow();
-  assert.strictEqual(env.gh.dispatches.length, 2, 'judgeNow starts a round today');
-  assert.strictEqual(lastDispatch(env).body.inputs.result_dir, 'drive-' + f.id);
-  minutes(env, 20);
-  writeStatus(env, f.id, 'paused', { waiting_for: 'judges', epub: 'ج.epub', pages_unsure: [3, 4], pages_judging: [3, 4] });
-  writeEpub(env, f.id, 'ج.epub', Buffer.from('PK better'));
-  tick(env);
-  const epubs = filesIn(env, 'ready').filter((x) => /\.epub$/.test(x.name));
-  assert.strictEqual(epubs.length, 1, 'old EPUB replaced right away');
-  assert.ok(epubs[0].content.equals(Buffer.from('PK better')));
-  assert.ok(/تحسّن/.test(env.mails[env.mails.length - 1].subject));
-  assert.strictEqual(jobs(env)[f.id].stage, 'delivered');
-  assert.notStrictEqual(jobs(env)[f.id].refineDone, true);
-
-  // Next day: no judge quota at all, nothing improves; the book is not given up on.
-  env.clock += 24 * 3600000;
-  tick(env);
-  assert.strictEqual(env.gh.dispatches.length, 3);
-  minutes(env, 20);
-  writeStatus(env, f.id, 'paused', { waiting_for: 'judges', epub: 'ج.epub', pages_unsure: [3, 4], pages_judging: [3, 4] });
-  writeEpub(env, f.id, 'ج.epub', Buffer.from('PK same'));
-  tick(env);
-  assert.notStrictEqual(jobs(env)[f.id].refineDone, true, 'a quota-short round does not end refinement');
-  env.clock += 24 * 3600000;
-  tick(env);
-  assert.strictEqual(env.gh.dispatches.length, 4, 'and the rounds go on');
-});
-
-test('judgeNow: a book delivered by an older script (no unsure count, no report id) is judged too', () => {
-  const env = readyEnv();
-  const f = addBook(env, 'د.pdf');
-  tick(env);
-  minutes(env, 30);
-  writeStatus(env, f.id, 'done', { epub: 'د.epub', pages_unsure: [1, 2, 3] });
-  writeEpub(env, f.id, 'د.epub', Buffer.from('PK old'));
-  env.gh.files['drive-' + f.id + '/report.md'] = 'تقرير قديم';
-  tick(env);
-  assert.strictEqual(names(env, 'ready').filter((n) => /تقرير/.test(n)).length, 1);
-  const all = jobs(env);
-  ['unsure', 'reportId', 'refineDay'].forEach((k) => { delete all[f.id][k]; });
-  env.props.set('JOBS', JSON.stringify(all));
-  minutes(env, 10);
-  env.ctx.judgeNow();
-  assert.strictEqual(env.gh.dispatches.length, 2, 'round started');
-  assert.strictEqual(jobs(env)[f.id].unsureBefore, 3);
-  minutes(env, 20);
-  writeStatus(env, f.id, 'paused', { waiting_for: 'judges', epub: 'د.epub', pages_unsure: [3], pages_judging: [3] });
-  writeEpub(env, f.id, 'د.epub', Buffer.from('PK new'));
-  tick(env);
-  const ready = names(env, 'ready');
-  assert.strictEqual(ready.filter((n) => /تقرير/.test(n)).length, 1, 'old report replaced, not duplicated');
-  assert.strictEqual(ready.filter((n) => /\.epub$/.test(n)).length, 1);
-});
-
-test('judgeNow with nothing unsure does nothing', () => {
-  const env = readyEnv();
-  assert.strictEqual(env.ctx.judgeNow(), 'nothing to judge');
-  assert.strictEqual(env.gh.dispatches.length, 0);
 });
 
 test('done without report.md still delivers; done without the EPUB file is retried', () => {
@@ -1626,25 +1521,16 @@ test('review: places listed, answers saved in Drive, sent once and applied in a 
   assert.deepStrictEqual(r.pages[0].items.map((x) => x.core), ['كلمة2']);
 });
 
-test('a book reaches 6- مكتمل only when nothing is unsure: judges done leaves it in جاهز until the review', () => {
+test('a book reaches 6- مكتمل only when nothing is unsure: it stays in جاهز until the review', () => {
   const env = readyEnv();
   const { f, items } = deliverWithPlaces(env, 'منتهٍ.pdf', 1);
-  // An improvement round that changes nothing ends the book's improvement.
-  env.clock += 24 * 3600000;
-  tick(env);
-  minutes(env, 20);
-  writeStatus(env, f.id, 'done', { epub: 'b.epub', pages_unsure: [3], review_items: 1 });
-  writeEpub(env, f.id, 'b.epub', Buffer.from('PK same'));
-  tick(env);
-  assert.strictEqual(jobs(env)[f.id].refineDone, true, 'no more improvement rounds');
   assert.strictEqual(epubsIn(env, 'final').length, 0, 'still unsure: stays in جاهز');
   assert.strictEqual(epubsIn(env, 'ready').length, 1);
-  const stop = env.mails[env.mails.length - 1];
-  assert.ok(/انتهت مراجعة النماذج/.test(stop.subject) && /لا تحذف الملف الأصلي/.test(stop.body), stop.body);
+  assert.ok(/لا تحذف الملف الأصلي/.test(env.mails[env.mails.length - 1].body));
   env.clock += 24 * 3600000;
   const rounds = env.gh.dispatches.length;
   tick(env);
-  assert.strictEqual(env.gh.dispatches.length, rounds, 'no more rounds by itself');
+  assert.strictEqual(env.gh.dispatches.length, rounds, 'no round by itself');
 
   env.ctx.saveAnswers(f.id, JSON.stringify({ [items.pages[0].items[0].id]: answerFor(items.pages[0].items[0], 'fix', 'كلمه') }));
   env.ctx.sendReview(f.id);
@@ -1667,7 +1553,7 @@ test('a book reaches 6- مكتمل only when nothing is unsure: judges done leav
   writeStatus(env, g.f.id, 'done', { epub: 'b.epub', pages_unsure: [], review_items: 0, review_kept: 1 });
   writeEpub(env, g.f.id, 'b.epub', Buffer.from('PK all checked'));
   tick(env);
-  assert.strictEqual(jobs(env)[g.f.id].refineDone, true, 'nothing unsure left: finished');
+  assert.strictEqual(jobs(env)[g.f.id].final, true, 'nothing unsure left: finished');
   assert.ok(epubsIn(env, 'final').some((x) => x.content.equals(Buffer.from('PK all checked'))));
   assert.ok(/نقلت الكتاب إلى «6- مكتمل»/.test(env.mails[env.mails.length - 1].body));
 });
@@ -1718,16 +1604,6 @@ test('the answers go with every run of the book, and review rounds come first', 
   const one = items.pages[0].items[0];
   env.ctx.saveAnswers(f.id, JSON.stringify({ [one.id]: answerFor(one, 'keep') }));
   const answersId = rv(env, f.id).a;
-  // Next day, not sent: the improvement round carries them.
-  env.clock += 24 * 3600000;
-  tick(env);
-  assert.strictEqual(lastDispatch(env).body.inputs.review, answersId);
-  assert.strictEqual(rv(env, f.id).n, 0);
-  minutes(env, 20);
-  writeStatus(env, f.id, 'done', { epub: 'b.epub', pages_unsure: [3], review_items: 1, review_kept: 1 });
-  writeEpub(env, f.id, 'b.epub');
-  tick(env);
-  assert.strictEqual(jobs(env)[f.id].stage, 'delivered');
 
   // Another book is converting when the user sends: the review waits, then goes before the inbox.
   const b = addBook(env, 'ب.pdf');
@@ -1753,16 +1629,10 @@ test('finished books from before the review get their places once; without saved
   minutes(env, 30);
   // An older workflow: no review numbers.
   writeStatus(env, f.id, 'done', { epub: 'b.epub', pages_unsure: [5], review_items: undefined });
-  writeEpub(env, f.id, 'b.epub', Buffer.from('PK old'));
-  tick(env);
-  env.clock += 24 * 3600000;
-  tick(env);
-  minutes(env, 20);
-  writeStatus(env, f.id, 'done', { epub: 'b.epub', pages_unsure: [5], review_items: undefined });
   writeEpub(env, f.id, 'b.epub', Buffer.from('PK old 2'));
   const before = env.gh.dispatches.length;
   tick(env);
-  assert.strictEqual(jobs(env)[f.id].refineDone, true);
+  assert.ok(epubsIn(env, 'ready')[0].content.equals(Buffer.from('PK old 2')), 'delivered');
   assert.strictEqual(env.gh.dispatches.length, before + 1, 'idle: its places are prepared');
   assert.strictEqual(lastDispatch(env).body.inputs.review, ':only');
   minutes(env, 6);
@@ -1782,12 +1652,6 @@ test('finished books from before the review get their places once; without saved
   const g = addBook(env, 'قديم ثان.pdf');
   tick(env);
   minutes(env, 30);
-  writeStatus(env, g.id, 'done', { epub: 'g.epub', pages_unsure: [2], review_items: undefined });
-  writeEpub(env, g.id, 'g.epub', Buffer.from('PK g'));
-  tick(env);
-  env.clock += 24 * 3600000;
-  tick(env);
-  minutes(env, 20);
   writeStatus(env, g.id, 'done', { epub: 'g.epub', pages_unsure: [2], review_items: undefined });
   writeEpub(env, g.id, 'g.epub', Buffer.from('PK g2'));
   tick(env);
@@ -1902,7 +1766,7 @@ function pageSandbox(env, initial) {
       withSuccessHandler(f) { call.ok = f; return chain; },
       withFailureHandler(f) { call.fail = f; return chain; }
     };
-    ['getStatus', 'tick', 'judgeNow', 'getReview', 'getReviewImage', 'saveAnswers', 'sendReview', 'setHelperBoxes', 'helperRequest'].forEach((name) => {
+    ['getStatus', 'tick', 'getReview', 'getReviewImage', 'saveAnswers', 'sendReview', 'setHelperBoxes', 'helperRequest'].forEach((name) => {
       chain[name] = (...args) => { call.name = name; call.args = args; calls.push(call); };
     });
     return chain;
@@ -2281,7 +2145,8 @@ test('transcribe: with models in the box the run gets the book folder; the book 
   assert.strictEqual(lastDispatch(env).body.inputs.drive_file_id, b.id);
   assert.strictEqual(env.mails.length, 0, 'no mail for waiting on the helper');
   const s = status(env);
-  assert.deepStrictEqual(s.parked.map((p) => [p.title, p.stage]), [['أول', 'helper']]);
+  assert.deepStrictEqual(s.working.map((w) => w.title), ['أول'], 'a current book, under «الآن»');
+  assert.deepStrictEqual(s.parked, []);
   assert.ok(!s.recent.some((j) => j.title === 'أول'), 'a parked book is not listed as ready');
 
   // The helper finished the three pages: seen twice, eight minutes apart, then the book runs again.
@@ -2306,6 +2171,58 @@ test('transcribe: with models in the box the run gets the book folder; the book 
   tick(env);
   assert.strictEqual(jobs(env)[a.id].stage, 'delivered');
   assert.strictEqual(bookFolderOf(env, a.id), undefined, 'the exchange folder is removed once the book is delivered');
+});
+
+test('transcribe: the free models come back to the book while the helper works on it; the page shows it under «الآن» with the whole book', () => {
+  const env = boxesEnv({ transcribe: [GEMINI], review: [] });
+  const a = addBook(env, 'كبير.pdf');
+  tick(env);
+  const folderA = bookFolderOf(env, a.id);
+  minutes(env, 40);
+  const helperPages = Array.from({ length: 869 }, (_, i) => i + 55);
+  writeStatus(env, a.id, 'paused', { waiting_for: 'helper', epub: 'كبير.epub', pages_total: 923, pages_done: 54,
+    pages_helper: helperPages, free_left: false, free_done: 120 });
+  tick(env);
+  assert.strictEqual(jobs(env)[a.id].stage, 'helper');
+  const bookAt = new Date(env.clock).toISOString();
+  writeHelperStatus(env, { models: MODELS, chips: { [GEMINI]: { state: 'working', text: 'يحسم ص 915' } },
+    books: { [a.id]: { need: 869, finished: 700, book_at: bookAt } } });
+
+  // The whole book: 54 pages done by the runs and 700 by the helper's models since.
+  let s = status(env);
+  assert.strictEqual(s.active, null);
+  assert.deepStrictEqual(s.parked, []);
+  const w = s.working[0];
+  assert.deepStrictEqual([w.title, w.total, w.done, w.helperDone], ['كبير', 923, 754, 700]);
+  assert.ok(w.freeAt, 'the free models come back once their quota renews');
+  const page = pageSandbox(env, s);
+  const now = page.byId.now.textContent;
+  assert.ok(/«كبير»/.test(now) && /نماذجك تعمل عليه/.test(now) && /754/.test(now) && /من 923 صفحة/.test(now), now);
+  assert.ok(!/كبير/.test(page.byId.queue.textContent), 'not in the waiting list');
+  assert.ok(/754 من 923/.test(page.byId.figs.textContent), page.byId.figs.textContent);
+
+  // Same day: their quota is used for today, the helper's models go on.
+  minutes(env, 10);
+  writeHelperStatus(env, { models: MODELS, books: { [a.id]: { need: 869, finished: 700, book_at: bookAt } } });
+  tick(env);
+  assert.strictEqual(env.gh.dispatches.length, 1);
+  // A new Pacific day: the free models take their share again, while the helper's models go on.
+  const parkedDay = jobs(env)[a.id].freeDay;
+  for (let i = 1; i <= 13 && env.gh.dispatches.length < 2; i++) {
+    env.clock += 2 * 3600000;
+    writeHelperStatus(env, { models: MODELS, books: { [a.id]: { need: 869, finished: 700 + 10 * i, book_at: bookAt } } });
+    tick(env);
+  }
+  assert.strictEqual(env.gh.dispatches.length, 2);
+  assert.ok(formatDate(env.clock, 'America/Los_Angeles', 'yyyy-MM-dd') > parkedDay, 'not before their quota renews');
+  assert.strictEqual(lastDispatch(env).body.inputs.helper, folderA.id + ':transcribe');
+  // They stopped for time with quota left: the next run starts in the same check.
+  minutes(env, 40);
+  writeStatus(env, a.id, 'paused', { waiting_for: 'helper', epub: 'كبير.epub', pages_total: 923, pages_done: 400,
+    pages_helper: [60, 61], free_left: true });
+  tick(env);
+  assert.strictEqual(env.gh.dispatches.length, 3);
+  assert.strictEqual(lastDispatch(env).body.inputs.helper, folderA.id + ':transcribe');
 });
 
 test('transcribe: an empty box, a computer away for an hour, or a helper that stopped moving hands the book to the free model', () => {
@@ -2435,9 +2352,6 @@ test('review: with models in the review box the places are copied for the helper
   minutes(env, 10);
   tick(env);
   assert.strictEqual(env.gh.dispatches.length, before + 1, 'the same verdicts are not applied twice');
-  // Every later run of the book carries them too.
-  env.ctx.judgeNow();
-  if (env.gh.dispatches.length > before + 1) assert.strictEqual(lastDispatch(env).body.inputs.judge, file.id);
 
   // Nothing open any more: the copy for the helper goes.
   writeStatus(env, f.id, 'done', { epub: 'مراجع.epub', pages_unsure: [], review_items: 0 });
@@ -2471,8 +2385,7 @@ test('a book the user deleted: off the page, not reviewed by the models, not imp
   minutes(env, 24 * 60);
   const before = env.gh.dispatches.length;
   tick(env);
-  assert.strictEqual(env.gh.dispatches.length, before, 'no improvement round the next day');
-  assert.strictEqual(jobs(env)[f.id].refineDone, true);
+  assert.strictEqual(env.gh.dispatches.length, before, 'no round the next day');
 });
 
 test('a deleted book: its review folder goes even while the review box is empty, and before a model is put in it', () => {
@@ -2502,30 +2415,6 @@ test('a deleted book: its review folder goes even while the review box is empty,
   env.drive.DriveApp.getFileById(g.id).setTrashed(true);
   env.ctx.setHelperBoxes(JSON.stringify({ transcribe: [], review: [GEMINI] }));
   assert.strictEqual(sub(env, reviews(), g.id), undefined, 'gone before the model starts');
-});
-
-test('an improvement round that fails twice leaves the delivered book as it was, with no problem email', () => {
-  const env = readyEnv();
-  const f = addBook(env, 'محسّن.pdf');
-  tick(env);
-  minutes(env, 30);
-  writeStatus(env, f.id, 'done', { epub: 'م.epub', pages_total: 10, pages_done: 10, pages_unsure: [3] });
-  writeEpub(env, f.id, 'م.epub', Buffer.from('PK delivered'));
-  tick(env);
-  const epubId = jobs(env)[f.id].epubId;
-  env.clock += 24 * 3600000;
-  tick(env);
-  assert.strictEqual(jobs(env)[f.id].refining, true, 'improvement round dispatched');
-  for (let i = 0; i < 2; i++) {
-    minutes(env, 20);
-    writeStatus(env, f.id, 'failed', { reason: 'crash' });
-    tick(env);
-  }
-  const j = jobs(env)[f.id];
-  assert.deepStrictEqual([j.stage, j.epubId, j.refining], ['delivered', epubId, false]);
-  assert.ok(!env.mails.some((m) => /مشكلة/.test(m.subject)), env.mails.map((m) => m.subject).join(' | '));
-  assert.strictEqual(filesIn(env, 'problem').filter((x) => !x.trashed).length, 0, 'nothing moved to «5- مشكلة»');
-  assert.ok(filesIn(env, 'ready').some((x) => x.id === epubId && !x.trashed), 'the EPUB stays');
 });
 
 test('a book deleted while it waits for the helper: dropped after two checks, its folder goes, and the helper is told', () => {
