@@ -1826,6 +1826,28 @@ function reviewForPage() {
   return { ok: true, fileId: '1Bbook0000000aBcDeF', title: 'كتاب', pages: [items], saved: 0, sent: false, running: false, note: '' };
 }
 
+test('the review screen: «the other reading is right» for one place, or for every place left on the page', () => {
+  const env = readyEnv();
+  const id = '1Bbook0000000aBcDeF';
+  const status = JSON.parse(env.ctx.getStatus());
+  status.reviews = [{ fileId: id, title: 'كتاب', open: 3, saved: 0, pending: false, note: '' }];
+  const P = pageSandbox(env, status);
+  P.click(P.button('راجِع', P.byId.reviews));
+  P.answer(P.pending('getReview')[0], reviewForPage());
+  const saved = {};
+  const flush = () => { let s; while ((s = P.pending('saveAnswers')).length) { Object.assign(saved, JSON.parse(s[0].args[1])); P.answer(s[0], { ok: true, saved: 1 }); } };
+  P.click(P.button('القراءة الأخرى هي الصحيحة'));
+  flush();
+  assert.deepStrictEqual([saved['p3-0000000001'].verdict, saved['p3-0000000001'].text], ['fix', 'كلمه']);
+  // Place 2 is a line that may be missing: no «other reading» for it, the page-wide button skips it.
+  assert.ok(!/القراءة الأخرى هي الصحيحة/.test(P.byId['rv-body'].textContent));
+  P.click(P.button('تخطَّ'));
+  P.click(P.button('القراءة الأخرى لكل ما بقي في الصفحة'));
+  flush();
+  assert.strictEqual(saved['p3-00000000aa'], undefined, 'the missing line is left');
+  assert.ok(Object.keys(saved).length >= 1);
+});
+
 test('the review screen: one place at a time, each button gives the right answer, one save at a time, then send', () => {
   const env = readyEnv();
   const id = '1Bbook0000000aBcDeF';
