@@ -491,7 +491,10 @@ function minutes(env, n) {
   env.clock += n * 60000;
 }
 
-/** One check; also asserts the global rules: at most one dispatch, one active job, lock released. */
+/**
+ * One check; also asserts the global rules: at most one dispatch, one active job (a book
+ * paused for its quota, with no run going, may wait beside one review round), lock released.
+ */
 function tick(env) {
   const before = env.gh.dispatches.length;
   const posts = env.requests.filter((r) => r.method === 'POST').length;
@@ -499,7 +502,8 @@ function tick(env) {
   assert.ok(env.gh.dispatches.length - before <= 1, 'more than one dispatch in one check');
   assert.ok(env.requests.filter((r) => r.method === 'POST').length - posts <= 1, 'more than one dispatch request in one check');
   const active = Object.values(jobs(env)).filter((j) => j.stage === 'queued' || j.stage === 'running');
-  assert.ok(active.length <= 1, 'two active jobs');
+  const going = active.filter((j) => !(j.pausedDay && !j.humanRound));
+  assert.ok(going.length <= 1 && active.length <= 2, 'two active jobs');
   assert.strictEqual(env.lockHeld, false, 'lock released');
   return result;
 }
@@ -1620,6 +1624,53 @@ test('the answers go with every run of the book, and review rounds come first', 
   const d = lastDispatch(env);
   assert.strictEqual(d.body.inputs.drive_file_id, f.id, 'the review round first');
   assert.strictEqual(d.body.inputs.review, answersId + ':only');
+});
+
+test('a review sent while another book waits for its quota is applied at once; that book resumes the next day', () => {
+  const env = readyEnv({ start: '2026-10-19T15:00:00Z' });   // Pacific 08:00 on the 19th
+  const { f, items } = deliverWithPlaces(env, 'أ.pdf', 2);
+  const b = addBook(env, 'ب.pdf');
+  tick(env);
+  assert.strictEqual(lastDispatch(env).body.inputs.drive_file_id, b.id);
+  minutes(env, 60);
+  writeStatus(env, b.id, 'paused', { quota_day: '2026-10-19', pages_total: 500, pages_done: 100 });
+  env.gh.runs = [{ id: 1, status: 'completed', created_at: ghTime(env.clock - 3500000) }];
+  tick(env);
+  assert.strictEqual(jobs(env)[b.id].pausedDay, '2026-10-19');
+  const n = env.gh.dispatches.length;
+
+  // The user finishes the review and sends it: the round starts now, not days later after ب.
+  items.pages[0].items.forEach((it) => env.ctx.saveAnswers(f.id, JSON.stringify({ [it.id]: answerFor(it, 'keep') })));
+  assert.strictEqual(JSON.parse(env.ctx.sendReview(f.id)).started, true);
+  assert.strictEqual(env.gh.dispatches.length, n + 1);
+  const d = lastDispatch(env).body.inputs;
+  assert.strictEqual(d.drive_file_id, f.id);
+  assert.ok(/:only$/.test(d.review), d.review);
+  assert.strictEqual(jobs(env)[b.id].pausedDay, '2026-10-19', 'ب still waits for its quota');
+  assert.strictEqual(status(env).reviews[0].pending, true);
+
+  // A second check while the round runs starts nothing else.
+  minutes(env, 3);
+  tick(env);
+  assert.strictEqual(env.gh.dispatches.length, n + 1);
+
+  // Nothing unsure left: the book goes to 6- مكتمل, and ب still waits.
+  minutes(env, 3);
+  putItems(env, f.id, reviewItems(0));
+  writeStatus(env, f.id, 'done', { epub: 'b.epub', pages_unsure: [], review_items: 0, review_kept: 2 });
+  writeEpub(env, f.id, 'b.epub', Buffer.from('PK all checked'));
+  tick(env);
+  assert.strictEqual(jobs(env)[f.id].final, true);
+  assert.ok(epubsIn(env, 'final').some((x) => x.content.equals(Buffer.from('PK all checked'))));
+  assert.strictEqual(env.gh.dispatches.length, n + 1, 'nothing else starts');
+  assert.strictEqual(status(env).active.fileId, b.id);
+  assert.strictEqual(status(env).active.paused, true);
+
+  // The next Pacific day: ب goes on.
+  env.clock = Date.parse('2026-10-20T07:05:00Z');
+  tick(env);
+  assert.strictEqual(env.gh.dispatches.length, n + 2);
+  assert.strictEqual(lastDispatch(env).body.inputs.drive_file_id, b.id);
 });
 
 test('finished books from before the review get their places once; without saved pages it stays quiet', () => {

@@ -492,7 +492,8 @@ function saveAnswers(fileId, json) {
 
 /**
  * "أرسل التصحيحات": the book's saved answers are applied in a review round, now when
- * nothing else is running, otherwise after the current book. Pressing it twice
+ * nothing else is running or the current book waits for its quota, otherwise after the
+ * current book's run. Pressing it twice
  * starts one round.
  */
 function sendReview(fileId) {
@@ -619,12 +620,22 @@ function runTick_() {
   var notes = [];
   dropGoneBooks_(ctx);
 
-  var active = activeJob_(ctx.jobs);
+  // A review round started while another book waits for its quota goes first: it is quick
+  // and never pauses.
+  var active = reviewRound_(ctx.jobs) || activeJob_(ctx.jobs);
   if (active) {
     notes.push(active.fileId + ': ' + advanceJob_(ctx, active));
   }
+  var holder = activeJob_(ctx.jobs);
+  if (holder && ctx.dispatched === 0 && waitsForDay_(holder) && !reviewRound_(ctx.jobs)) {
+    // The book holding the slot waits for a new Pacific day with no run going: the user's
+    // answers, and the verdicts of their models, are applied meanwhile (rounds with no
+    // model request), so a finished review does not wait days for that book.
+    var meanwhile = applyNext_(ctx) || helperJudgeNext_(ctx);
+    if (meanwhile) notes.push(meanwhile);
+  }
   // A finished job frees the slot, so the next book can start in the same check.
-  if (!activeJob_(ctx.jobs) && ctx.dispatched === 0) {
+  if (!holder && ctx.dispatched === 0) {
     // The user's answers first (a quick round with no model request), then the verdicts
     // of the user's own models (the same kind of round), then books parked for a reader
     // whose quota has renewed (oldest first), then books an older version parked for the
@@ -2533,6 +2544,21 @@ function isActive_(job) {
 /** Waiting in "2- قيد التحويل" without holding the slot: for the helper's models, a reader, or (older versions) the judges. */
 function isParked_(job) {
   return job.stage === 'judging' || job.stage === 'helper' || job.stage === 'readerWait';
+}
+
+/** The review round running, if any (it may run while another book waits for its quota). */
+function reviewRound_(jobs) {
+  var round = null;
+  Object.keys(jobs).forEach(function (id) {
+    var j = jobs[id];
+    if (j && isActive_(j) && j.humanRound && (!round || String(j.createdAt) < String(round.createdAt))) round = j;
+  });
+  return round;
+}
+
+/** A book paused for the free quota: its run is over, and it waits for a new Pacific day. */
+function waitsForDay_(job) {
+  return job.stage === 'running' && !!job.pausedDay && !job.humanRound;
 }
 
 function activeJob_(jobs) {
