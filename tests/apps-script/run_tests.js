@@ -1842,6 +1842,9 @@ test('the review screen: one place at a time, each button gives the right answer
   P.answer(get, reviewForPage());
   assert.ok(/الموضع 1 من 3 · صفحة 3 من الأصل/.test(P.byId['rv-count'].textContent));
   assert.ok(/كلمة1/.test(P.byId['rv-body'].textContent));
+  // Every place of the page is listed, so the rest can be checked before «كل ما بقي … صحيح».
+  const body = P.byId['rv-body'].textContent;
+  assert.ok(/مواضع هذه الصفحة \(3\)/.test(body) && /سطر قد يكون ساقطاً/.test(body) && /كلمة3/.test(body), body);
   const img = P.pending('getReviewImage');
   assert.strictEqual(img.length, 1, 'one image for the page, asked once');
   assert.deepStrictEqual(img[0].args, [id, 'p0003-0123456789.jpg']);
