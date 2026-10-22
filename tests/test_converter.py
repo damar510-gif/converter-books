@@ -308,28 +308,31 @@ class Pipeline(PipelineBase):
         self.assertEqual({r["check"]["state"] for r in self.records().values()}, {"unsure"})
         self.assertIn("قراءة الصفحة 31 من الأصل غير مؤكدة", md)
 
-    def test_flash_models_read_and_settle_once_both_lite_readers_are_out(self):
-        def gone(p, n):
-            raise Exception("429 RESOURCE_EXHAUSTED GenerateRequestsPerDayPerProjectPerModel-FreeTier")
+    def test_flash_models_settle_first_and_never_read(self):
+        never = lambda p, n: self.fail("a Flash model does not read")
         code, st, md, fake = self.run_book({
-            "gemini-3.5-flash-lite": gone,
-            "gemini-3.1-flash-lite": gone,
-            "gemini-3.8-flash": lambda p, n: answer(TRUE if "النسخة (أ)" in p else WRONG),
-            "gemini-3.7-flash": lambda p, n: answer(TRUE),
-        }, pages="30", extra=("--extra-models", "gemini-3.8-flash,gemini-3.7-flash"))
+            "gemini-3.5-flash-lite": lambda p, n: answer(WRONG),
+            "gemini-3.1-flash-lite": lambda p, n: answer(TRUE),
+            "gemini-3.8-flash": lambda p, n: answer(TRUE) if "النسخة (أ)" in p else never(p, n),
+        }, pages="30", extra=("--extra-models", "gemini-3.8-flash"))
         self.assertEqual(code, 0, st)
         rec = self.records()[30]
-        self.assertEqual((rec["a"]["model"], rec["b"]["model"]), ("gemini-3.8-flash", "gemini-3.7-flash"))
+        self.assertEqual((rec["a"]["model"], rec["b"]["model"]), ("gemini-3.5-flash-lite", "gemini-3.1-flash-lite"))
         self.assertEqual((rec["check"]["state"], rec["check"]["model"]), ("reconciled", "gemini-3.8-flash"))
+        self.assertEqual([m for m, k in fake.calls if k == "reconcile"], ["gemini-3.8-flash"])
         self.assertNotIn("كاقية", md)
-        # With quota left, Lite reads first and the Flash models are not asked at all.
+        # Its quota used up: a Lite reader settles.
+        def gone(p, n):
+            raise Exception("429 RESOURCE_EXHAUSTED GenerateRequestsPerDayPerProjectPerModel-FreeTier")
         shutil.rmtree(os.path.join(self.tmp, "work"))
         code, st, md, fake = self.run_book({
-            "gemini-3.5-flash-lite": lambda p, n: answer(TRUE),
+            "gemini-3.5-flash-lite": lambda p, n: answer(TRUE if "النسخة (أ)" in p else WRONG),
             "gemini-3.1-flash-lite": lambda p, n: answer(TRUE),
-        }, pages="30", extra=("--extra-models", "gemini-3.8-flash,gemini-3.7-flash"))
+            "gemini-3.8-flash": gone,
+        }, pages="30", extra=("--extra-models", "gemini-3.8-flash"))
         self.assertEqual(code, 0, st)
-        self.assertEqual({m for m, _ in fake.calls}, {"gemini-3.5-flash-lite", "gemini-3.1-flash-lite"})
+        self.assertEqual(self.records()[30]["check"]["state"], "reconciled")
+        self.assertIn(self.records()[30]["check"]["model"], ("gemini-3.5-flash-lite", "gemini-3.1-flash-lite"))
 
     def test_cover_is_picked_from_the_first_pages(self):
         def lite(p, n):
