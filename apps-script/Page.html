@@ -1481,6 +1481,7 @@
     minor.appendChild(button('btn-sm', 'كل ما بقي في هذه الصفحة صحيح', rest, 'checks', '3'));
     if (other) minor.appendChild(button('btn-sm', 'القراءة الأخرى لكل ما بقي في الصفحة', restOther, 'checks', '5'));
     side.appendChild(minor);
+    side.appendChild(jumper(page.page));
     side.appendChild(pagePlaces(cur));
     if (RV.done[it.id]) side.appendChild(el('div', 'rv-note', 'أجبت عن هذا الموضع؛ إجابتك الجديدة تحل محل السابقة.'));
     grid.appendChild(side);
@@ -1659,6 +1660,32 @@
       list.appendChild(li);
     });
     box.appendChild(list);
+    return box;
+  }
+
+  // Go to any page of the book's places (or to the last), without skipping one by one: the
+  // user can start from the end while their models start from the beginning.
+  function jumper(now) {
+    var box = el('div', 'minor');
+    var pages = [];
+    RV.flat.forEach(function (x) { if (pages.indexOf(x.page.page) < 0) pages.push(x.page.page); });
+    var input = el('input', 'in');
+    input.type = 'number';
+    input.min = String(pages[0] || 1);
+    input.max = String(pages[pages.length - 1] || 1);
+    input.value = String(now);
+    input.style.width = '6.5em';
+    input.setAttribute('aria-label', 'رقم الصفحة');
+    var toPage = function (n) {
+      for (var k = 0; k < RV.flat.length; k++) if (RV.flat[k].page.page >= n) return go(k);
+      go(RV.flat.length - 1);
+    };
+    box.appendChild(el('span', 'rv-note', 'انتقل إلى صفحة:'));
+    box.appendChild(input);
+    box.appendChild(button('btn-sm', 'انتقل', function () { toPage(Number(input.value) || 0); }, 'next'));
+    box.appendChild(button('btn-sm', 'أول صفحة', function () { go(0); }, 'back'));
+    box.appendChild(button('btn-sm', 'آخر صفحة', function () { toPage(pages[pages.length - 1] || 0); }, 'next'));
+    input.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); toPage(Number(input.value) || 0); } });
     return box;
   }
 
