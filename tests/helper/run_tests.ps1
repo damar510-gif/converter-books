@@ -163,6 +163,17 @@ Test 'transcription: with the free quota out, two models give the two readings, 
   Same (Read-PageFile $dir 3 'final').a_sha (Text-Sha $RIGHT) 'on the first reading of Grok'
 }
 
+Test 'a tool writing about task.md is no reading; its words before the page go; task.md has a BOM' {
+  Same (Clean-Answer "I'll read ``task.md`` and follow its instructions.$RIGHT") $RIGHT 'Grok''s opening sentence'
+  Same (Clean-Answer "Here is the text:`n`n# مقدمة`nنص") "# مقدمة`nنص" 'a heading stays'
+  Same (Clean-Answer $RIGHT) $RIGHT 'a page alone is untouched'
+  Check (Test-Refusal 'لم أتمكن من قراءة محتوى `task.md` لأن النص ظهر بترميز غير سليم.' $RIGHT) 'Codex''s apology'
+  Check (-not (Test-Refusal $RIGHT $RIGHT)) 'a page is no refusal'
+  Write-Task $Tmp 'نص'
+  $b = [IO.File]::ReadAllBytes((Join-Path $Tmp 'task.md'))
+  Same "$($b[0]) $($b[1]) $($b[2])" '239 187 191' 'UTF-8 with a byte order mark'
+}
+
 Test 'transcription: the free second reading (b.json) is settled on, not read again' {
   Set-Boxes @($GEMINI) @()
   $dir = Make-Book 'book1' @(4) @() $false @{ 4 = $WRONG }

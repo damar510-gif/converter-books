@@ -274,17 +274,41 @@ def settled(rec, check_version):
     return c.get("v") == check_version and c.get("state") in SETTLED
 
 
+ARABIC = re.compile(r"[\u0600-\u06FF]")
+# What a tool on the user's computer may write about its task, before or instead of the page.
+TALK = re.compile(r"task\.md|page\.(?:jpg|png)|\bI['’]ll\b|\bI will\b|\bLet me\b|\bHere is\b|\bHere's\b|\bSure\b", re.I)
+FILES = re.compile(r"task\.md|page\.(?:jpg|png)", re.I)
+
+
+def clean_text(text):
+    """A helper text without what its tool said before the page ("I'll read `task.md` and
+    follow its instructions."): the Latin words before the first Arabic letter go, up to their
+    last full stop, when they talk about the task."""
+    text = (text or "").replace("\r\n", "\n")
+    m = ARABIC.search(text)
+    if not m or not TALK.search(text[:m.start()]):
+        return text
+    head = text[:m.start()]
+    ends = [i for i, ch in enumerate(head)
+            if ch == "\n" or (ch in ".:!" and (i + 1 == len(head) or not head[i + 1].isalnum()))]
+    return (head[ends[-1] + 1:] if ends else "").lstrip(" `") + text[m.start():]
+
+
+def usable(text):
+    """A page's text, not the tool writing about its files (an apology, a question)."""
+    return bool(text.strip()) and not FILES.search(text)
+
+
 def as_reading(out):
     """A helper file's reading in the form of the record's readings. "sha" names the text
     exactly as the helper wrote it, which its settled text refers to."""
     text = str(out.get("text") or "")
-    clean = text.replace("\r\n", "\n").strip()
-    return {"model": str(out.get("model") or "helper"), "text": clean, "finish": "", "via": "helper",
+    return {"model": str(out.get("model") or "helper"), "text": clean_text(text).strip(), "finish": "", "via": "helper",
             "status": "ok", "sha": sha(text)}
 
 
 def has_text(out):
-    return isinstance(out, dict) and isinstance(out.get("text"), str) and out["text"].strip() != ""
+    return isinstance(out, dict) and isinstance(out.get("text"), str) and usable(clean_text(out["text"]))
 
 
 def reading_sha(reading):
@@ -317,7 +341,7 @@ def merge(rec, outs, page_no, check_version):
         keep = {k: v for k, v in (rec or {}).items() if k in ("hskip", "ink", "spread")}
         a, b = as_reading(ha), as_reading(hb)
         rec = {"page": page_no, "status": "ok", "text": a["text"], "a": a, "b": b, **keep,
-               "hfinal": {"model": str(fin.get("model") or b["model"]), "text": fin["text"]}}
+               "hfinal": {"model": str(fin.get("model") or b["model"]), "text": clean_text(fin["text"])}}
         return rec, True
     if (rec is None or rec.get("status") != "ok") and has_text(ha):
         keep = {k: v for k, v in (rec or {}).items() if k == "hskip"}
@@ -342,7 +366,7 @@ def merge(rec, outs, page_no, check_version):
     good = has_text(fin) and b.get("status") == "ok" and fin.get("a_sha") == reading_sha(rec["a"]) \
         and fin.get("b_sha") == reading_sha(b)
     if good:
-        final = {"model": str(fin.get("model") or b.get("model", "")), "text": fin["text"]}
+        final = {"model": str(fin.get("model") or b.get("model", "")), "text": clean_text(fin["text"])}
         if rec.get("hfinal") != final:
             rec["hfinal"] = final
             rec.pop("check", None)

@@ -6,7 +6,7 @@
 # places through the folders «كتب», «مراجعة» and «أحكام» (docs/helper-boxes-plan.md).
 # Windows PowerShell 5.1: no ?? or ?: operators.
 
-$HelperVersion = '2026-10-22.2'
+$HelperVersion = '2026-10-22.3'
 $BooksName = 'كتب'
 $ReviewsName = 'مراجعة'
 $VerdictsName = 'أحكام'
@@ -58,10 +58,12 @@ $Tools = [ordered]@{
 
 # The prompt each tool gets on its command line: plain ASCII, because cmd.exe shims would
 # garble Arabic. The Arabic instructions are in task.md next to the page image.
+# task.md is Arabic text in UTF-8 (written with a byte order mark, so Windows tools read it
+# right: Codex once took it for corrupted and wrote an apology instead of the page).
 $ToolPrompts = @{
-  read = 'Read the file task.md in the current folder and follow it exactly. Your reply must be only the transcribed text of the page image, nothing else.'
-  settle = 'Read the file task.md in the current folder and follow it exactly. Your reply must be only the final text of the page, nothing else.'
-  judge = 'Read the file task.md in the current folder and follow it exactly. Your reply must be only the JSON array that task.md asks for, nothing else.'
+  read = 'Read the file task.md (UTF-8, Arabic) in the current folder and follow it exactly. Your reply must be only the transcribed text of the page image: no word before or after it (no "I''ll read…", no note).'
+  settle = 'Read the file task.md (UTF-8, Arabic) in the current folder and follow it exactly. Your reply must be only the final text of the page: no word before or after it (no "I''ll read…", no note).'
+  judge = 'Read the file task.md (UTF-8, Arabic) in the current folder and follow it exactly. Your reply must be only the JSON array that task.md asks for, nothing else.'
 }
 
 # The converter's reading rules (converter.py, OCR_RULES; <<SPREAD>> is its {spread}).
@@ -101,6 +103,23 @@ $Utf8 = New-Object Text.UTF8Encoding $false
 function Now-Iso { return (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ') }
 
 function Write-Utf8([string]$path, [string]$text) { [IO.File]::WriteAllText($path, $text, $Utf8) }
+function Write-Task([string]$dir, [string]$text) { [IO.File]::WriteAllText((Join-Path $dir 'task.md'), $text, (New-Object Text.UTF8Encoding $true)) }
+
+# What a tool said before the page ("I'll read `task.md` and follow its instructions."): the
+# Latin words before the first Arabic letter go, up to their last full stop, when they talk
+# about the task (helperbox.clean_text does the same in the run).
+function Clean-Answer([string]$text) {
+  $m = [regex]::Match($text, '[\u0600-\u06FF]')
+  if (-not $m.Success) { return $text }
+  $head = $text.Substring(0, $m.Index)
+  if ($head -notmatch "(?i)task\.md|page\.(jpg|png)|\bI['’]ll\b|\bI will\b|\bLet me\b|\bHere is\b|\bHere's\b|\bSure\b") { return $text }
+  $cut = -1
+  for ($i = 0; $i -lt $head.Length; $i++) {
+    $ch = $head[$i]
+    if ($ch -eq "`n" -or ('.:!'.Contains([string]$ch) -and ($i + 1 -eq $head.Length -or -not [char]::IsLetterOrDigit($head[$i + 1])))) { $cut = $i }
+  }
+  return ($head.Substring($cut + 1).TrimStart(' ', '`') + $text.Substring($m.Index)).Trim()
+}
 
 function Read-Json([string]$path) {
   if (-not (Test-Path -LiteralPath $path)) { return $null }
@@ -266,6 +285,7 @@ function Invoke-Page([string]$tool, [string]$exe, [string]$model, [string]$effor
   if ($tool -eq 'codex' -and (Test-Path -LiteralPath $outFile)) { $text = Read-Utf8 $outFile }
   $text = ([string]$text).Trim()
   if ($text -match '^```[a-z]*\r?\n([\s\S]*?)\r?\n```$') { $text = $Matches[1].Trim() }
+  if ($kind -ne 'judge') { $text = Clean-Answer $text }
   return @{ text = $text; code = $r.code; seconds = $r.seconds; timedOut = $r.timedOut; err = $r.err }
 }
 
@@ -670,6 +690,8 @@ function Test-Quota($r) {
 function Word-Count([string]$text) { return (Norm-Words $text).Length }
 
 function Test-Refusal([string]$text, [string]$first) {
+  # Writing about its files instead of the page (an apology, a question) is no reading of it.
+  if ($text -match '(?i)task\.md|page\.(jpg|png)') { return $true }
   # "[[EMPTY]]" for a page another model found words on is not a reading of it.
   if ($text.Trim() -eq $Empty) { return [bool]($first.Trim() -and $first.Trim() -ne $Empty -and (Word-Count $first) -gt 0) }
   $n = Word-Count $text
@@ -735,11 +757,11 @@ function Invoke-TranscribeJob($job, [string]$exe, [string]$work, $boxes) {
         b_sha = (Text-Sha $b); same = $true; at = (Now-Iso) }
       return
     }
-    Write-Utf8 (Join-Path $work 'task.md') (Get-SettleTask $a $b $spans $missing $spread)
+    Write-Task $work (Get-SettleTask $a $b $spans $missing $spread)
     $effort = $SettleEffort
     $prompt = 'settle'
   } else {
-    Write-Utf8 (Join-Path $work 'task.md') (Get-ReadTask 'page.jpg' $spread)
+    Write-Task $work (Get-ReadTask 'page.jpg' $spread)
     $effort = $ReadEffort
     $prompt = 'read'
   }
@@ -946,7 +968,7 @@ function Invoke-JudgeJob($job, [string]$exe, [string]$work, $titles) {
   $title = $titles[$job.book.id]
   Set-Chip $chip @{ state = 'working'; text = "يراجع ص $p من «$title»"; until = '' } | Out-Null
   Copy-Item -LiteralPath $job.img -Destination (Join-Path $work 'page.jpg') -Force
-  Write-Utf8 (Join-Path $work 'task.md') (Get-JudgeTask $job.items)
+  Write-Task $work (Get-JudgeTask $job.items)
   $r = Use-Tool $tool { Invoke-Page $tool $exe (Chip-Model $chip) $JudgeEffort $work 'page.jpg' 'judge' }
   if (Test-Quota $r) { Rest-Chip $chip; return }
   $verdicts = $null

@@ -348,6 +348,39 @@ class Merge(unittest.TestCase):
         self.assertNotIn("hfinal", got)
 
 
+class ToolTalk(unittest.TestCase):
+    """What a tool on the user's computer wrote about its task (book 1_k2opt, 2026-10-22)."""
+
+    def test_the_words_before_the_page_go_and_an_apology_is_no_reading(self):
+        self.assertEqual(helperbox.clean_text("I'll read `task.md` and follow its instructions." + TRUE), TRUE)
+        self.assertEqual(helperbox.clean_text("Here is the text:\n\n# مقدمة\nنص"), "# مقدمة\nنص")
+        self.assertEqual(helperbox.clean_text("# مقدمة\nنص"), "# مقدمة\nنص")
+        self.assertFalse(helperbox.usable("لم أتمكن من قراءة محتوى `task.md` لأن النص ظهر بترميز غير سليم."))
+        self.assertTrue(helperbox.usable(TRUE))
+        rec = {"page": 3, "status": "ok", "text": WRONG, "a": {"model": "m", "text": WRONG}}
+        apology = {"hb": {"model": "codex|gpt-6-luna", "text": "I can’t read `task.md` because its contents are corrupted."}}
+        self.assertEqual(helperbox.merge(dict(rec), apology, 3, c.CHECK_VERSION)[0].get("b"), None)
+        got, _ = helperbox.merge(dict(rec), {"hb": {"model": CHIP, "text": "I'll read `task.md`." + TRUE}}, 3, c.CHECK_VERSION)
+        self.assertEqual(got["b"]["text"], TRUE.strip())
+
+    def test_a_saved_page_is_cleaned_and_an_apology_read_again(self):
+        talk = "I'll read `task.md` and follow its instructions."
+        settled = {"page": 7, "status": "ok", "text": talk + TRUE, "a": {"model": "m", "text": TRUE},
+                   "b": {"model": OTHER, "text": talk + TRUE, "via": "helper", "status": "ok"},
+                   "check": {"v": c.CHECK_VERSION, "state": "reconciled", "model": OTHER}}
+        self.assertTrue(c.scrub(settled, True))
+        self.assertEqual((settled["text"], settled["b"]["text"], settled["check"]["state"]), (TRUE, TRUE, "reconciled"))
+        apology = {"page": 13, "status": "ok", "text": TRUE, "a": {"model": "m", "text": TRUE},
+                   "b": {"model": "codex|gpt-6-luna", "text": "I can’t read `task.md`.", "via": "helper", "status": "ok"},
+                   "check": {"v": c.CHECK_VERSION, "state": "reconciled", "model": CHIP}}
+        kept = json.loads(json.dumps(apology))
+        self.assertFalse(c.scrub(kept, False))
+        self.assertIn("b", kept, "a review round reads nothing, so it drops nothing")
+        self.assertTrue(c.scrub(apology, True))
+        self.assertNotIn("b", apology)
+        self.assertNotIn("check", apology)
+
+
 class Fetch(unittest.TestCase):
     def test_files_already_downloaded_are_not_downloaded_again(self):
         import tempfile
