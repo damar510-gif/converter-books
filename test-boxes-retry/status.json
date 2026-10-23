@@ -1,0 +1,84 @@
+{
+  "state": "paused",
+  "pages_total": 2,
+  "pages_done": 1,
+  "pages_helper": [],
+  "pages_unsure": [],
+  "pages_missing": [],
+  "pages_waiting": [
+    41
+  ],
+  "pages_retry": [],
+  "pages_human": [],
+  "helper_checked": 0,
+  "review_items": 0,
+  "review_applied": 0,
+  "review_kept": 0,
+  "review_conflicts_new": 0,
+  "review_seen": "",
+  "stages": {
+    "done": 1,
+    "read2": 1
+  },
+  "requests": {
+    "gemini-3.5-flash-lite": 7,
+    "gemini-3.1-flash-lite": 2
+  },
+  "models_out": [
+    "gemini-3.5-flash-lite",
+    "gemini-3.8-flash"
+  ],
+  "free_models": [
+    "gemini-3.5-flash-lite",
+    "gemini-3.1-flash-lite",
+    "gemini-2.5-flash-lite",
+    "gemini-3.8-flash",
+    "gemini-3.7-flash",
+    "gemini-3.6-flash",
+    "gemini-3.5-flash",
+    "gemini-3-flash-preview",
+    "gemini-2.5-flash",
+    "gemini-3.1-pro-preview",
+    "gemini-2.5-pro",
+    "gemma-4-31b-it",
+    "gemma-4-26b-a4b-it"
+  ],
+  "free_default": {
+    "read1": [
+      "gemini-3.5-flash-lite",
+      "gemini-3.1-flash-lite"
+    ],
+    "read2": [
+      "gemini-3.1-flash-lite",
+      "gemini-3.5-flash-lite"
+    ],
+    "settle": [
+      "gemini-3.8-flash",
+      "gemini-3.7-flash",
+      "gemini-3.6-flash",
+      "gemini-3.5-flash",
+      "gemini-3.1-pro-preview",
+      "gemini-3-flash-preview",
+      "gemini-3.5-flash-lite",
+      "gemini-3.1-flash-lite"
+    ]
+  },
+  "boxes": {
+    "read1": [
+      "gemini-3.5-flash-lite"
+    ],
+    "read2": [
+      "gemini-3.1-flash-lite"
+    ],
+    "settle": [
+      "gemini-3.8-flash",
+      "gemini-3.5-flash-lite"
+    ]
+  },
+  "book": "تراث الانسانية 3-1-246",
+  "epub": "تراث الانسانية 3-1-246.epub",
+  "updated_at": "2026-10-23T17:18:46Z",
+  "quota_day": "2026-10-23",
+  "run_id": 39992481733,
+  "run_number": 56
+}
