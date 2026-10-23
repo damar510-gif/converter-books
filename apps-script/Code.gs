@@ -2493,19 +2493,22 @@ function helperJudgeNext_(ctx) {
  */
 function syncHelperReviews_(cfg) {
   var boxed = helperBoxes_().review.length > 0;
+  // The free models in the review box judge on GitHub (freeReviewNext_): their folders need
+  // only the places the user answered, not the copies of the places.
+  var freeBoxed = freeInfo_().boxes.review.length > 0;
   var parent = helperSub_(CONFIG.HELPER_REVIEWS, boxed);
   if (!parent) return;
   var open = dropHelperReviews_(parent);
   // The helper reviews only the books requests.json lists: a book deleted (or closed)
   // stops there at once, even while Drive for desktop has not yet removed its folder.
   if (props_().getProperty('HELPER_REVIEW_IDS') !== JSON.stringify(Object.keys(open).sort())) writeRequests_();
-  if (!boxed) return;
+  if (!boxed && !freeBoxed) return;
   var jobs = loadJobs_();
   var budget = CONFIG.HELPER_REVIEW_FILES;
   Object.keys(open).forEach(function (id) {
     var j = jobs[id];
     // Copied from a delivered book only: a running round is about to change its places.
-    if (budget > 0 && (!j || j.stage === 'delivered')) budget -= syncReviewFolder_(cfg, id, open[id], parent, budget);
+    if (boxed && budget > 0 && (!j || j.stage === 'delivered')) budget -= syncReviewFolder_(cfg, id, open[id], parent, budget);
     syncAnswered_(id, open[id], parent);
   });
 }
