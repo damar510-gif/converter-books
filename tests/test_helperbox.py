@@ -128,6 +128,79 @@ class HelperPipeline(PipelineBase):
         self.assertEqual((code, asked(fake)), (5, []))
         self.assertEqual(self.drive.files["p0030.jpg"]["modifiedTime"], sent["p0030.jpg"]["modifiedTime"])
 
+    def test_pages_no_free_model_can_settle_go_to_the_settling_box_at_once_with_their_readings(self):
+        # Run 51 (2026-10-23): every page read twice, Flash out for the day, Lite barred from
+        # settling while the user's models settle. The run took all 494 pages, spent its hour
+        # asking the Flash models, and sent no reading: the user's models had nothing to do.
+        boxes = ("--boxes", "read1=gemini-3.5-flash-lite;read2=gemini-3.1-flash-lite;"
+                            "settle=gemini-3.8-flash,gemini-3.5-flash-lite")
+        free = {"gemini-3.5-flash-lite": lambda p, n: answer(WRONG),
+                "gemini-3.1-flash-lite": lambda p, n: answer(TRUE)}
+        code, st, md, fake = self.run_helper(free, mode="settle", extra=boxes + ("--extra-models", ""))
+        self.assertEqual(st["pages_helper"], [30, 31])
+        # The next run: Flash is known to be out today; nothing is asked, and the pages and
+        # their readings are the helper's from the start of the run.
+        never = {m: (lambda p, n: self.fail("no free model has work")) for m in
+                 ("gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-3.8-flash")}
+        self.drive.files.clear()
+        code, st, md, fake = self.run_helper(never, mode="settle",
+                                             extra=(boxes[0], boxes[1] + ";out=gemini-3.8-flash", "--extra-models", ""))
+        self.assertEqual(code, 5, st)
+        self.assertEqual(asked(fake), [])
+        self.assertEqual(self.drive.json("book.json")["need"], [30, 31])
+        # The book's folder was made anew: the readings sent to the old one are sent again.
+        for p in (30, 31):
+            self.assertEqual(self.drive.json(f"p{p:04d}.a.json")["text"], WRONG.strip())
+            self.assertEqual(self.drive.json(f"p{p:04d}.b.json")["text"], TRUE.strip())
+
+    def test_a_settler_running_out_mid_run_hands_its_pages_over_with_their_readings(self):
+        gone = Exception("429 RESOURCE_EXHAUSTED GenerateRequestsPerDayPerProjectPerModel-FreeTier")
+
+        def out(p, n):
+            raise gone
+        free = {"gemini-3.5-flash-lite": lambda p, n: answer(WRONG),
+                "gemini-3.1-flash-lite": lambda p, n: answer(TRUE),
+                "gemini-3.8-flash": out}
+        handed = []
+        put = self.drive.put
+
+        def watch(name, data):
+            if name == "book.json":
+                handed.append(json.loads(data.decode("utf-8") if isinstance(data, bytes) else json.dumps(data))["need"])
+            put(name, data)
+        self.drive.put = watch
+        code, st, md, fake = self.run_helper(free, mode="settle", extra=(
+            "--boxes", "read1=gemini-3.5-flash-lite;read2=gemini-3.1-flash-lite;settle=gemini-3.8-flash",
+            "--extra-models", ""))
+        self.assertEqual(code, 5, st)
+        self.assertEqual([m for m, _ in fake.calls].count("gemini-3.8-flash"), c.DAY_CHECKS)
+        self.assertEqual(st["pages_helper"], [30, 31])
+        # The first book.json gave the helper none (the free models had them all); one written
+        # during the pass hands over what Flash could not settle; the last one, all.
+        self.assertEqual(handed[0], [])
+        self.assertGreaterEqual(len(handed), 3, handed)
+        self.assertTrue(handed[1], handed)
+        self.assertEqual(handed[-1], [30, 31])
+        for p in (30, 31):
+            self.assertEqual(self.drive.json(f"p{p:04d}.b.json")["model"], "gemini-3.1-flash-lite")
+
+    def test_the_free_share_holds_only_pages_the_free_models_can_move_now(self):
+        pool = c.ModelPool("gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemma-4-26b-a4b-it", 10)
+        pool.set_boxes({"read1": ["gemini-3.5-flash-lite"], "read2": ["gemini-3.1-flash-lite"],
+                        "settle": ["gemini-3.8-flash", "gemini-3.5-flash-lite"]})
+        a = {"model": "gemini-3.5-flash-lite", "text": TRUE, "status": "ok"}
+        b = {"model": "gemini-3.1-flash-lite", "text": WRONG, "status": "ok"}
+        recs = {1: None, 2: {"page": 2, "status": "ok", "a": dict(a)},
+                3: {"page": 3, "status": "ok", "a": dict(a), "b": dict(b)}}
+        can = lambda lite: (lambda r: c.free_can(pool, r, lite))
+        self.assertEqual(c.free_share(recs, half=False, can=can(False)), [3, 2, 1])
+        pool.set_out(["gemini-3.8-flash"])
+        # Flash out, Lite may not settle (the user's models do): page 3 is theirs at once.
+        self.assertEqual(c.free_share(recs, half=False, can=can(False)), [2, 1])
+        self.assertEqual(c.free_share(recs, half=False, can=can(True)), [3, 2, 1])
+        pool.set_out(["gemini-3.1-flash-lite"])
+        self.assertEqual(c.free_share(recs, half=False, can=can(False)), [1])
+
     def test_lite_never_settles_while_the_helpers_models_are_on(self):
         free = {"gemini-3.5-flash-lite": lambda p, n: answer(WRONG),
                 "gemini-3.1-flash-lite": lambda p, n: answer(TRUE)}

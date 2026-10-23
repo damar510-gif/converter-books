@@ -97,7 +97,8 @@ class QuotaExhausted(Exception):
         self.model = model
 
 
-# A 429 naming the daily limit is believed on the third time, each a minute after the last.
+# A 429 naming the daily limit is believed on the third in a row, each a minute after the
+# last: the model gets no other request meanwhile (one at a time), so this takes 2-3 minutes.
 DAY_CHECKS = 3
 DAY_CHECK_SECONDS = 60
 # A 429 asking for a longer wait than this is the daily limit too, whatever quota it names: on
@@ -301,6 +302,10 @@ class ModelPool:
         # The status page's boxes for the free models (set_boxes): {"read1": [...], "read2":
         # [...], "settle": [...]}, each in the user's order. A role without one keeps the above.
         self.boxes = {}
+        # strict: the boxes came from the status page (set_boxes): no model works outside them,
+        # an empty box means nobody does that step, and Gemma reads a refused page only from a
+        # box (the user's decision, 2026-10-23: "I decide who works").
+        self.strict = False
         # The free models this account has, for the status page's boxes (free_catalog).
         self.catalog = []
         self.rpm = rpm
@@ -318,27 +323,51 @@ class ModelPool:
         # seconds; none when empty); time_up: one was refused for it.
         self.stops = {}
         self.time_up = False
-        # A 429 that reads like the daily limit, per model: (how many, in which round). Believed
-        # only on the DAY_CHECKS-th, each in a later round (a round = one wait of at least
-        # DAY_CHECK_SECONDS): on 2026-10-23 a per-minute 429 stopped both readers for the day
-        # after 8 and 3 requests, while Google counted 10 and 5 of 500.
+        # 429s in a row that read like the daily limit, per model: believed on the DAY_CHECKS-th.
+        # On 2026-10-23 a per-minute 429 stopped both readers for the day after 8 and 3
+        # requests, while Google counted 10 and 5 of 500.
         self.day_hits = {}
-        self.day_round = {}
+        # One request at a time per model (the user's rule, 2026-10-23): the next one leaves
+        # only once the last one is answered. Requests to different models go side by side.
+        self.turns = {}
+        # Models the user sent back to work during this run (revive).
+        self.revived = set()
 
-    def day_limit(self, model, seen):
-        """Counts a 429 naming the daily limit, for a request sent in round `seen`; True on the
-        DAY_CHECKS-th. Several threads' 429s in one round count once."""
+    def day_limit(self, model):
+        """Counts a 429 naming the daily limit; True on the DAY_CHECKS-th in a row."""
         with self.lock:
-            n, last = self.day_hits.get(model, (0, -1))
-            if seen != last:
-                n, last = n + 1, seen
-                self.day_hits[model] = (n, last)
-            return n >= DAY_CHECKS
+            self.day_hits[model] = self.day_hits.get(model, 0) + 1
+            return self.day_hits[model] >= DAY_CHECKS
 
-    def day_waited(self, model, seen):
-        """A thread waited after a 429 of round `seen`: the next requests are a new round."""
+    def set_out(self, models):
+        """Models already found out of quota today by an earlier run (the status page knows):
+        not asked again, unless the user sends one back (revive)."""
         with self.lock:
-            self.day_round[model] = max(self.day_round.get(model, 0), seen + 1)
+            self.exhausted.update(m for m in models if m)
+
+    def revive(self, model):
+        """The user pressed «أعد المحاولة الآن» for this model during the run: it works again
+        (a model this account does not have stays out)."""
+        with self.lock:
+            # The page may name a model by its short name ("gemini-3-flash" for "-preview").
+            names = [m for m in self.exhausted if m == model or m.startswith(model + "-")] or [model]
+            names = [m for m in names if m not in self.missing]
+            if not names:
+                return False
+            for m in names:
+                self.exhausted.discard(m)
+                self.day_hits.pop(m, None)
+                self.revived.add(m)
+        for m in names:
+            self.live.revived(m)
+            print(f"  {m}: back to work (asked on the status page)")
+        return True
+
+    def _turn(self, model):
+        with self.lock:
+            if model not in self.turns:
+                self.turns[model] = threading.Lock()
+            return self.turns[model]
 
     def available(self, model):
         return bool(model) and model not in self.exhausted
@@ -357,10 +386,12 @@ class ModelPool:
     def set_boxes(self, boxes):
         """The free models the user put in the status page's boxes: only they give the first
         reading, only they the second, only they settle, each first to last (the next one
-        when the one before has no quota left). Without a second reading, its box goes."""
-        self.boxes = {k: list(dict.fromkeys(boxes[k])) for k in BOX_KEYS if boxes.get(k)}
+        when the one before has no quota left). An empty box: nobody does that step. Without
+        a second reading, its box is empty."""
+        self.strict = True
+        self.boxes = {k: list(dict.fromkeys(m for m in (boxes.get(k) or []) if m)) for k in BOX_KEYS}
         if not self.second:
-            self.boxes.pop("read2", None)
+            self.boxes["read2"] = []
 
     def readers(self, first=None):
         """The two Lite readers; first: the one to try first."""
@@ -371,6 +402,8 @@ class ModelPool:
         """Who gives a page's first ("a") or second ("b") reading, first to last: the models in
         its box on the status page, else both Lite readers, each first in its own reading."""
         box = self.boxes.get("read1" if kind == "a" else "read2")
+        if self.strict:
+            return list(box or [])
         return list(box) if box else self.readers(self.second if kind == "b" else None)
 
     def can_read(self, kind, besides=""):
@@ -384,8 +417,8 @@ class ModelPool:
         (fewer requests first, to spread their quotas). lite False: the helper's models are on
         and settle instead of the Lite readers (and of Gemma, in a box)."""
         box = self.boxes.get("settle")
-        if box:
-            return [m for m in box if self.available(m) and (lite or model_rank(m) > (0,))]
+        if box or self.strict:
+            return [m for m in box or [] if self.available(m) and (lite or model_rank(m) > (0,))]
         out = [m for m in self.extra if self.available(m)]
         if lite:
             out += sorted((m for m in (self.model, self.second) if self.available(m)),
@@ -396,6 +429,14 @@ class ModelPool:
         """No free reader has quota left today (Gemma only rescues refused pages, unless the
         user put it in a reading box)."""
         return not any(self.available(m) for m in self.reading("a") + self.reading("b"))
+
+    def rescue_for(self):
+        """The model that reads a page Gemini refused: Gemma, unless the boxes say who works."""
+        return "" if self.strict else self.rescue
+
+    def any_left(self):
+        """Some free model in the boxes still has quota today (a reader or a settler)."""
+        return not self.free_out() or bool(self.settlers())
 
     def _limiter(self, model):
         with self.lock:
@@ -443,9 +484,19 @@ class ModelPool:
 
     def read(self, png, prompt, model, attempts=3):
         """Returns (text, finish_reason). Raises QuotaExhausted (TimeUp for page work once its
-        stop time has passed) or the last error."""
-        last = None
+        stop time has passed) or the last error. The model gets one request at a time: this
+        waits until it has answered the one before (and any wait Google asked for after it)."""
         page, kind = live.now_doing()
+        if model in self.exhausted:
+            raise QuotaExhausted(model)
+        # Shown as waiting for its turn meanwhile.
+        h = self.live.begin(model, page, kind)
+        with self._turn(model):
+            self.live.done(h, False)
+            return self._read(png, prompt, model, attempts, page, kind)
+
+    def _read(self, png, prompt, model, attempts, page, kind):
+        last = None
         stop = ("settle" if kind == "settle" else "read") if kind in ("a", "b", "settle") else None
         attempt = 0
         while attempt < attempts:
@@ -454,7 +505,6 @@ class ModelPool:
             if stop and self.past(stop):
                 raise TimeUp(model)
             attempt += 1
-            seen = self.day_round.get(model, 0)
             try:
                 got = self._call(model, png, prompt)
                 with self.lock:
@@ -478,7 +528,7 @@ class ModelPool:
                     wait = int(m.group(1)) + 2 if m else 65
                     if "perday" in low.replace(" ", "") or "per day" in low or "daily" in low \
                             or wait > LONG_WAIT_SECONDS:
-                        if self.day_limit(model, seen):
+                        if self.day_limit(model):
                             with self.lock:
                                 self.exhausted.add(model)
                                 self.quota_day = self.quota_day or pacific_day()
@@ -491,7 +541,6 @@ class ModelPool:
                         print(f"  {model}: 429 naming the daily limit, checking again in {wait}s: {msg[:300]}")
                         self.live.note(model, "rest", page, kind, secs=wait, extra="check-day " + quota_ids(msg))
                         time.sleep(wait)
-                        self.day_waited(model, seen)
                         continue
                     else:
                         self.live.note(model, "rest", page, kind, secs=wait, extra=quota_ids(msg))
@@ -743,7 +792,8 @@ def read_page(pool, doc, index, cache_dir, total, dual):
     prompt = OCR_PROMPT.format(spread=SPREAD_HINT if spread else "")
     if need_a:
         with live.doing(page_no, "a"):
-            status, reading, error = read_with(pool, pool.reading("a"), page, png, pix, prompt, ink, rescue=pool.rescue)
+            status, reading, error = read_with(pool, pool.reading("a"), page, png, pix, prompt, ink,
+                                               rescue=pool.rescue_for())
         if status == "pending":
             return None
         note_reading(pool, page_no, "a", status, reading, error)
@@ -753,9 +803,10 @@ def read_page(pool, doc, index, cache_dir, total, dual):
             rec["error"] = error
     if dual and rec["status"] == "ok":
         # The second reading comes from a different model, so its mistakes fall elsewhere.
-        # Gemma may give it only when Gemini refused this page.
+        # Gemma may give it only when Gemini refused this page (and, with the status page's
+        # boxes, only from a box).
         others = [m for m in pool.reading("b") if m != rec["a"]["model"]]
-        rescue = pool.rescue if rec["a"].get("refused") and rec["a"]["model"] != pool.rescue else ""
+        rescue = pool.rescue_for() if rec["a"].get("refused") and rec["a"]["model"] != pool.rescue else ""
         with live.doing(page_no, "b"):
             status, reading, error = read_with(pool, others, page, png, pix, prompt, ink, rescue=rescue)
         if status == "pending":
@@ -1159,13 +1210,14 @@ def free_catalog(have):
 BOX_KEYS = ("read1", "read2", "settle")
 
 
-def parse_boxes(text):
-    """The workflow's "models" input, "read1=a,b;read2=c;settle=d,e" (set from the status
-    page's boxes), as {"read1": ["a", "b"], ...}."""
+def parse_boxes(text, keys=BOX_KEYS):
+    """The workflow's "models" input, "read1=a,b;read2=c;settle=d,e;out=f" (set from the status
+    page's boxes; out: the models an earlier run found out of quota today), as {"read1": ["a",
+    "b"], ...}; an empty box stays, empty. keys: the parts wanted (("out",) for the list)."""
     out = {}
     for part in (text or "").split(";"):
         key, _, names = part.partition("=")
-        if key.strip() in BOX_KEYS:
+        if key.strip() in keys:
             out[key.strip()] = [n for n in dict.fromkeys(x.strip() for x in names.split(",")) if n]
     return out
 
@@ -1622,10 +1674,10 @@ def write_status(path, summary, title, epub_name, quota_day=""):
     data = {k: v for k, v in summary.items() if k not in ("counts", "samples", "reasons")}
     data.update(book=title, epub=epub_name or "",
                 updated_at=datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"))
-    if summary["state"] in ("paused", "helper", "reader", "time"):
+    if summary["state"] in ("paused", "helper", "reader", "time", "boxes"):
         # The Pacific date the quota ran out on; the inbox starts again the day after.
         data["quota_day"] = quota_day or pacific_day()
-    if summary["state"] in ("helper", "reader", "time"):
+    if summary["state"] in ("helper", "reader", "time", "boxes"):
         # Written as "paused" so an older inbox script (which knows none of them) still
         # waits for the next day; the current one parks the book on waiting_for ("time": it
         # starts the next run at once; only runs it gave a live file to stop for time).
@@ -1701,7 +1753,7 @@ def extract_cover_from_pdf(doc, cover_path, index=0):
     return False
 
 
-EXIT_CODES = {"done": 0, "incomplete": 2, "paused": 3, "helper": 5, "reader": 6, "time": 7}
+EXIT_CODES = {"done": 0, "incomplete": 2, "paused": 3, "helper": 5, "reader": 6, "time": 7, "boxes": 8}
 
 
 def load_pins(path, book_hash):
@@ -1785,14 +1837,18 @@ def free_second(rec):
     return b if b.get("status") == "ok" and b.get("via") != "helper" and b.get("text") else None
 
 
-def send_readings(box, filepath, records, cache_dir, lv=live.NULL):
+def send_readings(box, filepath, records, cache_dir, lv=live.NULL, pages=None):
     """The free models' readings the helper has not got yet: pNNNN.a.json, with the lines
     Tesseract saw that it may have dropped (as the settling request lists them), and
-    pNNNN.b.json, a second reading the Flash models could not settle on."""
+    pNNNN.b.json, a second reading the Flash models could not settle on. pages: only these.
+    A reading counts as sent only while the book's folder has it: a folder made anew for the
+    book (2026-10-23) has none of the readings sent to the one before."""
+    def owed(r, key, reading):
+        return reading.get("up") != helperbox.sha(reading["text"]) or not box.has(f"p{r['page']:04d}.{key}.json")
+
     todo = [r for r in records if r.get("status") == "ok" and (r.get("a") or {}).get("via") != "helper"
-            and helperbox.needs_helper(r, CHECK_VERSION)
-            and (r["a"].get("up") != helperbox.sha(r["a"]["text"])
-                 or (free_second(r) and free_second(r).get("up") != helperbox.sha(free_second(r)["text"])))]
+            and (pages is None or r["page"] in pages) and helperbox.needs_helper(r, CHECK_VERSION)
+            and (owed(r, "a", r["a"]) or (free_second(r) and owed(r, "b", free_second(r))))]
     if not todo or not box.fresh():
         return
     vocab = book_vocab(records)
@@ -1839,6 +1895,8 @@ def tell_helper(box, args, total, recs, lite_out, share=()):
 # the run's Drive token lasts about an hour, and the pages they leave must go back to the
 # helper's models (book.json) before it runs out. The Drive inbox starts the next run soon.
 FREE_PASS_SECONDS = 35 * 60
+# The pages the free models leave during their pass go to the helper's models at most this often.
+HAND_BACK_SECONDS = 60
 
 
 # With the live view on (live.py), the free models alone start no page work after the run's
@@ -1863,15 +1921,52 @@ def run_stops(token, now=None, left=None):
     return {"read": now + budget - settle, "settle": now + budget}
 
 
-def free_share(recs, half=True):
+def nobody_for(pool, box, records, dual):
+    """True when no model in any box, free or on the user's computer (box), could take the
+    next step of a page left waiting, whatever its quota: the user emptied those boxes."""
+    reads = bool(box and box.reads)
+    settles = bool(box and box.settles)
+    for r in records:
+        if review.pin_of(r) or r.get("status") in ("empty", "text-layer"):
+            continue
+        if r.get("status") != "ok":
+            if pool.reading("a") or reads:
+                return False
+        elif dual and (r.get("b") or {}).get("status") != "ok":
+            if [m for m in pool.reading("b") if m != (r.get("a") or {}).get("model")] or reads:
+                return False
+        elif (r.get("check") or {}).get("v") != CHECK_VERSION:
+            if pool.boxes.get("settle") or settles or r["a"].get("refused"):
+                return False
+    return True
+
+
+def free_share(recs, half=True, can=None):
     """The pages the free models take in a run while the helper's models work on the book:
     those every model in the helper's box handed back, then the later half of the pages left
     (the helper's models read from the start of the book), the last page first. half=False:
-    the helper's models do not read, so the free models read every page left."""
-    left = sorted(p for p, r in recs.items() if helperbox.needs_helper(r, CHECK_VERSION))
+    the helper's models do not read, so the free models read every page left. can(rec): the
+    free models can take this page's next step now (free_can); the others are not taken, so
+    the helper's models get them at once instead of after a run that could not touch them."""
+    ok = (lambda p: True) if can is None else (lambda p: can(recs[p]))
+    left = sorted(p for p, r in recs.items() if helperbox.needs_helper(r, CHECK_VERSION) and ok(p))
     back = sorted((p for p, r in recs.items() if r and r.get("hskip") and r.get("status") not in ("empty", "text-layer")
-                   and not review.pin_of(r) and not helperbox.settled(r, CHECK_VERSION)), reverse=True)
+                   and not review.pin_of(r) and not helperbox.settled(r, CHECK_VERSION) and ok(p)), reverse=True)
     return back + sorted(left[(len(left) + 1) // 2:] if half else left, reverse=True)
+
+
+def free_can(pool, rec, lite):
+    """The free models can take this page's next step in this run: a model in its box with
+    quota left reads it, gives its second reading, or settles its two readings (lite: the Lite
+    readers, and Gemma, may settle; a page handed back by the helper's models always may)."""
+    if rec is None or rec.get("status") != "ok":
+        return pool.can_read("a")
+    if (rec.get("b") or {}).get("status") != "ok":
+        return pool.can_read("b", (rec.get("a") or {}).get("model", ""))
+    if rec["a"].get("refused") or rec.get("hfinal"):
+        # Settled without asking a model (settle_state, check_helper_page).
+        return True
+    return bool(pool.settlers(lite or bool(rec.get("hskip"))))
 
 
 def helper_can(rec, box):
@@ -1883,22 +1978,28 @@ def helper_can(rec, box):
     return box.settles if both else box.reads
 
 
-def free_pass(pool, filepath, share, outs, cache_dir, total, workers, deadline, vocab, lite=False):
+def free_pass(pool, filepath, share, outs, cache_dir, total, workers, deadline, vocab, lite=False, on_back=None):
     """The free models' pages while the helper's models work on the book (free_share): each
     read twice by the Lite readers (once, when the helper's models already gave the second
     reading), then settled by a Flash model; by Lite only when the helper's models do not
-    settle (lite), or for a page they handed back. No page starts after the deadline, or once
-    the Lite readers are out for the day. Returns (pages settled, pages the free models moved
-    on: read or settled in this run)."""
+    settle (lite), or for a page they handed back. No page starts after the deadline, or when
+    no model in its box can take its next step (free_can). on_back(page): a page the free
+    models leave (no model with quota left for it), for the helper's models at once. Returns
+    (pages settled, pages the free models moved on: read or settled in this run)."""
     done, moved = set(), set()
     lock = threading.Lock()
+    back = on_back or (lambda p: None)
 
     def one(p):
-        if time.time() > deadline or pool.free_out():
+        if time.time() > deadline:
+            return
+        rec = load_record(cache_dir, p, pool.rescue)
+        if not free_can(pool, rec, lite):
+            # Nobody here can take its next step now (out of quota): the helper's models.
+            back(p)
             return
         local = open_pdf(filepath)
         try:
-            rec = load_record(cache_dir, p, pool.rescue)
             had = (bool(rec) and rec.get("status") == "ok", bool(rec) and (rec.get("b") or {}).get("status") == "ok")
             hb = (outs.get(p) or {}).get("hb")
             given = not (rec and rec.get("status") == "ok") and helperbox.has_text(hb) \
@@ -1921,6 +2022,7 @@ def free_pass(pool, filepath, share, outs, cache_dir, total, workers, deadline, 
                 result = check_page(pool, local, rec, tess, vocab, lite=lite or bool(rec.get("hskip")))
             if result == "wait":
                 # No Flash model left today: the helper's models settle it (send_readings).
+                back(p)
                 return
             save_record(cache_dir, rec)
             pool.live.page(p, page_state(rec))
@@ -1933,8 +2035,15 @@ def free_pass(pool, filepath, share, outs, cache_dir, total, workers, deadline, 
         finally:
             close_pdf(local)
 
-    with ThreadPoolExecutor(max_workers=workers) as tp:
-        list(tp.map(one, share))
+    # No request starts after the deadline, and a model's wait for its quota ends there too:
+    # the Drive token must last for handing the pages left to the helper's models.
+    stops, time_up = dict(pool.stops), pool.time_up
+    pool.stops = {"read": deadline, "settle": deadline}
+    try:
+        with ThreadPoolExecutor(max_workers=workers) as tp:
+            list(tp.map(one, share))
+    finally:
+        pool.stops, pool.time_up = stops, time_up
     return done, moved
 
 
@@ -1955,7 +2064,7 @@ def generate_epub_from_pdf(filepath, output_path, args):
             answers.update(got)
 
     # The status page's live view (live.py): silent when the run was started without one.
-    lv = live.open_live(args.live, os.environ.get("DRIVE_TOKEN", ""))
+    lv = live.open_live(args.live, os.environ.get("DRIVE_TOKEN", ""), args.control)
     for i in selected:
         rec = load_record(cache_dir, i + 1, args.rescue_model)
         if rec and not review.pin_of(rec) and scrub(rec, drop=not args.review_only):
@@ -1977,12 +2086,19 @@ def generate_epub_from_pdf(filepath, output_path, args):
             boxes = parse_boxes(args.boxes)
             if boxes:
                 pool.set_boxes({k: match_models(have, v) if have else v for k, v in boxes.items()})
-                print("Free models' boxes: " + "; ".join(f"{k}={','.join(v)}" for k, v in pool.boxes.items()))
+                print("Free models' boxes: " + "; ".join(f"{k}={','.join(v) or '-'}" for k, v in pool.boxes.items()))
+            out = parse_boxes(args.boxes, ("out",)).get("out") or []
+            if out:
+                pool.set_out(match_models(have, out) if have else out)
+                print("Out of quota today (an earlier run found it): " + ", ".join(out))
+            # «أعد المحاولة الآن» on the status page during the run: the model works again.
+            lv.watch(pool.revive)
             pool.catalog = free_catalog(have)
             roles = [(pool.model, "read1"), (pool.second, "read2")] if not pool.boxes else \
                 [(m, "read1") for m in pool.reading("a")] + ([(m, "read2") for m in pool.reading("b")] if pool.second else [])
-            for model, role in roles + [(m, "settle") for m in (pool.boxes.get("settle") or pool.extra)] + \
-                    [(pool.rescue, "rescue")]:
+            settle = pool.boxes.get("settle", []) if pool.strict else pool.boxes.get("settle") or pool.extra
+            for model, role in roles + [(m, "settle") for m in settle] + \
+                    ([(pool.rescue, "rescue")] if pool.rescue_for() else []):
                 lv.role(model, role)
     dual = bool(pool and args.dual and args.second_model)
 
@@ -2019,15 +2135,37 @@ def generate_epub_from_pdf(filepath, output_path, args):
         outs = take_helper_files(start)
         # With the helper's models on, the free models and they share the book: the free
         # models take its end in this run, and the helper's models do not touch it meanwhile.
-        share = free_share(start, half=box.reads) if transcribe else []
+        # Only the pages the free models can move on now (a model in their box with quota):
+        # the others are the helper's models' at once.
+        can = lambda r: free_can(pool, r, not box.settles)
+        share = free_share(start, half=box.reads, can=can) if transcribe else []
         need = tell_helper(box, args, len(doc), start, False, share)
         if transcribe:
             box.start_images(sorted(set(need) | set(share)), lambda p: page_jpeg(filepath, p))
+            # Their pages' readings go now, not at the end of the run (on 2026-10-23 a run whose
+            # Drive token ran out first sent 494 images and no reading: nothing to settle on).
+            send_readings(box, filepath, [r for r in start.values() if r], cache_dir, lv, pages=set(need))
             print(f"Free models: {len(share)} pages from the end of the book; the helper's models: {len(need)}")
             lv.set_phase("free", pages=len(share), helper=len(need), reads=box.reads, settles=box.settles)
+            # A page the free models leave during the pass (a model ran out) goes to the helper's
+            # models within a minute, with its readings, not at the end of the run.
+            handed, hand_lock, hand_at = set(), threading.Lock(), [0.0]
+
+            def hand_back(p):
+                with hand_lock:
+                    handed.add(p)
+                    if time.time() - hand_at[0] < HAND_BACK_SECONDS:
+                        return
+                    hand_at[0] = time.time()
+                    pages = set(handed)
+                recs = dict(start)
+                recs.update({q: load_record(cache_dir, q, args.rescue_model) for q in pages})
+                send_readings(box, filepath, [r for r in recs.values() if r], cache_dir, lv, pages=pages)
+                tell_helper(box, args, len(doc), recs, False, [q for q in share if q not in pages])
+
             free_done, free_moved = free_pass(pool, filepath, share, outs, cache_dir, len(doc), args.workers,
                                   box.drive.started + FREE_PASS_SECONDS, book_vocab([r for r in start.values() if r]),
-                                  lite=not box.settles)
+                                  lite=not box.settles, on_back=hand_back)
             print(f"Free models settled {len(free_done)} pages")
 
     def work(i):
@@ -2090,8 +2228,10 @@ def generate_epub_from_pdf(filepath, output_path, args):
         left = {r["page"]: r for r in records if r.get("status") not in ("text-layer", "empty")}
         helper_wait |= {p for p, r in left.items() if helper_can(r, box)}
         tell_helper(box, args, len(doc), left, pool.free_out())
-        # Worth another run right away: the free models finished pages and still have quota.
-        free_left = bool(free_moved) and not pool.free_out() and bool(free_share(left, half=box.reads))
+        # Worth another run right away: the free models finished pages (or the user sent one
+        # back to work) and still have something they can do.
+        free_left = (bool(free_moved) or bool(pool.revived)) and \
+            bool(free_share(left, half=box.reads, can=lambda r: free_can(pool, r, not box.settles)))
     if box:
         box.wait_images()
         notes = notes + [f"المساعد: {n}" for n in box.notes]
@@ -2119,9 +2259,15 @@ def generate_epub_from_pdf(filepath, output_path, args):
         if summary["state"] == "paused" and free_left:
             # Pages not read yet only because the run's time was up: the next run reads them.
             summary["state"] = "helper"
-    if summary["state"] == "paused" and pool and pool.time_up and not pool.free_out():
-        # Stopped before the Drive token ran out, with quota left: the next run goes on at once.
+    if summary["state"] == "paused" and pool and (pool.time_up or pool.revived) and pool.any_left():
+        # Stopped before the Drive token ran out, with quota left (or the user sent a model back
+        # to work during the run): the next run goes on at once.
         summary["state"] = "time"
+    if summary["state"] == "paused" and pool and pool.strict and not args.review_only \
+            and nobody_for(pool, box, records, dual):
+        # No model in any box (free or on the user's computer) can take the waiting pages'
+        # next step: the book waits for the user to put one there, not for a new day.
+        summary["state"] = "boxes"
     summary["stages"] = dict(collections.Counter("helper" if r["page"] in helper_wait else page_state(r)
                                                  for r in records))
     md = assemble(records, review_pages)
@@ -2157,8 +2303,10 @@ def generate_epub_from_pdf(filepath, output_path, args):
         # until the user changes them (the readers, then the settlers); and the boxes used.
         if pool.catalog:
             summary["free_models"] = pool.catalog
-            summary["free_default"] = {"read1": [pool.model], "read2": [pool.second] if pool.second else [],
-                                       "settle": list(dict.fromkeys(pool.extra + [m for m in (pool.model, pool.second) if m]))}
+            # Each Lite reader gives the readings the other cannot (as without boxes).
+            readers = [m for m in (pool.model, pool.second) if m]
+            summary["free_default"] = {"read1": readers, "read2": readers[::-1] if pool.second else [],
+                                       "settle": list(dict.fromkeys(pool.extra + readers))}
         if pool.boxes:
             summary["boxes"] = pool.boxes
     write_status(args.status, summary, args.title, os.path.basename(output_path), pool.quota_day if pool else "")
@@ -2260,6 +2408,9 @@ def main():
     parser.add_argument("--live", default="",
                         help="The Drive file of the status page's live view (live.py); the Drive token is in "
                              "DRIVE_TOKEN. With it, no page work starts after the token would run out")
+    parser.add_argument("--control", default="",
+                        help="The Drive file of the status page's requests during the run («أعد المحاولة "
+                             "الآن» on a free model), read with the live view's token")
     parser.add_argument("--helper", default="",
                         help="The book's Drive folder for the helper on the user's computer, as "
                              "<folder id>:transcribe (its models read and settle), :read (they only read), "

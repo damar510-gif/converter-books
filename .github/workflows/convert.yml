@@ -59,12 +59,12 @@ on:
         type: string
       # The status page's live view (live.py, docs/drive-inbox.md).
       live:
-        description: 'Drive inbox only: the Drive file ID where the run writes what it is doing, every few seconds'
+        description: 'Drive inbox only: the Drive file ID where the run writes what it is doing, every few seconds, with ":<file ID>" of the status page''s requests during the run'
         required: false
         type: string
       # The free models in the status page's boxes (apps-script/Page.html, docs/drive-inbox.md).
       models:
-        description: 'Drive inbox only: who reads first, second and settles, as read1=a,b;read2=c;settle=d,e'
+        description: 'Drive inbox only: who reads first, second and settles, as read1=a,b;read2=c;settle=d,e;out=f (out: found out of quota today)'
         required: false
         type: string
 
@@ -98,24 +98,58 @@ jobs:
         env:
           LIVE: ${{ inputs.live }}
         run: |
-          if [[ "$LIVE" =~ ^[A-Za-z0-9_-]{10,100}$ ]]; then
+          # "<live file>" or "<live file>:<requests file>" («أعد المحاولة الآن» during the run).
+          if [[ "$LIVE" =~ ^([A-Za-z0-9_-]{10,100})(:([A-Za-z0-9_-]{10,100}))?$ ]]; then
             DRIVE_TOKEN=$(jq -r '.inputs.drive_token // ""' "$GITHUB_EVENT_PATH")
             [ -n "$DRIVE_TOKEN" ] && echo "::add-mask::$DRIVE_TOKEN"
-            echo "LIVE_FILE=$LIVE" >> "$GITHUB_ENV"
-            DRIVE_TOKEN="$DRIVE_TOKEN" python live.py mark setup || true
+            echo "LIVE_FILE=${BASH_REMATCH[1]}" >> "$GITHUB_ENV"
+            echo "LIVE_CONTROL=${BASH_REMATCH[3]}" >> "$GITHUB_ENV"
+            LIVE_FILE="${BASH_REMATCH[1]}"
+            LIVE_FILE="$LIVE_FILE" DRIVE_TOKEN="$DRIVE_TOKEN" python live.py mark setup || true
           fi
 
-      # The runner's package lists usually do: "apt-get update" first sometimes hangs ten
-      # minutes on a slow mirror (2026-10-22 and 23) before any page is read. It runs only
-      # when the install fails without it.
+      # The packages come from the cache of an earlier run on the same runner image: the
+      # runner's mirror is sometimes so slow that the download alone took 15 minutes and failed
+      # (2026-10-23, run 53). Without a cached copy they are downloaded, from the main archive
+      # when the mirror stalls.
+      - name: Name the package cache
+        id: debkey
+        run: echo "key=debs-${ImageOS:-ubuntu}-${ImageVersion:-0}-pandoc-tesseract-ara-v1" >> "$GITHUB_OUTPUT"
+
+      - name: Restore the cached packages
+        id: debs
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/debs
+          key: ${{ steps.debkey.outputs.key }}
+
       - name: Install Pandoc and Tesseract
-        timeout-minutes: 25
+        id: install
+        timeout-minutes: 15
         run: |
           PKGS="pandoc tesseract-ocr tesseract-ocr-ara"
-          if ! sudo timeout 300 apt-get install -y -q $PKGS; then
-            sudo timeout 600 apt-get update -q -o Acquire::Retries=3 -o Acquire::http::Timeout=30 || true
-            sudo timeout 600 apt-get install -y -q $PKGS
+          mkdir -p ~/debs/partial
+          APT="-o Dir::Cache::archives=$HOME/debs -o APT::Keep-Downloaded-Packages=true -o Acquire::http::Timeout=20 -o Acquire::Retries=2"
+          if sudo apt-get install -y -q --no-download $APT $PKGS; then
+            echo "Installed from the cached packages"
+          elif ! sudo timeout 180 apt-get install -y -q $APT $PKGS; then
+            # The mirror stalls: the main archive instead.
+            sudo sed -i 's#http://azure.archive.ubuntu.com#https://archive.ubuntu.com#g' \
+              /etc/apt/sources.list /etc/apt/sources.list.d/*.sources 2>/dev/null || true
+            sudo timeout 240 apt-get update -q -o Acquire::Retries=2 -o Acquire::http::Timeout=20 || true
+            sudo timeout 300 apt-get install -y -q $APT $PKGS
           fi
+          sudo rm -rf ~/debs/lock ~/debs/partial
+          sudo chown -R "$(id -u):$(id -g)" ~/debs
+          echo "debs=$(ls ~/debs/*.deb 2>/dev/null | wc -l)" >> "$GITHUB_OUTPUT"
+
+      - name: Save the packages for the next runs
+        if: steps.debs.outputs.cache-hit != 'true' && steps.install.outputs.debs != '0'
+        continue-on-error: true
+        uses: actions/cache/save@v4
+        with:
+          path: ~/debs
+          key: ${{ steps.debkey.outputs.key }}
 
       - name: Install Python Dependencies
         run: |
@@ -324,11 +358,13 @@ jobs:
           if [[ "$HELPER" =~ ^[A-Za-z0-9_-]+:(transcribe|read|settle|import)$ ]]; then
             ARGS+=(--helper "$HELPER")
           fi
-          # The live view: what the run does, written to the user's Drive every few seconds.
+          # The live view: what the run does, written to the user's Drive every few seconds;
+          # and the status page's requests during the run («أعد المحاولة الآن» on a free model).
           [ -n "$LIVE_FILE" ] && ARGS+=(--live "$LIVE_FILE")
-          # The status page's boxes: which free models read first, read second and settle
-          # (freeInput_ in Code.gs).
-          BOXES_RE='^(read1|read2|settle)=[a-z0-9.,-]*(;(read1|read2|settle)=[a-z0-9.,-]*)*$'
+          [ -n "$LIVE_FILE" ] && [ -n "$LIVE_CONTROL" ] && ARGS+=(--control "$LIVE_CONTROL")
+          # The status page's boxes: which free models read first, read second and settle, and
+          # those found out of quota today (freeInput_ in Code.gs).
+          BOXES_RE='^(read1|read2|settle|out)=[a-z0-9.,-]*(;(read1|read2|settle|out)=[a-z0-9.,-]*)*$'
           if [[ "$FREE_BOXES" =~ $BOXES_RE ]]; then
             ARGS+=(--boxes "$FREE_BOXES")
           fi
@@ -466,6 +502,7 @@ jobs:
             5) echo "The pages left are with the helper's models on the user's computer; the free models take their share again in the next run (the Drive inbox runs the book again)." ;;
             6) echo "Some free readers are out for today: some pages wait for their second reading tomorrow; the next book can start with the readers left." ;;
             7) echo "The run stopped before its Drive token ran out, with quota left: the Drive inbox starts the next run at once." ;;
+            8) echo "No model in the status page's boxes can take the pages left any further: the book waits for the user to put one there." ;;
             2) echo "Some pages could not be read (see report.md). Run the same book again to retry them." ;;
             *) echo "The conversion failed (see the log above)." ;;
           esac

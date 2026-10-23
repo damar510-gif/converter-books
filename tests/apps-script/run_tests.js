@@ -518,6 +518,11 @@ function lastDispatch(env) {
   return env.gh.dispatches[env.gh.dispatches.length - 1];
 }
 
+/** The live file of a dispatch (its "live" input is "<live file>:<requests file>"). */
+function liveId(d) {
+  return String(d.body.inputs.live || '').split(':')[0];
+}
+
 function writeStatus(env, fileId, state, extra) {
   const s = Object.assign({
     state,
@@ -659,13 +664,19 @@ test('new PDF: moved to قيد التحويل and dispatched with the contract i
       drive_file_name: 'تاريخ الأندلس.pdf',
       result_dir: 'drive-' + f.id,
       title: 'تاريخ الأندلس',
-      // The live view's file (live.py), which says which run is coming until the run writes.
-      live: env.props.get('LIVE_FILE_ID')
+      // The live view's file (live.py), which says which run is coming until the run writes,
+      // and the file of the page's requests to the run («أعد المحاولة الآن»).
+      live: env.props.get('LIVE_FILE_ID') + ':' + env.props.get('LIVE_CONTROL_ID'),
+      // The free models' boxes as the page shows them (the converter's own until the user
+      // changes them): each Lite reader gives the readings the other cannot.
+      models: 'read1=gemini-3.5-flash-lite,gemini-3.1-flash-lite;read2=gemini-3.1-flash-lite,gemini-3.5-flash-lite;' +
+        'settle=gemini-3.8-flash,gemini-3.7-flash,gemini-3.6-flash,gemini-3-flash,gemini-3.5-flash-lite,gemini-3.1-flash-lite'
     }
   });
-  const live = JSON.parse(env.drive.DriveApp.getFileById(d.body.inputs.live).getBlob().getDataAsString());
+  const live = JSON.parse(env.drive.DriveApp.getFileById(liveId(d)).getBlob().getDataAsString());
   assert.deepStrictEqual(live, { v: 1, seq: 0, phase: 'queued', file: f.id, book: 'تاريخ الأندلس', dispatched: iso(env.clock), round: '' });
-  assert.strictEqual(env.drive.DriveApp.getFileById(d.body.inputs.live).getName(), 'live.json');
+  assert.strictEqual(env.drive.DriveApp.getFileById(liveId(d)).getName(), 'live.json');
+  assert.strictEqual(env.drive.DriveApp.getFileById(env.props.get('LIVE_CONTROL_ID')).getName(), 'control.json');
   assert.strictEqual(d.contentType, 'application/json');
   const req = env.requests.find((r) => r.method === 'POST');
   assert.strictEqual(req.url, 'https://api.github.com/repos/' + REPO + '/actions/workflows/convert.yml/dispatches');
@@ -1355,7 +1366,7 @@ test('Page.html loads nothing from outside and supports dark mode', () => {
   // Every function the page calls is a public function of Code.gs (google.script.run cannot call private ones).
   const called = new Set((PAGE.match(/\.(\w+)\((?:[^()]|\([^()]*\))*\);?\s*(?:\n|\})/g) || []).map((x) => /\.(\w+)\(/.exec(x)[1]));
   ['getStatus', 'getLive', 'checkNow', 'runNow', 'getReview', 'getReviewImage', 'saveAnswers', 'sendReview', 'helperRequest', 'setHelperBoxes',
-    'setFreeBoxes']
+    'setFreeBoxes', 'retryFree']
     .forEach((fn) => {
       assert.ok(new RegExp('\\.' + fn + '\\(').test(PAGE), 'the page calls ' + fn);
       assert.ok(new RegExp('\\nfunction ' + fn + '\\(').test(CODE), fn + ' is public in Code.gs');
@@ -1843,7 +1854,7 @@ function pageSandbox(env, initial) {
       withFailureHandler(f) { call.fail = f; return chain; }
     };
     ['getStatus', 'tick', 'getReview', 'getReviewImage', 'saveAnswers', 'sendReview', 'setHelperBoxes', 'helperRequest',
-      'getLive', 'checkNow', 'runNow', 'setFreeBoxes'].forEach((name) => {
+      'getLive', 'checkNow', 'runNow', 'setFreeBoxes', 'retryFree'].forEach((name) => {
       chain[name] = (...args) => { call.name = name; call.args = args; calls.push(call); };
     });
     return chain;
@@ -2862,7 +2873,7 @@ test('live: the page reads the live file every few seconds, GitHub\'s steps whil
   const env = readyEnv({ start: '2026-10-23T07:03:00Z' });
   const f = addBook(env, 'مباشر.pdf');
   tick(env);
-  const file = env.drive.DriveApp.getFileById(lastDispatch(env).body.inputs.live);
+  const file = env.drive.DriveApp.getFileById(liveId(lastDispatch(env)));
   let g = JSON.parse(env.ctx.getLive('{}'));
   assert.strictEqual(g.live.phase, 'queued');
   assert.strictEqual(g.live.file, f.id);
@@ -2985,7 +2996,7 @@ function liveSandbox(env) {
   let ok = null;
   chain.withSuccessHandler = (fn) => { ok = fn; return chain; };
   chain.withFailureHandler = () => chain;
-  ['getStatus', 'tick', 'getLive', 'checkNow', 'runNow'].forEach((fn) => {
+  ['getStatus', 'tick', 'getLive', 'checkNow', 'runNow', 'retryFree'].forEach((fn) => {
     chain[fn] = function () { calls.push({ fn, args: Array.from(arguments), ok }); };
   });
   const sandbox = {
@@ -3014,7 +3025,7 @@ test('the page: the free models one by one, the run\'s events as they come, and 
   const f = addBook(env, 'تراث.pdf');
   tick(env);
   minutes(env, 10);
-  const file = env.drive.DriveApp.getFileById(lastDispatch(env).body.inputs.live);
+  const file = env.drive.DriveApp.getFileById(liveId(lastDispatch(env)));
   const t = Math.floor(env.clock / 1000);
   const dispatched = JSON.parse(file.content.toString('utf8')).dispatched;
   file.setContent(JSON.stringify({ v: 1, seq: 12, run: '77', run_n: '43', file: f.id, book: 'تراث', dispatched,
@@ -3069,9 +3080,13 @@ test('the page: the free models one by one, the run\'s events as they come, and 
   const text = pg.byId.now.textContent;
   assert.ok(/متوقف: نفد رصيد Gemini 3\.5 Flash-Lite وGemini 3\.1 Flash-Lite لهذا اليوم/.test(text), text);
   assert.ok(/قُرئت قراءتين وتنتظر الحسم *441/.test(text), text);
-  // Each free model has «اعمل الآن» too, for the same book.
+  // Each free model in a box that is out today has «أعد المحاولة الآن».
   pg.sandbox.gotLive(JSON.parse(env.ctx.getLive('{}')));
-  assert.ok(pg.find(pg.byId.free, (n) => n.tag === 'button' && /اعمل الآن/.test(n.textContent)), 'a free model\'s «اعمل الآن»');
+  const again = pg.find(pg.byId.free, (n) => n.tag === 'button' && /أعد المحاولة الآن/.test(n.textContent));
+  assert.ok(again, 'a free model\'s «أعد المحاولة الآن»');
+  again.click();
+  const asks = pg.calls.filter((c) => c.fn === 'retryFree').pop();
+  assert.ok(LITES.concat('gemini-3.8-flash').indexOf(asks.args[0]) >= 0, asks.args[0]);
   const run = pg.find(pg.byId.now, (n) => n.tag === 'button' && /شغّل الآن/.test(n.textContent));
   assert.ok(run, 'a «شغّل الآن» button');
   run.click();
@@ -3110,11 +3125,14 @@ test('the free models\' boxes: the converter\'s own until the user changes them,
   const env = readyEnv();
   let s = status(env);
   assert.strictEqual(s.free.custom, false);
-  assert.deepStrictEqual([s.free.boxes.read1, s.free.boxes.read2], [['gemini-3.5-flash-lite'], ['gemini-3.1-flash-lite']]);
+  // Each Lite reader gives the readings the other cannot, as the converter does without boxes.
+  assert.deepStrictEqual([s.free.boxes.read1, s.free.boxes.read2],
+    [['gemini-3.5-flash-lite', 'gemini-3.1-flash-lite'], ['gemini-3.1-flash-lite', 'gemini-3.5-flash-lite']]);
   assert.ok(s.free.models.indexOf('gemma-4-31b-it') >= 0, 'Gemma can be picked before any run said so');
   const f = addBook(env, 'أول.pdf');
   tick(env);
-  assert.strictEqual(lastDispatch(env).body.inputs.models, undefined, 'the converter\'s own boxes: nothing to send');
+  assert.ok(/^read1=gemini-3\.5-flash-lite,gemini-3\.1-flash-lite;/.test(lastDispatch(env).body.inputs.models),
+    'the boxes go with every run, the converter\'s own too: only their models work');
   // The run says what the account has, and the converter's own boxes.
   minutes(env, 30);
   writeStatus(env, f.id, 'paused', { free_models: ACCOUNT, free_default: { read1: ['gemini-3.5-flash-lite'],
@@ -3123,10 +3141,12 @@ test('the free models\' boxes: the converter\'s own until the user changes them,
   s = status(env);
   assert.deepStrictEqual(s.free.models, ACCOUNT);
   assert.deepStrictEqual(s.free.boxes.settle, ['gemini-3.8-flash', 'gemini-3-flash-preview', 'gemini-3.5-flash-lite', 'gemini-3.1-flash-lite']);
-  // Every box keeps one model at least, and only free models' names go in.
-  let r = JSON.parse(env.ctx.setFreeBoxes(JSON.stringify({ read1: [], read2: ['gemini-3.1-flash-lite'], settle: ['gemini-3.8-flash'] })));
-  assert.strictEqual(r.ok, false);
-  assert.ok(/نموذج واحد على الأقل/.test(r.error), r.error);
+  // An empty box is allowed (nobody does that step); only free models' names go in.
+  let r = JSON.parse(env.ctx.setFreeBoxes(JSON.stringify({ read1: [], read2: ['gemini-3.1-flash-lite'], settle: [] })));
+  assert.strictEqual(r.ok, true, r.error);
+  assert.deepStrictEqual([r.free.boxes.read1, r.free.boxes.settle], [[], []]);
+  assert.strictEqual(freeInputOf(env), 'read1=;read2=gemini-3.1-flash-lite;settle=');
+  env.props.delete('FREE_BOXES');
   r = JSON.parse(env.ctx.setFreeBoxes(JSON.stringify({ read1: ['gemma-4-31b-it;rm -rf'], read2: ['a'], settle: ['b'] })));
   assert.strictEqual(r.ok, false);
   assert.strictEqual(env.props.get('FREE_BOXES'), undefined);
@@ -3145,11 +3165,13 @@ test('the free models\' boxes: the converter\'s own until the user changes them,
   const re = new RegExp(/BOXES_RE='([^']+)'/.exec(yml)[1]);
   assert.ok(re.test(input), input);
   assert.ok(!re.test('read1=a;rm -rf /') && !re.test('read1=$(id)'));
-  // Back to the converter's own: nothing is sent any more.
+  assert.ok(re.test('read1=;read2=a;settle=b,c;out=d'), 'empty boxes and the models out today pass');
+  // Back to the converter's own.
   r = JSON.parse(env.ctx.setFreeBoxes(JSON.stringify({ reset: true })));
   assert.strictEqual(r.free.custom, false);
-  assert.deepStrictEqual(r.free.boxes.read1, ['gemini-3.5-flash-lite']);
-  assert.strictEqual(freeInputOf(env), '');
+  assert.deepStrictEqual(r.free.boxes.read1, ['gemini-3.5-flash-lite', 'gemini-3.1-flash-lite']);
+  assert.ok(/^read1=gemini-3\.5-flash-lite,gemini-3\.1-flash-lite;read2=gemini-3\.1-flash-lite,gemini-3\.5-flash-lite;settle=gemini-3\.8-flash,/.test(freeInputOf(env)),
+    freeInputOf(env));
 });
 
 function freeInputOf(env) { return env.ctx.freeInput_(env.ctx.freeInfo_()); }
@@ -3171,27 +3193,37 @@ test('the page: the free models go into the three boxes with a tap or a drag, in
   assert.ok(/Gemini 3\.5 Flash-Lite/.test(boxes(0)[1].textContent));
   assert.ok(/Gemma 4 31B/.test(boxes(0)[0].textContent), 'every model of the account can be picked');
 
-  // A tap on Gemma 4 31B in the first reading's «المتاحة»: it works there after 3.5 Flash-Lite.
+  // A tap on Gemma 4 31B in the first reading's «المتاحة»: it works there after the Lite readers.
   page.click(chipIn(boxes(0)[0], 'Gemma 4 31B'));
-  assert.deepStrictEqual(saved().read1, ['gemini-3.5-flash-lite', 'gemma-4-31b-it']);
+  assert.deepStrictEqual(saved().read1, ['gemini-3.5-flash-lite', 'gemini-3.1-flash-lite', 'gemma-4-31b-it']);
   assert.ok(cardIn(boxes(0)[1], 'Gemma 4 31B'), 'shown in the box at once');
   let call = page.pending('setFreeBoxes')[0];
   page.answer(call, env.ctx.setFreeBoxes(call.args[0]));
-  // «قدّمه»: Gemma reads first.
+  // «قدّمه» twice: Gemma reads first.
   page.click(page.button('قدّمه', cardIn(boxes(0)[1], 'Gemma 4 31B')));
-  assert.deepStrictEqual(saved().read1, ['gemma-4-31b-it', 'gemini-3.5-flash-lite']);
   call = page.pending('setFreeBoxes')[0];
   page.answer(call, env.ctx.setFreeBoxes(call.args[0]));
-  assert.deepStrictEqual(JSON.parse(env.props.get('FREE_BOXES')).read1, ['gemma-4-31b-it', 'gemini-3.5-flash-lite']);
-  // «أخرجه»: 3.5 Flash-Lite no longer reads first. The last model of a box cannot go.
-  page.click(page.button('أخرجه', cardIn(boxes(0)[1], 'Gemini 3.5 Flash-Lite')));
+  page.click(page.button('قدّمه', cardIn(boxes(0)[1], 'Gemma 4 31B')));
+  assert.deepStrictEqual(saved().read1, ['gemma-4-31b-it', 'gemini-3.5-flash-lite', 'gemini-3.1-flash-lite']);
   call = page.pending('setFreeBoxes')[0];
-  assert.deepStrictEqual(JSON.parse(call.args[0]).read1, ['gemma-4-31b-it']);
   page.answer(call, env.ctx.setFreeBoxes(call.args[0]));
-  assert.ok(!/أخرجه/.test(boxes(0)[1].textContent), 'one model left: nothing to take out');
+  assert.deepStrictEqual(JSON.parse(env.props.get('FREE_BOXES')).read1, ['gemma-4-31b-it', 'gemini-3.5-flash-lite', 'gemini-3.1-flash-lite']);
+  // «أخرجه»: the Lite readers no longer read first.
+  ['Gemini 3.5 Flash-Lite', 'Gemini 3.1 Flash-Lite'].forEach((name) => {
+    page.click(page.button('أخرجه', cardIn(boxes(0)[1], name)));
+    call = page.pending('setFreeBoxes')[0];
+    page.answer(call, env.ctx.setFreeBoxes(call.args[0]));
+  });
+  assert.deepStrictEqual(JSON.parse(env.props.get('FREE_BOXES')).read1, ['gemma-4-31b-it']);
+  // The last one may go too (the user's rule): nobody gives first readings then.
   boxes(0)[0].handlers.drop[0]({ preventDefault() {}, dataTransfer: { getData: () => JSON.stringify({ id: 'gemma-4-31b-it' }) } });
-  assert.strictEqual(page.pending('setFreeBoxes').length, 0);
-  assert.ok(/نموذج واحد على الأقل/.test(page.byId.toasts.textContent));
+  call = page.pending('setFreeBoxes')[0];
+  assert.deepStrictEqual(JSON.parse(call.args[0]).read1, []);
+  page.answer(call, env.ctx.setFreeBoxes(call.args[0]));
+  assert.ok(/لا نموذج هنا: لا يعمل أحد في «القراءة الأولى»/.test(boxes(0)[1].textContent), boxes(0)[1].textContent);
+  assert.ok(/لا يعمل أحد في هذه المرحلة/.test(page.byId.toasts.textContent), page.byId.toasts.textContent);
+  // There is no «خارج المربعات»: no model works outside the boxes.
+  assert.ok(!/خارج المربعات/.test(page.byId.free.textContent));
   // Gemma 4 26B dragged onto the second card of the settling box goes before it.
   const settle = boxes(2)[1];
   const second = settle.kids.filter((k) => /\bmrow\b/.test(k.className))[1];
@@ -3209,8 +3241,107 @@ test('the page: the free models go into the three boxes with a tap or a drag, in
   call = page.pending('setFreeBoxes')[0];
   assert.deepStrictEqual(JSON.parse(call.args[0]), { reset: true });
   page.answer(call, env.ctx.setFreeBoxes(call.args[0]));
-  assert.deepStrictEqual(boxes(0)[1].kids.filter((k) => /\bmrow\b/.test(k.className)).map((k) => k.kids[0].kids[0].textContent),
-    ['Gemini 3.5 Flash-Lite']);
+  assert.deepStrictEqual(boxes(0)[1].kids.filter((k) => /\bmrow\b/.test(k.className))
+    .map((k) => k.kids[0].kids.find((x) => x.tag === 'b').textContent), ['Gemini 3.5 Flash-Lite', 'Gemini 3.1 Flash-Lite']);
+});
+
+function controlOf(env) {
+  return JSON.parse(env.drive.DriveApp.getFileById(env.props.get('LIVE_CONTROL_ID')).getBlob().getDataAsString());
+}
+
+test('«أعد المحاولة الآن» on a free model: its out mark goes, and a waiting book runs with it at once', () => {
+  const env = readyEnv({ start: '2026-10-23T07:03:00Z' });
+  const f = addBook(env, 'تراث.pdf');
+  tick(env);
+  minutes(env, 60);
+  writeStatus(env, f.id, 'paused', { quota_day: '2026-10-23', models_out: LITES, requests: { 'gemini-3.5-flash-lite': 11 } });
+  tick(env);
+  // The runs are told which models are out today, so none spends minutes asking them again.
+  assert.ok(/;out=gemini-3\.5-flash-lite,gemini-3\.1-flash-lite$/.test(freeInputOf(env)), freeInputOf(env));
+  // A model in no box cannot be sent back to work.
+  let r = JSON.parse(env.ctx.retryFree('gemma-4-26b-a4b-it'));
+  assert.strictEqual(r.ok, false);
+  assert.ok(/ضعه في «يعمل هنا»/.test(r.error), r.error);
+  assert.strictEqual(JSON.parse(env.ctx.retryFree('rm -rf')).ok, false);
+  // No run going: the book paused for the day runs now, and 3.5 Flash-Lite is not out in it.
+  r = JSON.parse(env.ctx.retryFree('gemini-3.5-flash-lite'));
+  assert.strictEqual(r.ok, true, r.error);
+  assert.strictEqual(r.started, true);
+  assert.ok(/بدأ تشغيل «تراث»، ويعمل فيه «Gemini 3\.5 Flash-Lite»/.test(r.text), r.text);
+  assert.strictEqual(env.gh.dispatches.length, 2);
+  assert.ok(/;out=gemini-3\.1-flash-lite$/.test(lastDispatch(env).body.inputs.models), lastDispatch(env).body.inputs.models);
+  assert.strictEqual(jobs(env)[f.id].stage, 'running');
+  assert.strictEqual(jobs(env)[f.id].pauses, 1, 'asked for by the user: no daily pause of its own');
+  assert.ok(/طلبتَ أن يعود «Gemini 3\.5 Flash-Lite» إلى العمل/.test(journal(env).pop().x));
+  assert.strictEqual(env.lockHeld, false);
+  // A run going: it is told through the requests file, and nothing new starts.
+  minutes(env, 2);
+  r = JSON.parse(env.ctx.retryFree('gemini-3.1-flash-lite'));
+  assert.ok(/في التشغيل الجاري/.test(r.text), r.text);
+  assert.strictEqual(env.gh.dispatches.length, 2);
+  assert.deepStrictEqual(controlOf(env), { v: 1, retry: { 'gemini-3.1-flash-lite': iso(env.clock) } });
+  assert.strictEqual(freeInputOf(env).indexOf('out='), -1, 'neither is out any more');
+  // A later run that asked a model without it running out: whatever was said before, it works.
+  minutes(env, 30);
+  writeStatus(env, f.id, 'paused', { quota_day: '2026-10-23', models_out: ['gemini-3.1-flash-lite'],
+    requests: { 'gemini-3.5-flash-lite': 40, 'gemini-3.1-flash-lite': 3 } });
+  tick(env);
+  const u = status(env).usage.m;
+  assert.strictEqual(u['gemini-3.5-flash-lite'].out, false);
+  assert.strictEqual(u['gemini-3.1-flash-lite'].out, true);
+});
+
+test('empty boxes: nobody works, no run starts for a scanned book, and a book waiting for a model runs once there is one', () => {
+  let env = readyEnv({ start: '2026-10-23T07:03:00Z' });
+  const none = JSON.stringify({ read1: [], read2: [], settle: [] });
+  assert.strictEqual(JSON.parse(env.ctx.setFreeBoxes(none)).ok, true);
+  // A text file needs no model.
+  addBook(env, 'نص.txt');
+  tick(env);
+  assert.strictEqual(env.gh.dispatches.length, 1);
+  env = readyEnv({ start: '2026-10-23T07:03:00Z' });
+  env.ctx.setFreeBoxes(none);
+  const g = addBook(env, 'ممسوح.pdf');
+  tick(env);
+  assert.strictEqual(env.gh.dispatches.length, 0, 'no run for nothing');
+  assert.deepStrictEqual(names(env, 'inbox'), ['ممسوح.pdf']);
+  // One model in one box: it starts. Its waiting pages no model in any box can take further:
+  // it waits for one, with no daily pause counted, and runs as soon as the boxes change.
+  env.ctx.setFreeBoxes(JSON.stringify({ read1: ['gemini-3.5-flash-lite'], read2: [], settle: [] }));
+  tick(env);
+  assert.strictEqual(env.gh.dispatches.length, 1);
+  minutes(env, 20);
+  writeStatus(env, g.id, 'paused', { waiting_for: 'boxes', stages: { read1: 10 } });
+  tick(env);
+  const j = jobs(env)[g.id];
+  assert.strictEqual(j.stage, 'boxWait');
+  assert.ok(!j.pauses);
+  assert.ok(/لا نموذج في المربعات يكمل صفحاته/.test(journal(env).pop().x));
+  minutes(env, 60 * 30);
+  tick(env);
+  assert.strictEqual(env.gh.dispatches.length, 1, 'waits for the user, not for a new day');
+  assert.strictEqual(status(env).parked[0].stage, 'boxWait');
+  env.ctx.setFreeBoxes(JSON.stringify({ read1: ['gemini-3.5-flash-lite'], read2: ['gemini-3.1-flash-lite'], settle: ['gemini-3.8-flash'] }));
+  tick(env);
+  assert.strictEqual(env.gh.dispatches.length, 2);
+  assert.strictEqual(jobs(env)[g.id].stage, 'running');
+  assert.ok(/تغيّرت المربعات/.test(journal(env).pop().x));
+});
+
+test('a paused book does not run on its new day when nobody can work', () => {
+  const env = readyEnv({ start: '2026-10-23T07:03:00Z' });
+  const f = addBook(env, 'تراث.pdf');
+  tick(env);
+  minutes(env, 60);
+  writeStatus(env, f.id, 'paused', { quota_day: '2026-10-23', models_out: LITES });
+  tick(env);
+  env.ctx.setFreeBoxes(JSON.stringify({ read1: [], read2: [], settle: [] }));
+  env.clock = Date.parse('2026-10-24T07:20:00Z');
+  tick(env);
+  assert.strictEqual(env.gh.dispatches.length, 1);
+  env.ctx.setFreeBoxes(JSON.stringify({ reset: true }));
+  tick(env);
+  assert.strictEqual(env.gh.dispatches.length, 2);
 });
 
 test('the fake GitHub saw only known endpoints', () => {

@@ -99,6 +99,9 @@ var CONFIG = {
   // seconds, into one file with their own Drive token, and the page reads it as often.
   LIVE_FOLDER: 'بيانات البث',
   LIVE_FILE: 'live.json',
+  // The page's requests to the run going («أعد المحاولة الآن» on a free model): the run
+  // reads this file every few seconds with its own Drive token (live.py, Live.watch).
+  LIVE_CONTROL: 'control.json',
   // A live file not written for this long: its run stopped writing (its token, or its end).
   LIVE_QUIET_MS: 90 * 1000,
   // The GitHub run's own steps, asked at most this often while the live file is quiet.
@@ -134,14 +137,16 @@ var REST_ID_RE = /^p(\d{1,5})-rest-[0-9a-z]{1,20}$/;
 // A model on the user's computer: "<tool>|<model>" (helper/helper.ps1, $Tools).
 var CHIP_RE = /^(grok|agy|codex|claude)\|[A-Za-z0-9._-]{1,60}$/;
 // The free models (Gemini and Gemma by the key on GitHub), and their boxes on the status page:
-// who gives the first reading, who the second, who settles, each first to last. The workflow
-// takes them as read1=…;read2=…;settle=… (freeInput_).
+// who gives the first reading, who the second, who settles, each first to last. Only the
+// models in a box work, and an empty box means nobody does that step (the user's rule,
+// 2026-10-23). The workflow takes them as read1=…;read2=…;settle=…;out=… (freeInput_).
 var FREE_MODEL_RE = /^(gemini|gemma)-[a-z0-9.-]{1,60}$/;
 var FREE_KEYS = ['read1', 'read2', 'settle'];
-// The converter's own choice until a run says it (free_default in status.json).
+// The converter's own choice until a run says it (free_default in status.json): each Lite
+// reader gives the readings the other cannot.
 var FREE_DEFAULT = {
-  read1: ['gemini-3.5-flash-lite'],
-  read2: ['gemini-3.1-flash-lite'],
+  read1: ['gemini-3.5-flash-lite', 'gemini-3.1-flash-lite'],
+  read2: ['gemini-3.1-flash-lite', 'gemini-3.5-flash-lite'],
   settle: ['gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-3.6-flash', 'gemini-3-flash', 'gemini-3.5-flash-lite',
     'gemini-3.1-flash-lite']
 };
@@ -655,8 +660,8 @@ function setHelperBoxes(json) {
 
 /**
  * The free models' boxes from the page: {read1: [ids], read2: [ids], settle: [ids]} in the
- * user's order, every box with one model at least; or {reset: true} for the converter's own
- * choice. The next run works with them (dispatch_).
+ * user's order (an empty box: nobody does that step); or {reset: true} for the converter's
+ * own choice. The next run works with them (dispatch_).
  */
 function setFreeBoxes(json) {
   try {
@@ -670,8 +675,7 @@ function setFreeBoxes(json) {
     var bad = '';
     FREE_KEYS.forEach(function (k) {
       var list = Array.isArray(r[k]) ? r[k].map(String) : [];
-      if (!list.length) bad = 'يبقى في كل مربع نموذج واحد على الأقل.';
-      else if (list.length > CONFIG.FREE_BOX_MAX || list.some(function (id) { return !FREE_MODEL_RE.test(id); })) bad = 'نموذج غير معروف';
+      if (list.length > CONFIG.FREE_BOX_MAX || list.some(function (id) { return !FREE_MODEL_RE.test(id); })) bad = 'نموذج غير معروف';
       boxes[k] = list.filter(function (id, i) { return list.indexOf(id) === i; });
     });
     if (bad) return JSON.stringify({ ok: false, error: bad });
@@ -729,7 +733,7 @@ function runTick_() {
     // judges (delivered now), then books the helper's models work on (the free models'
     // share, or what the helper's models finished), then new books.
     var applied = applyNext_(ctx) || helperJudgeNext_(ctx);
-    var resumed = applied || resumeReaderNext_(ctx) || judgeNext_(ctx) || helperNext_(ctx);
+    var resumed = applied || resumeReaderNext_(ctx) || boxNext_(ctx) || judgeNext_(ctx) || helperNext_(ctx);
     var started = resumed || startNext_(ctx);
     notes.push(started);
     // Nothing new to convert: prepare the review of a finished book delivered before it existed.
@@ -779,7 +783,7 @@ function handleStatus_(ctx, job, s) {
   // go to the user's own models and the user.
   var waiting = s.state === 'paused' ? String(s.waiting_for || '') : '';
   var state = waiting === 'judges' ? 'done' : waiting === 'helper' ? 'helper'
-    : waiting === 'reader' ? 'readerWait' : waiting === 'time' ? 'time' : s.state;
+    : waiting === 'reader' ? 'readerWait' : waiting === 'time' ? 'time' : waiting === 'boxes' ? 'boxWait' : s.state;
   switch (state) {
     case 'done':
       return deliver_(ctx, job, s, false);
@@ -840,6 +844,18 @@ function handleStatus_(ctx, job, s) {
       }
       return 'reader wait (parked)';
 
+    case 'boxWait':
+      // No model in any box (free or on the computer) can take the pages left further: the
+      // user emptied those boxes. The book waits without a run and without counting days;
+      // boxNext_ runs it again once the boxes change.
+      job.stage = 'boxWait';
+      job.boxSig = boxesSig_(ctx);
+      job.boxAt = now_().toISOString();
+      saveJobs_(ctx.jobs);
+      journal_('park', 'لا نموذج في المربعات يكمل صفحاته: ' + stagesText_(job.stages) +
+        '. يكمل حين تضع نموذجاً في مربع.', job.title);
+      return 'no model in the boxes (parked)';
+
     case 'helper':
       // The pages left are with the helper's models on the user's computer (from the start
       // of the book); the free models took their share from its end. The book waits without
@@ -897,6 +913,8 @@ function pause_(ctx, job, s, forced) {
 function resumeIfNewDay_(ctx, job) {
   var today = pacificDay_(now_());
   if (today > job.pausedDay) {
+    // Nobody to work (every box empty, the computer off): no run for nothing.
+    if (!anyoneWorks_(ctx)) return 'paused (no model in the boxes)';
     return 'quota reset, resume: ' + dispatch_(ctx, job, false, 'تجدد رصيد النماذج المجانية');
   }
   // The helper's models read what the free model could not: no need to wait for tomorrow.
@@ -988,6 +1006,11 @@ function startNext_(ctx) {
   var orphan = findOrphan_(ctx);
   var candidates = orphan ? [orphan] : scanInbox_(ctx.folders.inbox).ready;
   if (!candidates.length) return 'idle';
+  // A PDF needs a model (TXT and DOCX need none): with every box empty or out of quota today
+  // and the computer off, it waits in «1- جديد» instead of a run that could do nothing.
+  var first = candidates[0];
+  var ext = SUPPORTED_EXT[extOf_(first.getName())] ? extOf_(first.getName()) : MIME_EXT[first.getMimeType()] || 'pdf';
+  if (ext === 'pdf' && !anyoneWorks_(ctx)) return 'idle (no model can work now)';
 
   for (var i = 0; i < candidates.length && i < 3; i++) {
     var file = candidates[i];
@@ -1036,8 +1059,26 @@ function finalize_(ctx, job, mail) {
   sendMail_('مكتمل: ' + job.title, lines);
 }
 
+/** Dispatches the oldest book waiting for a model in the boxes, once the boxes changed and someone can work; or returns ''. */
+function boxNext_(ctx) {
+  var sig = null;
+  var pick = null;
+  Object.keys(ctx.jobs).forEach(function (id) {
+    var j = ctx.jobs[id];
+    if (!j || j.stage !== 'boxWait') return;
+    if (sig === null) sig = boxesSig_(ctx);
+    if (j.boxSig !== sig && (!pick || String(j.createdAt || '') < String(pick.createdAt || ''))) pick = j;
+  });
+  if (!pick || !anyoneWorks_(ctx)) return '';
+  pick.stage = 'queued';
+  pick.pendingCount = false;
+  saveJobs_(ctx.jobs);
+  return 'boxes changed ' + pick.fileId + ': ' + dispatch_(ctx, pick, false, 'تغيّرت المربعات');
+}
+
 /** Dispatches the oldest book parked for a reader whose quota has renewed, or returns ''. */
 function resumeReaderNext_(ctx) {
+  if (!freeAvailable_()) return '';
   var today = pacificDay_(now_());
   var pick = null;
   Object.keys(ctx.jobs).forEach(function (id) {
@@ -1131,10 +1172,15 @@ function dispatch_(ctx, job, countAttempt, why) {
   if (helper) body.inputs.helper = helper;
   var verdicts = verdictsFile_(job.fileId);
   if (verdicts) body.inputs.judge = verdicts.getId();
-  // The live view: the run writes what it does into this file (live.py).
+  // The live view: the run writes what it does into this file (live.py), and reads the
+  // page's requests to it from the second («أعد المحاولة الآن» on a free model).
   var live = resetLive_(job, at.toISOString());
-  if (live) body.inputs.live = live;
-  // The free models' boxes, once the user changed them on the page.
+  if (live) {
+    var control = null;
+    try { control = liveControl_(); } catch (err) { Logger.log('control file: ' + err); }
+    body.inputs.live = live + (control ? ':' + control.getId() : '');
+  }
+  // The free models' boxes as the page shows them, and those out of quota today.
   var models = freeInput_(freeInfo_());
   if (models) body.inputs.models = models;
   var r = gh_(ctx.cfg, 'post', '/repos/' + ctx.cfg.repo + '/actions/workflows/' + CONFIG.WORKFLOW + '/dispatches', body);
@@ -2242,8 +2288,12 @@ function helperNext_(ctx) {
       j.helperMovedAt = new Date(now).toISOString();
       saveJobs_(ctx.jobs);
     }
-    var why = !on ? 'helper off'
-      : helperDoneFor_(ctx, j) ? 'helper done'
+    // The free models take over only while one of them can work (a model in a box, not out
+    // of quota today): otherwise the run could do nothing.
+    var free = freeAvailable_();
+    var why = helperDoneFor_(ctx, j) ? 'helper done'
+      : !free ? ''
+      : !on ? 'helper off'
       : now - Date.parse(j.helperMovedAt || j.helperAt) > CONFIG.HELPER_STALL_MS ? 'helper stalled'
       : j.freeLeft ? 'free models'
       : String(j.freeDay || '') < today ? 'free quota renewed' : '';
@@ -2676,8 +2726,18 @@ function noteUsage_(s) {
     u.m[name] = u.m[name] || { n: 0 };
     return u.m[name];
   };
-  Object.keys(s.requests).slice(0, 20).forEach(function (name) { model(name).n += Number(s.requests[name]) || 0; });
-  (Array.isArray(s.models_out) ? s.models_out : []).slice(0, 20).forEach(function (name) {
+  var outs = (Array.isArray(s.models_out) ? s.models_out : []).slice(0, 20).map(String);
+  Object.keys(s.requests).slice(0, 20).forEach(function (name) {
+    var m = model(name);
+    var n = Number(s.requests[name]) || 0;
+    m.n += n;
+    // It was asked in this run and did not run out: whatever an earlier run said, it works.
+    if (n > 0 && outs.indexOf(name) < 0 && m.out) {
+      m.out = false;
+      delete m.at;
+    }
+  });
+  outs.forEach(function (name) {
     var m = model(name);
     m.out = true;
     m.at = new Date(at).toISOString();
@@ -2727,11 +2787,20 @@ function freeInfo_() {
   var known = parseJson_(props.getProperty('FREE_MODELS')) || {};
   var ids = freeList_(known.ids, CONFIG.FREE_MAX_MODELS);
   var saved = parseJson_(props.getProperty('FREE_BOXES'));
-  var custom = !!saved && FREE_KEYS.every(function (k) { return freeList_(saved[k]).length; });
+  var custom = !!saved && FREE_KEYS.every(function (k) { return Array.isArray(saved[k]); });
+  var d = {};
+  FREE_KEYS.forEach(function (k) {
+    var listed = freeList_(known.defaults && known.defaults[k]);
+    d[k] = listed.length ? listed : FREE_DEFAULT[k];
+  });
+  // Each reader gives the readings the other cannot (a run of an older converter said one each).
+  if (d.read2.length) {
+    d.read1 = d.read1.concat(d.read2);
+    d.read2 = d.read2.concat(d.read1);
+  }
   var boxes = {};
   FREE_KEYS.forEach(function (k) {
-    var d = freeList_(known.defaults && known.defaults[k]);
-    boxes[k] = (custom ? freeList_(saved[k]) : d.length ? d : FREE_DEFAULT[k])
+    boxes[k] = (custom ? freeList_(saved[k]) : d[k])
       .map(function (id) { return freeName_(id, ids); })
       .filter(function (id, i, all) { return all.indexOf(id) === i; });
   });
@@ -2740,10 +2809,46 @@ function freeInfo_() {
   return { boxes: boxes, custom: custom, at: custom ? String(saved.at || '') : '', models: models };
 }
 
-/** The workflow's "models" input for the boxes the user set ('' for the converter's own). */
+/**
+ * The workflow's "models" input: the boxes as the page shows them (the user's, or the
+ * converter's own until the user changes them), and the models a run found out of quota
+ * today (out=…), so no run spends minutes asking them again.
+ */
 function freeInput_(info) {
-  if (!info || !info.custom) return '';
-  return FREE_KEYS.map(function (k) { return k + '=' + info.boxes[k].join(','); }).join(';');
+  if (!info) return '';
+  var out = freeOut_();
+  return FREE_KEYS.map(function (k) { return k + '=' + info.boxes[k].join(','); }).join(';') +
+    (out.length ? ';out=' + out.join(',') : '');
+}
+
+/** The free models a run found out of quota on the current Pacific day (USAGE), not sent back to work since. */
+function freeOut_() {
+  var m = usage_().m;
+  return Object.keys(m).filter(function (id) { return FREE_MODEL_RE.test(id) && m[id] && m[id].out; }).slice(0, 20);
+}
+
+/** Some free model is in a box and was not found out of quota today. */
+function freeAvailable_() {
+  var info = freeInfo_();
+  var out = freeOut_();
+  return FREE_KEYS.some(function (k) {
+    return info.boxes[k].some(function (id) { return out.indexOf(id) < 0; });
+  });
+}
+
+/**
+ * Someone can work on a scanned book now: a free model in a box with quota left today, or
+ * the user's models in the reading or settling box on a computer seen within the hour.
+ */
+function anyoneWorks_(ctx) {
+  return freeAvailable_() || !!helperWork_(helperStatusOf_(ctx));
+}
+
+/** What the boxes are now (free and on the computer): a book waiting for the user to put a model in one runs when this changes. */
+function boxesSig_(ctx) {
+  var h = helperBoxes_();
+  var w = helperWork_(helperStatusOf_(ctx)) || {};
+  return JSON.stringify([freeInfo_().boxes, h.transcribe, h.settle, !!w.read, !!w.settle]);
 }
 
 /** The live file the runs write ("بيانات البث/live.json"), made on first use when create is true. */
@@ -2755,6 +2860,18 @@ function liveFile_(create) {
   var dir = findOrCreateFolder_(root, CONFIG.LIVE_FOLDER);
   f = liveFiles_(dir, CONFIG.LIVE_FILE)[0] || dir.createFile(CONFIG.LIVE_FILE, '{}', 'application/json');
   props_().setProperty('LIVE_FILE_ID', f.getId());
+  return f;
+}
+
+/** The page's requests to the run going ("بيانات البث/control.json"), made on first use. */
+function liveControl_() {
+  var f = fileFromProp_('LIVE_CONTROL_ID');
+  if (f) return f;
+  var root = folderFromProp_('FOLDER_ROOT');
+  if (!root) return null;
+  var dir = findOrCreateFolder_(root, CONFIG.LIVE_FOLDER);
+  f = liveFiles_(dir, CONFIG.LIVE_CONTROL)[0] || dir.createFile(CONFIG.LIVE_CONTROL, '{}', 'application/json');
+  props_().setProperty('LIVE_CONTROL_ID', f.getId());
   return f;
 }
 
@@ -2916,7 +3033,10 @@ function nowLine_(jobs) {
   }
   if (a) return 'يعمل الآن تشغيل «' + a.title + '» على GitHub.';
   var parked = Object.keys(jobs).map(function (id) { return jobs[id]; }).filter(function (j) { return j && isParked_(j); });
-  if (parked.length) return '«' + parked[0].title + '» ' + (parked[0].stage === 'helper' ? 'مع نماذجك على جهازك.' : 'ينتظر تجدد رصيد القارئ الثاني.');
+  if (parked.length) {
+    return '«' + parked[0].title + '» ' + (parked[0].stage === 'helper' ? 'مع نماذجك على جهازك.'
+      : parked[0].stage === 'boxWait' ? 'ينتظر أن تضع نموذجاً في المربعات.' : 'ينتظر تجدد رصيد القارئ الثاني.');
+  }
   return 'لا شيء يُحوَّل الآن.';
 }
 
@@ -2967,6 +3087,108 @@ function runNow(fileId) {
   } finally {
     lock.releaseLock();
   }
+}
+
+/**
+ * «أعد المحاولة الآن» on a free model in a box: it works again at once, whatever stopped it.
+ * Its out-of-quota mark for today goes; a run going is told through the requests file (the
+ * run reads it every few seconds, live.py); with no run going, the book waiting for one
+ * starts it (or the next new book). Returns {ok, text} or {ok: false, error}.
+ */
+function retryFree(id) {
+  id = String(id || '');
+  if (!FREE_MODEL_RE.test(id)) return JSON.stringify({ ok: false, error: 'نموذج غير معروف' });
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(30000)) return JSON.stringify({ ok: false, busy: true, error: 'يوجد فحص يعمل الآن، أعد المحاولة بعد دقيقة.' });
+  try {
+    var info = freeInfo_();
+    if (!FREE_KEYS.some(function (k) { return info.boxes[k].indexOf(id) >= 0; })) {
+      return JSON.stringify({ ok: false, error: 'ضعه في «يعمل هنا» في أحد المربعات أولاً.' });
+    }
+    var name = modelLabel_(id);
+    var at = now_().toISOString();
+    clearOut_(id);
+    var cfg = config_();
+    var ctx = { cfg: cfg, folders: getFolders_(), jobs: loadJobs_(), dispatched: 0 };
+    var going = null;
+    Object.keys(ctx.jobs).forEach(function (k) {
+      var j = ctx.jobs[k];
+      if (j && j.stage === 'running' && !j.pausedDay) going = j;
+    });
+    if (going && going.humanRound) {
+      return JSON.stringify({ ok: true, text: 'يعمل الآن تشغيل مراجعة لا يسأل النماذج؛ يعمل «' + name + '» في التشغيل التالي.' });
+    }
+    if (going) {
+      tellRun_(id, at);
+      journal_('retry', 'طلبتَ أن يعود «' + name + '» إلى العمل في التشغيل الجاري.', going.title);
+      return JSON.stringify({ ok: true, text: 'يعود «' + name + '» إلى العمل في التشغيل الجاري خلال ثوانٍ.' });
+    }
+    if (!cfg.token) return JSON.stringify({ ok: false, error: 'رمز GitHub غير موجود.' });
+    var job = waitingJob_(ctx);
+    var why = 'طلبتَ أن يعود «' + name + '» إلى العمل';
+    var r;
+    if (job) {
+      // A run asked for by the user is no daily pause of the book's own (MAX_PAUSES).
+      job.forced = true;
+      if (isParked_(job)) {
+        job.stage = 'queued';
+        job.pendingCount = false;
+      }
+      saveJobs_(ctx.jobs);
+      r = dispatch_(ctx, job, false, why);
+    } else {
+      r = startNext_(ctx);
+      if (!/^started /.test(r)) {
+        return JSON.stringify({ ok: true, text: 'لا كتاب ينتظر الآن؛ يعمل «' + name + '» في التشغيل القادم.' });
+      }
+      job = activeJob_(ctx.jobs);
+      r = /dispatched$/.test(r) ? 'dispatched' : r;
+    }
+    return JSON.stringify({ ok: true, started: r === 'dispatched', text: r === 'dispatched'
+      ? 'بدأ تشغيل «' + job.title + '»، ويعمل فيه «' + name + '».'
+      : 'تعذّر بدء التشغيل على GitHub، وسأحاول مرة أخرى في الفحص القادم.' });
+  } catch (err) {
+    Logger.log('retryFree failed: ' + (err && err.stack ? err.stack : err));
+    return JSON.stringify({ ok: false, error: String(err && err.message ? err.message : err) });
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/** A free model is no longer out of quota today (USAGE): the runs ask it again. */
+function clearOut_(id) {
+  var props = props_();
+  var u = parseJson_(props.getProperty('USAGE'));
+  if (!u || u.day !== pacificDay_(now_()) || !u.m || !u.m[id]) return;
+  u.m[id].out = false;
+  delete u.m[id].at;
+  props.setProperty('USAGE', JSON.stringify(u));
+}
+
+/** Tells the run going that this model works again (the requests file: {v, retry: {model: when}}). */
+function tellRun_(id, at) {
+  var f = liveControl_();
+  if (!f) return;
+  var data = parseJson_(f.getBlob().getDataAsString('UTF-8'));
+  var retry = data && data.retry && typeof data.retry === 'object' && !Array.isArray(data.retry) ? data.retry : {};
+  retry[id] = at;
+  var keys = Object.keys(retry).sort(function (a, b) { return String(retry[b]).localeCompare(String(retry[a])); });
+  var kept = {};
+  keys.slice(0, 40).forEach(function (k) { kept[k] = retry[k]; });
+  f.setContent(JSON.stringify({ v: 1, retry: kept }));
+}
+
+/**
+ * The book a free model sent back to work runs for: the one holding the slot (waiting for a
+ * new day, or for GitHub to take its run), else the oldest parked one; null when none waits.
+ */
+function waitingJob_(ctx) {
+  var holder = activeJob_(ctx.jobs);
+  if (holder) return waitsForDay_(holder) || holder.stage === 'queued' ? holder : null;
+  var parked = Object.keys(ctx.jobs).map(function (k) { return ctx.jobs[k]; })
+    .filter(function (j) { return j && isParked_(j) && j.stage !== 'judging'; })
+    .sort(function (a, b) { return String(a.createdAt || '') < String(b.createdAt || '') ? -1 : 1; });
+  return parked[0] || null;
 }
 
 /** The folder a file is in: its id, 'gone' (deleted or in the trash) or '' (unknown). */
@@ -3153,9 +3375,12 @@ function isActive_(job) {
   return job.stage === 'queued' || job.stage === 'running';
 }
 
-/** Waiting in "2- قيد التحويل" without holding the slot: for the helper's models, a reader, or (older versions) the judges. */
+/**
+ * Waiting in "2- قيد التحويل" without holding the slot: for the helper's models, a reader, a
+ * model in the boxes, or (older versions) the judges.
+ */
 function isParked_(job) {
-  return job.stage === 'judging' || job.stage === 'helper' || job.stage === 'readerWait';
+  return job.stage === 'judging' || job.stage === 'helper' || job.stage === 'readerWait' || job.stage === 'boxWait';
 }
 
 /** The review round running, if any (it may run while another book waits for its quota). */

@@ -171,6 +171,40 @@ class LiveState(unittest.TestCase):
         self.assertFalse(live.open_live(LIVE_ID, "").on)
 
 
+class Retries(unittest.TestCase):
+    """«أعد المحاولة الآن» on the status page while a run goes: the requests file (Live.watch)."""
+
+    def test_only_requests_made_after_the_dispatch_count_and_each_once(self):
+        lv = live.Live(FakeSink(), clock=Clock())
+        lv.base = {"dispatched": "2026-10-23T07:00:00.000Z"}
+        requests = {"retry": {"gemini-3.5-flash-lite": "2026-10-23T06:59:00.000Z",
+                              "gemini-3.1-flash-lite": "2026-10-23T07:05:00.000Z",
+                              "rm -rf /": "2026-10-23T07:05:00.000Z"}}
+        lv.control = FakeSink(requests)
+        back = []
+        lv.watch(back.append)
+        lv.check_control()
+        lv.check_control()
+        self.assertEqual(back, ["gemini-3.1-flash-lite"])
+        requests["retry"]["gemini-3.5-flash-lite"] = "2026-10-23T07:10:00.000Z"
+        lv.control = FakeSink(requests)
+        lv.check_control()
+        self.assertEqual(back, ["gemini-3.1-flash-lite", "gemini-3.5-flash-lite"])
+
+    def test_a_model_sent_back_is_no_longer_out_on_the_page(self):
+        lv = live.Live(FakeSink(), clock=Clock())
+        lv.note("gemini-3.5-flash-lite", "out", 30, "a", n=500)
+        lv.revived("gemini-3.5-flash-lite")
+        m = lv.snapshot()["models"]["gemini-3.5-flash-lite"]
+        self.assertEqual((m["out"], m["out_at"]), (False, ""))
+        self.assertEqual(lv.snapshot()["events"][-1]["r"], "back")
+
+    def test_the_requests_file_comes_with_the_live_file(self):
+        lv = live.open_live(LIVE_ID, "token", "control_file_1234567890")
+        self.assertEqual(lv.control.id, "control_file_1234567890")
+        self.assertIsNone(live.open_live(LIVE_ID, "token", "bad id").control)
+
+
 class DriveCalls(unittest.TestCase):
     def test_the_file_is_written_whole_with_the_token(self):
         opener = Opener()
@@ -379,7 +413,9 @@ class LiveHelperPipeline(LiveBase):
         last = self.sink.last
         self.assertEqual(last["pages"]["helper"], 2)
         sent = [e for e in last["events"] if e["r"] == "sent"]
-        self.assertEqual([(e["k"], e["n"]) for e in sent], [("helper", 2)])
+        # Each page as soon as the free models leave it (one at once, the next with the rest).
+        self.assertEqual({e["k"] for e in sent}, {"helper"})
+        self.assertEqual(sum(e["n"] for e in sent), 2)
         self.assertIn("free", [e["x"] for e in last["events"] if e["r"] == "phase"])
         self.assertEqual(st["stages"], {"helper": 2})
 
