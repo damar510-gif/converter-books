@@ -530,11 +530,11 @@
     "unsure": 1,
     "done": 2,
     "failed": 5,
-    "read1": 7,
-    "unread": 494
+    "read1": 17,
+    "unread": 484
   },
   "requests": {
-    "gemma-4-31b-it": 24,
+    "gemma-4-31b-it": 28,
     "gemini-2.5-flash": 1
   },
   "models_out": [
@@ -594,9 +594,9 @@
   },
   "book": "تراث الانسانية 4_k2opt",
   "epub": "تراث الانسانية 4_k2opt.epub",
-  "updated_at": "2026-10-23T21:10:25Z",
+  "updated_at": "2026-10-23T21:50:47Z",
   "quota_day": "2026-10-23",
   "waiting_for": "helper",
-  "run_id": 40020152569,
-  "run_number": 64
+  "run_id": 40025190950,
+  "run_number": 65
 }

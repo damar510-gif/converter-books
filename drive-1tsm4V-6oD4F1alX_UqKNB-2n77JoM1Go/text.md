@@ -147,6 +147,199 @@
 
 > **[الصفحة 12 لم تُقرأ]**
 
+[]{#pg-12 .pagebreak}[]{#pg-13 .pagebreak}[]{#pg-14 .pagebreak}[]{#pg-15 .pagebreak}[]{#pg-16 .pagebreak}[]{#pg-17 .pagebreak}[]{#pg-18 .pagebreak}[]{#pg-19 .pagebreak}[]{#pg-20 .pagebreak}[]{#pg-21 .pagebreak}[]{#pg-22 .pagebreak}[]{#pg-23 .pagebreak}[]{#pg-24 .pagebreak}[]{#pg-25 .pagebreak}[]{#pg-26 .pagebreak}[]{#pg-27 .pagebreak}[]{#pg-28 .pagebreak}[]{#pg-29 .pagebreak}[]{#pg-30 .pagebreak}[]{#pg-31 .pagebreak}[]{#pg-32 .pagebreak}[]{#pg-33 .pagebreak}[]{#pg-34 .pagebreak}[]{#pg-35 .pagebreak}[]{#pg-36 .pagebreak}[]{#pg-37 .pagebreak}[]{#pg-38 .pagebreak}[]{#pg-39 .pagebreak}[]{#pg-40 .pagebreak}[]{#pg-41 .pagebreak}[]{#pg-42 .pagebreak}[]{#pg-43 .pagebreak}[]{#pg-44 .pagebreak}[]{#pg-45 .pagebreak}[]{#pg-46 .pagebreak}[]{#pg-47 .pagebreak}[]{#pg-48 .pagebreak}[]{#pg-49 .pagebreak}[]{#pg-50 .pagebreak}[]{#pg-51 .pagebreak}[]{#pg-52 .pagebreak}[]{#pg-53 .pagebreak}[]{#pg-54 .pagebreak}[]{#pg-55 .pagebreak}[]{#pg-56 .pagebreak}[]{#pg-57 .pagebreak}[]{#pg-58 .pagebreak}[]{#pg-59 .pagebreak}[]{#pg-60 .pagebreak}[]{#pg-61 .pagebreak}[]{#pg-62 .pagebreak}[]{#pg-63 .pagebreak}[]{#pg-64 .pagebreak}[]{#pg-65 .pagebreak}[]{#pg-66 .pagebreak}[]{#pg-67 .pagebreak}[]{#pg-68 .pagebreak}[]{#pg-69 .pagebreak}[]{#pg-70 .pagebreak}[]{#pg-71 .pagebreak}[]{#pg-72 .pagebreak}[]{#pg-73 .pagebreak}[]{#pg-74 .pagebreak}[]{#pg-75 .pagebreak}[]{#pg-76 .pagebreak}[]{#pg-77 .pagebreak}[]{#pg-78 .pagebreak}[]{#pg-79 .pagebreak}[]{#pg-80 .pagebreak}[]{#pg-81 .pagebreak}[]{#pg-82 .pagebreak}[]{#pg-83 .pagebreak}[]{#pg-84 .pagebreak}[]{#pg-85 .pagebreak}[]{#pg-86 .pagebreak}[]{#pg-87 .pagebreak}[]{#pg-88 .pagebreak}[]{#pg-89 .pagebreak}[]{#pg-90 .pagebreak}[]{#pg-91 .pagebreak}[]{#pg-92 .pagebreak}[]{#pg-93 .pagebreak}[]{#pg-94 .pagebreak}[]{#pg-95 .pagebreak}[]{#pg-96 .pagebreak}[]{#pg-97 .pagebreak}[]{#pg-98 .pagebreak}[]{#pg-99 .pagebreak}[]{#pg-100 .pagebreak}[]{#pg-101 .pagebreak}[]{#pg-102 .pagebreak}[]{#pg-103 .pagebreak}[]{#pg-104 .pagebreak}[]{#pg-105 .pagebreak}[]{#pg-106 .pagebreak}[]{#pg-107 .pagebreak}[]{#pg-108 .pagebreak}[]{#pg-109 .pagebreak}[]{#pg-110 .pagebreak}[]{#pg-111 .pagebreak}[]{#pg-112 .pagebreak}[]{#pg-113 .pagebreak}[]{#pg-114 .pagebreak}[]{#pg-115 .pagebreak}[]{#pg-116 .pagebreak}[]{#pg-117 .pagebreak}[]{#pg-118 .pagebreak}[]{#pg-119 .pagebreak}[]{#pg-120 .pagebreak}[]{#pg-121 .pagebreak}[]{#pg-122 .pagebreak}[]{#pg-123 .pagebreak}[]{#pg-124 .pagebreak}[]{#pg-125 .pagebreak}[]{#pg-126 .pagebreak}[]{#pg-127 .pagebreak}[]{#pg-128 .pagebreak}[]{#pg-129 .pagebreak}[]{#pg-130 .pagebreak}[]{#pg-131 .pagebreak}[]{#pg-132 .pagebreak}[]{#pg-133 .pagebreak}[]{#pg-134 .pagebreak}[]{#pg-135 .pagebreak}[]{#pg-136 .pagebreak}[]{#pg-137 .pagebreak}[]{#pg-138 .pagebreak}[]{#pg-139 .pagebreak}[]{#pg-140 .pagebreak}[]{#pg-141 .pagebreak}[]{#pg-142 .pagebreak}[]{#pg-143 .pagebreak}[]{#pg-144 .pagebreak}[]{#pg-145 .pagebreak}[]{#pg-146 .pagebreak}[]{#pg-147 .pagebreak}[]{#pg-148 .pagebreak}[]{#pg-149 .pagebreak}[]{#pg-150 .pagebreak}[]{#pg-151 .pagebreak}[]{#pg-152 .pagebreak}[]{#pg-153 .pagebreak}[]{#pg-154 .pagebreak}[]{#pg-155 .pagebreak}[]{#pg-156 .pagebreak}[]{#pg-157 .pagebreak}[]{#pg-158 .pagebreak}[]{#pg-159 .pagebreak}[]{#pg-160 .pagebreak}[]{#pg-161 .pagebreak}[]{#pg-162 .pagebreak}[]{#pg-163 .pagebreak}[]{#pg-164 .pagebreak}[]{#pg-165 .pagebreak}[]{#pg-166 .pagebreak}[]{#pg-167 .pagebreak}[]{#pg-168 .pagebreak}[]{#pg-169 .pagebreak}[]{#pg-170 .pagebreak}[]{#pg-171 .pagebreak}[]{#pg-172 .pagebreak}[]{#pg-173 .pagebreak}[]{#pg-174 .pagebreak}[]{#pg-175 .pagebreak}[]{#pg-176 .pagebreak}[]{#pg-177 .pagebreak}[]{#pg-178 .pagebreak}[]{#pg-179 .pagebreak}[]{#pg-180 .pagebreak}[]{#pg-181 .pagebreak}[]{#pg-182 .pagebreak}[]{#pg-183 .pagebreak}[]{#pg-184 .pagebreak}[]{#pg-185 .pagebreak}[]{#pg-186 .pagebreak}[]{#pg-187 .pagebreak}[]{#pg-188 .pagebreak}[]{#pg-189 .pagebreak}[]{#pg-190 .pagebreak}[]{#pg-191 .pagebreak}[]{#pg-192 .pagebreak}[]{#pg-193 .pagebreak}[]{#pg-194 .pagebreak}[]{#pg-195 .pagebreak}[]{#pg-196 .pagebreak}[]{#pg-197 .pagebreak}[]{#pg-198 .pagebreak}[]{#pg-199 .pagebreak}[]{#pg-200 .pagebreak}[]{#pg-201 .pagebreak}[]{#pg-202 .pagebreak}[]{#pg-203 .pagebreak}[]{#pg-204 .pagebreak}[]{#pg-205 .pagebreak}[]{#pg-206 .pagebreak}[]{#pg-207 .pagebreak}[]{#pg-208 .pagebreak}[]{#pg-209 .pagebreak}[]{#pg-210 .pagebreak}[]{#pg-211 .pagebreak}[]{#pg-212 .pagebreak}[]{#pg-213 .pagebreak}[]{#pg-214 .pagebreak}[]{#pg-215 .pagebreak}[]{#pg-216 .pagebreak}[]{#pg-217 .pagebreak}[]{#pg-218 .pagebreak}[]{#pg-219 .pagebreak}[]{#pg-220 .pagebreak}[]{#pg-221 .pagebreak}[]{#pg-222 .pagebreak}[]{#pg-223 .pagebreak}[]{#pg-224 .pagebreak}[]{#pg-225 .pagebreak}[]{#pg-226 .pagebreak}[]{#pg-227 .pagebreak}[]{#pg-228 .pagebreak}[]{#pg-229 .pagebreak}[]{#pg-230 .pagebreak}[]{#pg-231 .pagebreak}[]{#pg-232 .pagebreak}[]{#pg-233 .pagebreak}[]{#pg-234 .pagebreak}[]{#pg-235 .pagebreak}[]{#pg-236 .pagebreak}[]{#pg-237 .pagebreak}[]{#pg-238 .pagebreak}[]{#pg-239 .pagebreak}[]{#pg-240 .pagebreak}[]{#pg-241 .pagebreak}[]{#pg-242 .pagebreak}[]{#pg-243 .pagebreak}[]{#pg-244 .pagebreak}[]{#pg-245 .pagebreak}[]{#pg-246 .pagebreak}[]{#pg-247 .pagebreak}[]{#pg-248 .pagebreak}[]{#pg-249 .pagebreak}[]{#pg-250 .pagebreak}[]{#pg-251 .pagebreak}[]{#pg-252 .pagebreak}[]{#pg-253 .pagebreak}[]{#pg-254 .pagebreak}[]{#pg-255 .pagebreak}[]{#pg-256 .pagebreak}[]{#pg-257 .pagebreak}[]{#pg-258 .pagebreak}[]{#pg-259 .pagebreak}[]{#pg-260 .pagebreak}[]{#pg-261 .pagebreak}[]{#pg-262 .pagebreak}[]{#pg-263 .pagebreak}[]{#pg-264 .pagebreak}[]{#pg-265 .pagebreak}[]{#pg-266 .pagebreak}[]{#pg-267 .pagebreak}[]{#pg-268 .pagebreak}[]{#pg-269 .pagebreak}[]{#pg-270 .pagebreak}[]{#pg-271 .pagebreak}[]{#pg-272 .pagebreak}[]{#pg-273 .pagebreak}[]{#pg-274 .pagebreak}[]{#pg-275 .pagebreak}[]{#pg-276 .pagebreak}[]{#pg-277 .pagebreak}[]{#pg-278 .pagebreak}[]{#pg-279 .pagebreak}[]{#pg-280 .pagebreak}[]{#pg-281 .pagebreak}[]{#pg-282 .pagebreak}[]{#pg-283 .pagebreak}[]{#pg-284 .pagebreak}[]{#pg-285 .pagebreak}[]{#pg-286 .pagebreak}[]{#pg-287 .pagebreak}[]{#pg-288 .pagebreak}[]{#pg-289 .pagebreak}[]{#pg-290 .pagebreak}[]{#pg-291 .pagebreak}[]{#pg-292 .pagebreak}[]{#pg-293 .pagebreak}[]{#pg-294 .pagebreak}[]{#pg-295 .pagebreak}[]{#pg-296 .pagebreak}[]{#pg-297 .pagebreak}[]{#pg-298 .pagebreak}[]{#pg-299 .pagebreak}[]{#pg-300 .pagebreak}[]{#pg-301 .pagebreak}[]{#pg-302 .pagebreak}[]{#pg-303 .pagebreak}[]{#pg-304 .pagebreak}[]{#pg-305 .pagebreak}[]{#pg-306 .pagebreak}[]{#pg-307 .pagebreak}[]{#pg-308 .pagebreak}[]{#pg-309 .pagebreak}[]{#pg-310 .pagebreak}[]{#pg-311 .pagebreak}[]{#pg-312 .pagebreak}[]{#pg-313 .pagebreak}[]{#pg-314 .pagebreak}[]{#pg-315 .pagebreak}[]{#pg-316 .pagebreak}[]{#pg-317 .pagebreak}[]{#pg-318 .pagebreak}[]{#pg-319 .pagebreak}[]{#pg-320 .pagebreak}[]{#pg-321 .pagebreak}[]{#pg-322 .pagebreak}[]{#pg-323 .pagebreak}[]{#pg-324 .pagebreak}[]{#pg-325 .pagebreak}[]{#pg-326 .pagebreak}[]{#pg-327 .pagebreak}[]{#pg-328 .pagebreak}[]{#pg-329 .pagebreak}[]{#pg-330 .pagebreak}[]{#pg-331 .pagebreak}[]{#pg-332 .pagebreak}[]{#pg-333 .pagebreak}[]{#pg-334 .pagebreak}[]{#pg-335 .pagebreak}[]{#pg-336 .pagebreak}[]{#pg-337 .pagebreak}[]{#pg-338 .pagebreak}[]{#pg-339 .pagebreak}[]{#pg-340 .pagebreak}[]{#pg-341 .pagebreak}[]{#pg-342 .pagebreak}[]{#pg-343 .pagebreak}[]{#pg-344 .pagebreak}[]{#pg-345 .pagebreak}[]{#pg-346 .pagebreak}[]{#pg-347 .pagebreak}[]{#pg-348 .pagebreak}[]{#pg-349 .pagebreak}[]{#pg-350 .pagebreak}[]{#pg-351 .pagebreak}[]{#pg-352 .pagebreak}[]{#pg-353 .pagebreak}[]{#pg-354 .pagebreak}[]{#pg-355 .pagebreak}[]{#pg-356 .pagebreak}[]{#pg-357 .pagebreak}[]{#pg-358 .pagebreak}[]{#pg-359 .pagebreak}[]{#pg-360 .pagebreak}[]{#pg-361 .pagebreak}[]{#pg-362 .pagebreak}[]{#pg-363 .pagebreak}[]{#pg-364 .pagebreak}[]{#pg-365 .pagebreak}[]{#pg-366 .pagebreak}[]{#pg-367 .pagebreak}[]{#pg-368 .pagebreak}[]{#pg-369 .pagebreak}[]{#pg-370 .pagebreak}[]{#pg-371 .pagebreak}[]{#pg-372 .pagebreak}[]{#pg-373 .pagebreak}[]{#pg-374 .pagebreak}[]{#pg-375 .pagebreak}[]{#pg-376 .pagebreak}[]{#pg-377 .pagebreak}[]{#pg-378 .pagebreak}[]{#pg-379 .pagebreak}[]{#pg-380 .pagebreak}[]{#pg-381 .pagebreak}[]{#pg-382 .pagebreak}[]{#pg-383 .pagebreak}[]{#pg-384 .pagebreak}[]{#pg-385 .pagebreak}[]{#pg-386 .pagebreak}[]{#pg-387 .pagebreak}[]{#pg-388 .pagebreak}[]{#pg-389 .pagebreak}[]{#pg-390 .pagebreak}[]{#pg-391 .pagebreak}[]{#pg-392 .pagebreak}[]{#pg-393 .pagebreak}[]{#pg-394 .pagebreak}[]{#pg-395 .pagebreak}[]{#pg-396 .pagebreak}[]{#pg-397 .pagebreak}[]{#pg-398 .pagebreak}[]{#pg-399 .pagebreak}[]{#pg-400 .pagebreak}[]{#pg-401 .pagebreak}[]{#pg-402 .pagebreak}[]{#pg-403 .pagebreak}[]{#pg-404 .pagebreak}[]{#pg-405 .pagebreak}[]{#pg-406 .pagebreak}[]{#pg-407 .pagebreak}[]{#pg-408 .pagebreak}[]{#pg-409 .pagebreak}[]{#pg-410 .pagebreak}[]{#pg-411 .pagebreak}[]{#pg-412 .pagebreak}[]{#pg-413 .pagebreak}[]{#pg-414 .pagebreak}[]{#pg-415 .pagebreak}[]{#pg-416 .pagebreak}[]{#pg-417 .pagebreak}[]{#pg-418 .pagebreak}[]{#pg-419 .pagebreak}[]{#pg-420 .pagebreak}[]{#pg-421 .pagebreak}[]{#pg-422 .pagebreak}[]{#pg-423 .pagebreak}[]{#pg-424 .pagebreak}[]{#pg-425 .pagebreak}[]{#pg-426 .pagebreak}[]{#pg-427 .pagebreak}[]{#pg-428 .pagebreak}[]{#pg-429 .pagebreak}[]{#pg-430 .pagebreak}[]{#pg-431 .pagebreak}[]{#pg-432 .pagebreak}[]{#pg-433 .pagebreak}[]{#pg-434 .pagebreak}[]{#pg-435 .pagebreak}[]{#pg-436 .pagebreak}[]{#pg-437 .pagebreak}[]{#pg-438 .pagebreak}[]{#pg-439 .pagebreak}[]{#pg-440 .pagebreak}[]{#pg-441 .pagebreak}[]{#pg-442 .pagebreak}[]{#pg-443 .pagebreak}[]{#pg-444 .pagebreak}[]{#pg-445 .pagebreak}[]{#pg-446 .pagebreak}[]{#pg-447 .pagebreak}[]{#pg-448 .pagebreak}[]{#pg-449 .pagebreak}[]{#pg-450 .pagebreak}[]{#pg-451 .pagebreak}[]{#pg-452 .pagebreak}[]{#pg-453 .pagebreak}[]{#pg-454 .pagebreak}[]{#pg-455 .pagebreak}[]{#pg-456 .pagebreak}[]{#pg-457 .pagebreak}[]{#pg-458 .pagebreak}[]{#pg-459 .pagebreak}[]{#pg-460 .pagebreak}[]{#pg-461 .pagebreak}[]{#pg-462 .pagebreak}[]{#pg-463 .pagebreak}[]{#pg-464 .pagebreak}[]{#pg-465 .pagebreak}[]{#pg-466 .pagebreak}[]{#pg-467 .pagebreak}[]{#pg-468 .pagebreak}[]{#pg-469 .pagebreak}[]{#pg-470 .pagebreak}[]{#pg-471 .pagebreak}[]{#pg-472 .pagebreak}[]{#pg-473 .pagebreak}[]{#pg-474 .pagebreak}[]{#pg-475 .pagebreak}[]{#pg-476 .pagebreak}[]{#pg-477 .pagebreak}[]{#pg-478 .pagebreak}[]{#pg-479 .pagebreak}[]{#pg-480 .pagebreak}[]{#pg-481 .pagebreak}[]{#pg-482 .pagebreak}[]{#pg-483 .pagebreak}[]{#pg-484 .pagebreak}[]{#pg-485 .pagebreak}[]{#pg-486 .pagebreak}[]{#pg-487 .pagebreak}[]{#pg-488 .pagebreak}[]{#pg-489 .pagebreak}[]{#pg-490 .pagebreak}[]{#pg-491 .pagebreak}[]{#pg-492 .pagebreak}[]{#pg-493 .pagebreak}[]{#pg-494 .pagebreak}[]{#pg-495 .pagebreak}يصيح قائلا وهو منطلق « اذهب » إلى كاترینا إيفانوفنا » . « من أجل النقود ؟ لنطلب منها نقوداً ؟ » . « لا ، لم يكن ذلك من أجل طلب النقود » . « ليس عنده نقود ، ولا أقل من القليل ، وسأستقر طوال الليل وأروى في الأمر ، ويسعك أن تذهب ، وربما تلقاها ! » . وأكد لى مجيئك لى فى صباح الغد أكد ذلك . فعندى ما أقوله لك غداً ، هل تجىء ؟ » .
+
+« نعم » .
+
+« حينما تحضر ادع أنك جئت بدافع رغبتك فى السؤال عنى : ولا تذكر لأى إنسان ما قلته لك : لا تقل عنه عنه كلمة واحدة لإيفان »
+
+« حسن جداً » .
+
+« صحبتك السلامة يا ملاكى ، لقد وقفت إلى جانبى اليوم ، ولن أنسى لك هذا : وعندى ما سأقوله لك غداً ، ولكن لا بد لى من التفكير فيه » . « وكيف حالك الآن ؟ » .
+
+« سأمنض غداً من الفراش ، وأخرج سلما معافى » بينما كان أليوشا يعبر الساحة وجد إيفان جالساً على مقعد عند المدخل ، وكان مشغولا بكتابة شيء فى مذكرته بالقلم الرصاص ، وأخبر أليوشا إيفان أن أباه قد استيقظ ، وسمح له بالعودة إلى الدير لينام به . فوقف إيفان وقال بلهجة ودية « يسرنى أن ألقاك غداً » .
+
+فقال أليوشا « سأكون عند أسرة هوهولاكوف غداً وقد أكون عند كاترینا إيفانوفنا كذلك إذا لم أجدها الآن » .
+
+فقال إيفان وقد علت وجهه بسمة « ولكنك ذاهب إليها الآن مهما يكن من الأمر ، فشكراً لك ووداعاً » فارتبك أليوشا .
+
+« أحسبنى أفهم الآن السبب صيحاته وجانباً مما حدث قبل ذلك وقد سألك ديمترى الذهاب إليها وأن تقول لها ـ وهذا هو الواقع ـ إنه يودعها ؟ » . فأجابه أليوشا قائلا « كيف ينتهى يا أخى هذا الخلاف الفظيع بين الوالد وديمترى ؟ » . « لا يستطيع أحد أن يعرف عـ وجه التأكيد ، فقد ينتهى إلى لا شيء وقد يسفر عن نتيجة خفيفة ، وهذه المرأة كالوحش ، ومهما يكن من الأمر فان علينا أن نستبقى الرجل العجوز فى داخل المنزل ، ولا ندع ديمترى يدخل إليه » .
+
+« اسمح لى يا أخى أن أسألك شيئاً أكثر من ذلك ، فهل من حق أى إنسان أن ينظر إلى الناس ويحكم أيهم جدير بأن يعيش ؟ » . « ولماذا تدخل مسألة الجدارة ؟ إن المسألة بيت فيها بقلوب الناس على أسس أخرى أقرب إلى الطبيعة ، أما من ناحية الحقوق فمن له الحق في أن يريد ؟ » . « لمن من أجل موت إنسان آخر ؟ » .
+
+« وماذا لو كان من أجل موت إنسان آخر ؟ ولماذا يكذب الإنسان على نفسه ما دامت الناس جميعاً تعيش هكذا ، وربما ليس فى استطاعتهم أن يكونوا غير ذلك . أ تراك تشير إلى ما قلته توّاً ـ وهو أن أفعى تبتلع أفعى ؟ فى وهى هذه الحالة دعنى أسألك أتظنى مثل ديمترى قادراً على إراقة دم عيسوب وقتله ؟ » .
+
+« ماذا تقول يا إيفان ؟ إن هذه الفكرة لم تخطر لى قط ببال ، ولا أظن أن ديمترى أهلا لذلك كذلك » . فابتسم إيفان وقال « شكراً لك ولو على ذلك وحده ، وكن واثقاً من أنى سأدافع عنه دائماً ، ولكن في صميم رغبتى سأحتفظ لنفسى بحرية التفكير كاملة فى هذه الحالة ، فصحبتك السلامة إلى الغد ، فلا تدنى ولا تلحقنى بالأوغاد » .
+
+وتصافحا بحرارة لم يكن لهما بها سابق عهد ، وشعر أليوشا بأن أخاه قد خطا الخطوة الأولى للاقتراب منه ، وأنه من المؤكد لم يفعل ذلك إلا مدفوعاً بباعث محدد » وقد فصل لنا دستويفسكى فى هذا الفصل جانباً من []{#pg-496 .pagebreak}[]{#pg-497 .pagebreak}ونجيبه أخوه أليوشا « كلا إنى لن أقبل ذلك » .
+
+فرد إبقان قائلا « وهل تستطيع أن تسلم بفكرة أن الناس الذين تخلق من أجلهم الكون يوافقون على أن تكون سعادتهم قائمة على أساس دماء الضحية الصغيرة ؟ وأنهم يظلون سعداء إلى الأبد بعد قبول ذلك ؟ »
+
+وفى الفصل الخامس بكبير قضاة محكمة التفتيش يجعل دستويفسكى هذا القاضى الكبير يخاطب السيد المسيح قائلا « إن الإنسان بطبيعته أضعف وأحط مما اعتقدت ! فهل فى استطاعته أن يصنع ما صنعت ؟ إنك باحترامك الكبير للإنسان طلبت منه الكثير . ولقد أحببته أكثر مما أحببت نفسك ، ولو أنك قلت احترامك له بلسأنه أقل مما سألت ، ولكان هذا أقرب إلى الحب لأن العبء فى هذه الحالة سيكون أخف حملا » .
+
+وفى فصل عنونه « سيدة ضعيفة الاعتقاد » يذكر لنا دستويفسكى محادثة بين الأب زوسيا والسيدة المشار إليها ، وكان أليوشا حاضر تلك المحادثة .
+
+يقول الأب زوسيا مخاطباً السيدة التى تقدمت ابنتها فى سبيل الشفاء بتأثيره الروحى ( الشعور بالراحة ليس الشفاء الكامل ، وقد يجيء من أسباب مختلفة ، ولكن إذا كان هناك أي برء فهو من إرادة الله ، وكله من الله » والتفت إلى أحد الرهبان الذين جاءوا لزيارته والتزود من نفحاته الروحية وقال له « إنى لا أرى الزائرين إلا فى الفينة بعد الفينة . وإنى أعانى المرض وأعرف أن أيامي معدودة » .
+
+فصاحت السيدة قائلة « لا . لا . لن يأخذك الله منا ، ستعيش طويلا ، أمامك زمن طويل ، ومم تشكو ؟ يبدو لى أن صحتك جيدة وأنك مستبشر سعيد » .
+
+« إن حالتى اليوم حسنة بصورة تفوق المألوف ، ولكنني أعلم أن هذا التحسن لن يظل طويلا ، وأنا خبير بالمرض الذى أعانيه ، فإذا كنت أبدو لك سعيداً فلن يكون فى وسعك أن تحدثينى بشىء أبعث على ارتياحى من ذلك القول ، لأن الإنسان قد خلق للسعادة ، وأى إنسان سعيد سعادة تامة من حقه أن يقول لنفسه إنى أنفذ إرادة الله على الأرض » وبجميع الصالحين الأبرار والقديسين والشهداء الأطهار كانوا سعداء » .
+
+فصاحت السيدة قائلة « كيف تقول ذلك ! إنها كلمات جريئة وسامية ! - ويبدو أنك تنفذ إلى أعماق القلوب بكلماتك . ومع ذلك فأين السعادة ؟ أين هي ؟ ومن ذا الذى يستطيع أن يقول عن نفسه إنه سعيد ؟ ومن ذا الذى سمحت لنا بأن نراك مرة أخرى اليوم فدعنى أفضي إليك مما لم أستطع أن أنطق به فى المرة الأخيرة . ما لم أجرؤ على قوله . ولقد شقيت به طويلا . إنى أعانى الشقاء فاغفر لى ، إنى أعانى الشقاء ! »
+
+وفى غمرة من حماسة الشعور ضمت يديها بعضهما إلى بعض أمامه .
+
+« مما تشقين بوجه خاص ؟ » .
+
+« أشقى . . . . من ضعف اليقين » .
+
+« ضعف اليقين بالله ؟ » .
+
+« كلا . كلا ، إنى لا أجرؤ حتى على التفكير فى ذلك ، ولكن الحياة الأخرى — إنها لغز محير ! ولا أحد . لا أحد يستطيع أن يحل هذا اللغز ، فاستمع لى ! إنك تشفى النفوس ، ولك خبرة واسعة بالروح الإنسانية ، وبطبيعة الحال لا أجرؤ أن أنتظر منك أن تنتظر منك أن تصدق حديثي خدافره ، ولكنني أؤكد لك بعرف إنى جادة فيما أقول ، إن فكرة الحياة وراء القبر تحررني وتذهلني إلى حد الألم وإثارة الرعب ، ولست أدرى لمن ألجأ ، ولم أقدم على ذلك طوال حياتى ، ولكنني الآن أجسر على سؤالك ، فبالله ! ماذا تظن بى الآن ؟ »
+
+وضمت يديها بعضهما إلى بعض .
+
+فقال لها زوسيا « لا تكربك معرفة رأي عنك ، إنى أعتقد أنك مخلصة فيما تعانين من شقاء » .
+
+« إنى أشكرك شكراً جزيلا ! وأنت ترى أننى أغمض عينى وأسأل نفسى إذا كان أي إنسان عنده []{#pg-498 .pagebreak}يقين من أين أتاه هذا اليقين ؟ وحينئذ يقولون إنه جميعه يأتى من الخوف الخوف تلقاء مظهر الطبيعة الذى يهددنا ، وإنه لا نصيب له من الحقيقة ، وأقول لنفسى « ماذا لو كنت مؤمنة مؤمنة طوال حياتى حياتى وحيماً ممضى بى الموت لا يكون هناك سوى الأشواك النامية فوق قبرى » كما قرأت لأحد المؤلفين ، إنه شيء فظيع ، فكيف أستطيع استرداد يقينى ؟ لقد اعتقدت حينما كنت طفلة صغيرة اعتقاداً آلياً بدون تفكير فى أى شيء ، فكيف ، كيف يثبت الإنسان هذا الاعتقاد ؟ لقد جئت لأضع روحى أمامك وأسألك عنها ؛ ولو أنى تركت هذه الفرصة تفلت من فلان يستطيع أجد طوال حياتى أن تجيبنى ، فكيف أثبت هذا اليقين ؟ وكيف أقنع نفسى ؟ آه ما أشقانى ! إنى أقف وأنظر حولى وأرى أنه قل من يعنيه ذلك ، ولا أحد يتعب باله بالتفكير فى ذلك ، وأنا وحدى التى لا تطيق هذا الموقف ، إنه شيء مميت مهلك ! » .
+
+« من غير شك شك ، ولكن لا سبيل إلى إثباته ولو أنه من الممكن أن تقتنعي به » .
+
+« كيف ؟ » .
+
+« عن طريق تجربة الحب الفعال ، فحاولى أن تحبى جيرانك حباً فعالاً لا يمسه لغوب . وكلما تقدمت فى طريق الحب ازداد تأكدك من حقيقة الله وخلود روحك ، وإذا وصلت إلى نسيان النفس الكامل فى حبك لجيرانك فإنك ستؤمنين إيماناً لا يشوبه شك ولا يستطيع الشك أن يتسرب إلى نفسك . وقد جرب ذلك ، وهو مؤكد » .
+
+« فى الحب الفعال ؟ ان هناك مسألة أخرى - وأية مسألة ! أرجو أن تصدقنى إذا قلت لك إن حبى للإنسانية قد وصل إلى حد أننى أحلم دائماً بأن أنزل عن كل ما أملك لها وأترك ابنى ليز ، وأنتظم فى سلك أخوات الرحمة ، وفى تلك اللحظات أشعر بأننى أوتيت من القوة ما أستطيع أن أتغلب به على العقبات كلها ، ولا يخيفنى فى تلك اللحظات الجراح والقروح ، فإنى أضمدها وأنظفها بيدى ؛ وسأمرض المصاب وسأكون مستعدة لتقبيل أمثال هذه الجراح » .
+
+« إنه كثير وحسن أن يمتلئ عقلك بأمثال هذه الأحلام لا بغيرها ، وفى بعض الأحيان ستفعلين الخير فى الواقع دون أن تدرى » .
+
+« نعم ، ولكن هل أستطيع طويلا مثل هذه الحياة ؟ » واسترسلت فى الحديث وقد اشتد تحمسها إلى حد الهوس « هذه هى المسألة الرئيسية ، هذه هى المسألة التى تؤلم نفسى أشد الألم ، وإنى أغمض عينى وأسأل نفسى « هل تبقى طويلا بهذا السبيل ؟ وإذا كان المريض الذى تغسل جراحه لا يتلاقاك بالشكر ومعرفة الجميل وإنما أتعبك بنزواته دون أن يقدر خدماتك الخيرة وشرع فى انتقاصك وألقى عليك أوامره فى خشونة وتقدم للسلطات العليا بالشكوى بشكوى منك ( وهو ما يحدث فى أغلب الأوقات حينما يقاسى الناس الآلام الشديدة ) فاذا يكون إذن ؟ فهل تظل محظظاً تحبك أو تتخلى عنه ؟ أتعلَم أنني انتبهت وأنا أشعر بالخوف والنفور إلى تلك النتيجة ، وهى : أنه إذا كان هناك شيء ممحو حبى للإنسانية فإنه نكران الجميل ، وموجز القول إنى خادم مأجور أنتظر الأجر فى الحال ، أى المدح وأن أتقاضى ثمن الحب حباً ، وخلافاً لذلك لا أكون أهلا لأن أحب أى إنسان » .
+
+واعترتها نوبة تعنيف للنفس ، وختمت حديثها بنظرة إلى شيخ الكنيسة تم تم على الاعتزاز ام المتحدى .
+
+فقال الأب زوسبما « إنها تشبه القصة التى حدثنى عنها مرة أحد الأطباء ، وكان رجلا قد تقدمت به السن وكان من غير شك شك رجلا بارعاً ، وكان يتحدث فى صراحة مثل صراحتك ولو أنها كانت فى قالب الهزل ولكن الهزل المشوب بالمرارة ، كان يقول « إنى أحب الإنسانية ولكنى أعجب من نفسى ، فكلما ازداد حبى للإنسانية بوجه عام قل حبى للإنسان بوجه خاص ، []{#pg-499 .pagebreak}وكثير أما توصفت فى أحلامى إلى عمل مشروعات حاسية خدمة الإنسانية ، وربما كنت أواجه الصلب فى الواقع إذا استلزم الأمر ذلك فجأة ، ومع ذلك فإنى لا أستطيع أن أعيش مع أى إنسان فى حجرة واحدة مدة يومين كما أعرف ذلك بالتجربة ، وحالما يقترب منى أى إنسان تزعج شخصيته سرورى بنفسى وتحد من حريتى وفى مدى أربع وعشرين ساعة أبداً أكره خير الناس وأحسنهم ، أكره واحداً لأنه بطيل الإقبال على الطعام وأكره الآخر لأنه مصاب ببرد ولا ينفاك يتمخط من أنفه ، وأناصب الناس العداء فى اللحظة التى يقتربون فيها منى ، ولكن كان يحدث دائماً أننى كنت كلما ازددت كراهة للناس ازداد أفراداً اذ داد حبى للإنسانية وتحمسى لها » .
+
+« ولكن ما العمل ؟ ماذا يفعل الإنسان فى مثل هذه الحالة ؟ أعليه أن بيأس ؟ » .
+
+« كلا يكفى شعورك بالضيق من هذه الحالة . فافعلى ما تستطيعين وكيف سيضاف إلى حسابك ، وقد حدثت فى نفسك أشياء كثيرة ما دمت قد استطعت أن تعرفى نفسك بهذا العمق وهذا الإخلاص : فلو أنك كنت تتحدثين إلى مثل هذا الإخلاص لمجرد أن تظفرى باستحسانى لصرخت راحتك كما فعلت فى التو واللحظة فإنك بطبيعة الحال لن تصلى إلى شيء فى طريق تحقيق الحب الحقيقى ، ولا يكون الأمر أكبر من أحلام وتذهب حياتك جميعها كما يزول الطيف ، وفى مثل هذه الحالة ستمنتعين عن التفكير فى الحياة الأخرى كذلك ، وفى النهاية تهدأ نفسك على أية صورة من الصور » .
+
+« لقد سحقتني ! الآن ليس غير وأنت تتحدث أدركت أننى أنى حقيقة كنت أسعى لأنال منك استحسان صراحتى حينما قلت لك إنني لا أستطيع احتمال نكران الجميل ، لقد كشفت لى نفسى ، لقد نفذت بنظراتك إلى أعماقى وأوضحت لى نفسى ! » .
+
+« أتقولين الحق ؟ » حسن ، الآن بعد هذا الاعتراف أعتقد أنك مخلصة وأناك طيبة القلب ، فإذا لم تصلى إلى السعادة فاذكرى دائماً أنك سائرة فى الطريق الصحيح ، وابذلى جهدك فى عدم التنحى عنه . وتجنبى الزيف قبل كل شيء . كل ضروب الزيف وخاصة عدم الصدق مع نفسك ، وراقبي ما تتورطين فيه من الخداع وتأمليه فى كل ساعة وكل لحظة ، وتخماضى الاحتقار ، احتقارك للغير واحتقارك لنفسك ، وما يبدو لك سيئاً فى داخل نفسك سيزداد صفاء ونقاء كلما راقبته فى نفسك ، وتجنبى الخوف كذلك ، ولو أن الخوف لا يكون سوى نتيجة لكل لون من ألوان الزيف ، ولا تخشى خور العزيمة فى الوصول إلى الحب ، ولا يشتد بك الخوف حتى من أعمالك السيئة ، ويؤسفنى أنى لا أستطيع أن أواسيك بأكثر من هذه الكلمات لأن العمل بالحب شيء قاسفظيع إذا كان قرن بالحب فى الأحلام . فالحب فى الأحلام شديد الخرص على العمل المباشر . العمل الذى يهم بمشهد من الجميع ، والناس مستعدون لأن بوجود حياتهم إذا لم يطل أمد المحنة ومرت مسرعة والجميع يشهدونها ويهللون لها كأنهم على المسرح . ولكن الحب الفعال عمل جلد . وهو كذلك عند بعض الناس ربما كان علماً كاملاً ، وفى أنبأ أنك حينما ترين وقد أخذك الروع أنك برغم ما بذلت من الجهود قد ابتعدت عن الهدف الذى قصدت إليه بدلا من الاقتراب منه ـ ففى تلك اللحظة نفسها أنبأ نفسها بأنك ستصلين إليه وترين بوضوح قوة المولى المعجزة الذى كان طوال الوقت يرعاك يحبه ويسدد خطواتك فى الخفاء ، وسامحينى لأننى لا أستطيع البقاء معك أكبر من ذلك ، إنهم ينتظروننى ، أستودعك الله » .
+
+كانت السيدة تذرف الدموع .
+« لز ، لز ! باركها - باركها » .
+فقال الأب زوسبما مداعباً « إنها غير جديرة بأن تحب ، لقد لحظت شقاوتها طوال الوقت ، ولماذا []{#pg-500 .pagebreak}كنت تضحكن من أليوشا ؟ » .
+والواقع أن ليز كانت خلال ذلك الحديث مشغولة بالسخرية من أليوشا ، فقد لحظت من قبل أن أليوشا غلب عليه الحياء ، وحاول أن يتحاشى النظر إليها ، وقد وجدت فى ذلك موضوعاً للفكاهة والتسلية ، وانتظرت عامدة أن تلتقى عيناهما ، ولما عجز أليوشا عن احتمال نظرتها المتعمدة اضطر اضطراراً إلى أن ينظر إليها فجأة فضحكت فى وجهه ضحكة الفائزة المنتصرة ، فازداد ارتباك أليوشا وأظهر استياءه ، وأخيراً حول وجهه عنها وتوارى خلف ظهر شيخ الكنيسة ، وبعد دقائق قليلة جذبته ثانية نفس القوة الى لا تقاوم فحول وجهه ليرى هل هي لا تزال موجهة إليه نظراتها أو أنها انصرفت عنه ، ووجدها تكاد تكون مائلة من مقعدها لتظل ناظرة إليه متلهفة على مبادلته إياها النظر ، ولما التقت عيناهما ضحكت فلم يستطع الأب زوسيما إلا أن يقول « لماذا تسخرين منه هكذا أيتها الفتاة الشقية ؟ » .
+
+وفجأة وعلى غير انتظار احمر وجهها وجهها خجلا ، وأبرقت عيناها وظهرت على وجهها علامات الجد والاهتمام ، وأخذت تتحدث فى سرعة وعصبية وبصوت فيه حاسة وغضب قائلة « لماذا نسى كل شيء ؟ لقد كان يحملنى وأنا طفلة صغيرة ، وكنا نلعب معاً ، وكان يأتى إلينا ليعلمنى القراءة ، أتعرف ذلك ، ومندذ سنتين مضتا حينا ذهب بعيداً قال لى إنه لن ينسانى وإنا صديقان إلى الأبد إلى الأبد ! والآن أراه متخوفاً منى ، أحسبنى محاولة أن أكله ؟ لماذا لا يريد الاقتراب منى ؟ لماذا لا يتكلم ؟ ولماذا لا يحضر لزيارتنا ؟ إنك لا تمنعه عن القيام بذلك ، فنحن نعرف أنه يذهب إلى كل مكان ، وليس من اللائق أن أدعوه للزيارة ، وكان يجب عليه أن يكون هو البادئ بالتفكير فيها إذا كان لم ينسى بعد ، والآن هو يسعى لإنقاذ روحه ! فليماذا ألبستموه هذا الجلباب الواسع ؟ إنه إذا جرى سيتعثر ويسقط » .
+
+وفجأة خبأت وجهها فى يدها وأخذت تصحك ضحكة عصبية طويلة مسموعة لا سبيل إلى مقاومتها . وقد أصغى إليها شيخ الكنيسة باسم الوجه . وباركها فى رفق وحنان ، وبينما كانت تقبل يده ضغطت يدها عليها ورفعتها إلى عينيها وبكت .
+« لا تغضب منى ، إنى ساذجة ولا أصلح لشيء ، وربما كان أليوشا على حق ، ربما كان مصيباً الصواب كله فى عدم رغبته فى زيارتنا لترى فتاة تثير الضحك »
+فقال شيخ الكنيسة « أوؤكد لك أنى سأرسله » .
+
+وقد أجرى دستويفسكى الكثير من أفكاره ونجاحاته على لسان الأب زوسيما وهو من الشخصيات البارزة فى روايته العظيمة ، من قبيل ذلك حديث زوسيما عن العلم فى العالم الحديث وتأثيره فى إضعاف الناحية الروحية فى الفصل الثالث من الكتاب السادس وذلك حيث يقول عن معاصريه « عندهم العلم ولكن فى العلم لا شيء سوى ما هو موضوع للحواس ، فالعالم الروحى والجزء الأسمى من كيان الإنسان ينبذ برمته ويحذف بنوع من الانتصار بل بشيء من الكراهة ، فقد أعلنت الدنيا عهد سيادة الحرية وخاصة فى العهد الأخير ، ولكن ماذا نرى فى هذه الحرية التى يتحدثون عنها ؟ ليس فيها سوى العبودية وهلاك النفس . لأن الدنيا تقول « عندك رغبات ورغبات ولذلك اعمل على إشباعها لأن لك من الحقوق فى ذلك مثل ما لأغنى الناس وأقواهم نفوذاً ، ولا تخش تخش إشباع هذه الرغبات بل اعمل على مضاعفة رغباتك » هذه هي الزرعة الجديدة السائدة فى العالم ، وهم يرون الحرية فى ذلك ، ولكن ما الذى يسفر عنه حق مضاعفة الرغبات ؟ عند الأغنياء العزلة والانتحار الروحى وعند الفقراء الحسد والقتل لأنهم أعطيت لهم حقوق ولكن لم يبصروا بالوسائل التى يسدون بها حاجاتهم ، وهم يزعمون أن العالم يزداد اتحاداً وترابطاً فى مجتمع أخوى لأنه قهر المسافات ، وطوى الأبعاد ، وأطلق الأفكار محلقة فى الهواء ، ولكن وا أسفاه لا يمكن الوثوق بمثل .
+
+[]{#pg-501 .pagebreak}هذه الرابطة الجماعية ، فتفسر الناس للحرية على أنها الإشباع المضاعف السريع للرغبات يجعلهم يشوهون طبيعتهم ، لأن ذلك ينمى فيهم رغبات طائشة رعناء وعادات سيئة ، وأوهاماً مضحكة ، فهم لا يعيشون . إلا للحسد المتبادل وللترف وحب المظاهر ، وستكون عندهم حفلات العشاء والزيارات والعربات والمناصب والدرجات والخدم والحشم فى رأيهم من المستلزمات التى يصحى من أجلها بالشرف والشعور الإنساني ، بل سينتحر الناس إذا عجزوا عن إشباع هذه الرغبات ، ونرى هذا الشيء نفسه بين الذين لا يعدون من الأغنياء فى حين أن الفقراء سيغرقون حاجتهم الى لم تشبع فى العكوف على الشراب ، ولكن سرعان ما يشربون الدماء بدلا من النبيذ ، وهم مسوقون إلى ذلك ، واسأل هل مثل هؤلاء الناس نحاس أحرار ؟ وأعرف أحد « أبطال الحرية » وقد أخبرني هو أخبرنى هو أنه حينما حرم في السجن من الطباق ووصل به الضيق وسوء الحال إلى حد أنه خان القضية التى نصب نفسه مدافعاً عنها من أجل الحصول على الطباق ! ومثل مثل هذا الرجل يقول « إننى أجاهد من أجل قضية الإنسانية » .
+
+فكيف يستطيع مثل هذا الإنسان الجهاد ؟ وماذا يصلح له ؟ ربما كان قادراً على أن يقوم ببعض الأعمال السريعة ولكنه لا يستطيع أن يثبت طويلا ، فلا عجب أن أمثاله بدلا من أن يظفروا بالحرية قد وقعوا في شرك العبودية وبدلا من أن حلموا بقضية الحب الأخوى واتحاد الإنسانية قد ارتطموا في حمأة الخلاف والعزلة كما حدثني الزائر الغامض وأستاذي في شبابي ، ولذلك نرى فكرة خدمة الإنسانية والحب الأخوى وتضامن النوع البشرى قد أخذت تضعف وتتضاءل في العالم ، وحقيقة إن هذه الفكرة تتناول في بعض الأوقات بالاحتقار والاستنكار ، لأنه كيف يستطيع الإنسان الخلاص من مألوف عاداته ؟ وماذا يصبر إليه أمره إذا كان أسراً لعادة إشباع رغباته العديدة التى خلقها لنفسه ؟ إنه في عزلة فماذا يعنيه من شؤون باقي الإنسانية ؟ لقد نجحوا في جمع حشد أعظم من الأشياء ولكن الابهاج في الدنيا قد ولى مدبراً . .
+
+ولكن دوستويفسكى مع ذلك كله لا يفقد الأمل ويقول عن لسان زوسيما « هل يمكن أن يكون حلماً أن الإنسان في النهاية وخاتمة المطاف سيجد سروره وارتياحه في الأعمال المضيئة والصنائع الإنسانية لا في المتع الوحشية شأنه في هذا العصر وفى النهم والفسوق والتظاهر والمفاخرة والحسد المتبادل ؟ إنى أعتقد اعتقاداً راسخاً أن ذلك ليس حلماً وأن الوقت قد حان ، والناس يضحكون ويتساءلون متى يجيء هذا الوقت وهل يبدو أنه قادم ؟ إنى أعتقد أنه بعون المسيح سوف نحقق هذا الشيء العظيم . وكم من الأفكار الكثيرة التى غشيت الأرض في تاريخ الإنسانية كانت لا تخطر بالبال قبل ظهورها بعشر سنوات ! وحينما جاءوا آواؤها وحل ميعاد ظهورها قدمته وانتشرت في أنحاء الأرض جميعا » .
+
+وقد وجهت تهمة قتل فيدور كارا مـازوف إلى ابنه ديمتري ، وكانت هناك شبهات وقرائن كثيرة تدعو إلى هذا الاتهام ، ولكن الواقع أن القاتل الحقيقي كان ابنه غير الشرعى سمردياكوف . وفى سرد أحداث الرواية بعد إلقاء القبض على ديمتري متهماً بقتل أبيه تتجلى براعة دوستويفسكى الكاتب الروائى وخصب خياله ووصفه للمحاكمة وإجراءاتها ودفاع المحامى فيتيكوفنش عن المتهم غاية في قوة التصوير ودقة التعبير .
+
+وقد اتهم دوستويفسكى بالرجعية حيناً من الزمن في روسيا السوفيتية وأعرض عن كتبه وأغفل ذكره . ولكن في السنوات الأخيرة خفت حدة نقده والتحامل عليه . وفسرت اتجاهاته الدينية تفسيراً فاسفياً ومهما يكن من الأمر فإنه لم يكن من المناسب أن يتنكر النقاد الروسيون لمفخرة من مفاخر أدبهم القومى ولروائي فنان وفيلسوف يضعه نقاد الغرب في مصاف أمثال شكسبير وهومر وغيرهما من القمم العالية في الأدب الإنساني .
+
+[]{#pg-502 .pagebreak}[]{#pg-503 .pagebreak}آراء أهل المدينة الفاضلة
+الفارابي ... ... ...
+
+الأحمر والأسود
+ستاندال ... ... ...
+
+الأخوة كارامازوف
+دستويفسكي ... ... ...
+
+استخراج الأوتار في الدائرة
+
+# الكتب
+
+رقم الصفحة | الصفحة
+--- | ---
+التطور الخالق ... برجسون ... ٥٦٩-٥٨٢ ... ٤٣٦-٤٥٣
+جين اير ... ٥٣١-٥٤٨ ... ٦٦٧-٦٨٠
+شارلوت برونتي ... ١٠٠٨-٩٩١ ... ٧٤٧-٧٦٠
+حسن المحاضرة
+البيروني ... ١٥٤-١٦٩
+
+أصل الأنواع
+داروين ... ٩٧٣-٩٩٠
+
+إضافات إلى جيولوجية وحفريات الصحراء الليبية
+تستل ... ٥٠-٥٦
+
+اعترافات القديس أوغسطين
+القديس أوغسطين ... ٦٤٥-٦٦٦
+
+أليس في أرض العجائب
+لويس كارول ... ٣١٨-٣٢٩
+أندرومـاك
+راسين ... ٢٧٠-٢٩٦
+
+أوديب ملكاً
+سوفوكليس ... ٩٥٦-٩٧٢
+
+الأورجانـون الجديد
+فرانسيس بيكون ... ٨٨١-٩٠٥
+
+أين اكبری
+أبو الفضل بن مبارك ... ٤٦٨-٤٨٢
+بابرنامه
+ظهير الدين محمد بابر ... ١٨١-١٩٣
+
+البخيل
+موليير ... ٢٢٨-٢٤٥
+
+البستان
+سعدى الشيرازي ... ٨٣٣-٨٤٨
+
+بول وفرجيني
+برناردان دي سان بيير ... ٣٧٣-٣٩٠
+السيوطي ... ٦٣٠-٦٤٤
+
+حكايات الأخوين جريم
+الأخوين جريم ... ٦١١-٦١٩
+
+الخواطر
+باسكال ... ٧٥-٨٥
+دافيد كوبرفيلد
+تشارلس ديكنز ... ٥٨٣-٥٩٦
+
+دروس في الفلسفة الوضعية
+أوجست كونت ... ٣-١٣
+
+ديوان شعر كاتوللوس
+كاتوللوس ... ٧٣٢-٧٤٦
+
+ذهب مع الريح
+مرجريت ميتشل ... ٤٥٤-٤٦٧
+
+رحلة ماركو بولو
+ماركو بولو ... ٨٠٤-٨١٥
+
+رسالة التوحيد
+محمد عبده ... ٧٦١-٧٧٩
+
+رسالة الغفران
+أبو العلاء ... ٤٢١-٤٣٥
+
+سراج الملوك
+الطرطوشي ... ٧٩٢-٨٠٣
+سقط الزند
+أبو العلاء المعري ... ٥٧-٧٤
+
+سقوط الإمبراطورية الرومانية
+جيبون ... ٨٦-١٠٠
+
 # السلوك
 المقريزي
 
@@ -251,7 +444,7 @@
 
 # المؤلفون
 
-[]{#pg-12 .pagebreak}[]{#pg-13 .pagebreak}[]{#pg-14 .pagebreak}[]{#pg-15 .pagebreak}[]{#pg-16 .pagebreak}[]{#pg-17 .pagebreak}[]{#pg-18 .pagebreak}[]{#pg-19 .pagebreak}[]{#pg-20 .pagebreak}[]{#pg-21 .pagebreak}[]{#pg-22 .pagebreak}[]{#pg-23 .pagebreak}[]{#pg-24 .pagebreak}[]{#pg-25 .pagebreak}[]{#pg-26 .pagebreak}[]{#pg-27 .pagebreak}[]{#pg-28 .pagebreak}[]{#pg-29 .pagebreak}[]{#pg-30 .pagebreak}[]{#pg-31 .pagebreak}[]{#pg-32 .pagebreak}[]{#pg-33 .pagebreak}[]{#pg-34 .pagebreak}[]{#pg-35 .pagebreak}[]{#pg-36 .pagebreak}[]{#pg-37 .pagebreak}[]{#pg-38 .pagebreak}[]{#pg-39 .pagebreak}[]{#pg-40 .pagebreak}[]{#pg-41 .pagebreak}[]{#pg-42 .pagebreak}[]{#pg-43 .pagebreak}[]{#pg-44 .pagebreak}[]{#pg-45 .pagebreak}[]{#pg-46 .pagebreak}[]{#pg-47 .pagebreak}[]{#pg-48 .pagebreak}[]{#pg-49 .pagebreak}[]{#pg-50 .pagebreak}[]{#pg-51 .pagebreak}[]{#pg-52 .pagebreak}[]{#pg-53 .pagebreak}[]{#pg-54 .pagebreak}[]{#pg-55 .pagebreak}[]{#pg-56 .pagebreak}[]{#pg-57 .pagebreak}[]{#pg-58 .pagebreak}[]{#pg-59 .pagebreak}[]{#pg-60 .pagebreak}[]{#pg-61 .pagebreak}[]{#pg-62 .pagebreak}[]{#pg-63 .pagebreak}[]{#pg-64 .pagebreak}[]{#pg-65 .pagebreak}[]{#pg-66 .pagebreak}[]{#pg-67 .pagebreak}[]{#pg-68 .pagebreak}[]{#pg-69 .pagebreak}[]{#pg-70 .pagebreak}[]{#pg-71 .pagebreak}[]{#pg-72 .pagebreak}[]{#pg-73 .pagebreak}[]{#pg-74 .pagebreak}[]{#pg-75 .pagebreak}[]{#pg-76 .pagebreak}[]{#pg-77 .pagebreak}[]{#pg-78 .pagebreak}[]{#pg-79 .pagebreak}[]{#pg-80 .pagebreak}[]{#pg-81 .pagebreak}[]{#pg-82 .pagebreak}[]{#pg-83 .pagebreak}[]{#pg-84 .pagebreak}[]{#pg-85 .pagebreak}[]{#pg-86 .pagebreak}[]{#pg-87 .pagebreak}[]{#pg-88 .pagebreak}[]{#pg-89 .pagebreak}[]{#pg-90 .pagebreak}[]{#pg-91 .pagebreak}[]{#pg-92 .pagebreak}[]{#pg-93 .pagebreak}[]{#pg-94 .pagebreak}[]{#pg-95 .pagebreak}[]{#pg-96 .pagebreak}[]{#pg-97 .pagebreak}[]{#pg-98 .pagebreak}[]{#pg-99 .pagebreak}[]{#pg-100 .pagebreak}[]{#pg-101 .pagebreak}[]{#pg-102 .pagebreak}[]{#pg-103 .pagebreak}[]{#pg-104 .pagebreak}[]{#pg-105 .pagebreak}[]{#pg-106 .pagebreak}[]{#pg-107 .pagebreak}[]{#pg-108 .pagebreak}[]{#pg-109 .pagebreak}[]{#pg-110 .pagebreak}[]{#pg-111 .pagebreak}[]{#pg-112 .pagebreak}[]{#pg-113 .pagebreak}[]{#pg-114 .pagebreak}[]{#pg-115 .pagebreak}[]{#pg-116 .pagebreak}[]{#pg-117 .pagebreak}[]{#pg-118 .pagebreak}[]{#pg-119 .pagebreak}[]{#pg-120 .pagebreak}[]{#pg-121 .pagebreak}[]{#pg-122 .pagebreak}[]{#pg-123 .pagebreak}[]{#pg-124 .pagebreak}[]{#pg-125 .pagebreak}[]{#pg-126 .pagebreak}[]{#pg-127 .pagebreak}[]{#pg-128 .pagebreak}[]{#pg-129 .pagebreak}[]{#pg-130 .pagebreak}[]{#pg-131 .pagebreak}[]{#pg-132 .pagebreak}[]{#pg-133 .pagebreak}[]{#pg-134 .pagebreak}[]{#pg-135 .pagebreak}[]{#pg-136 .pagebreak}[]{#pg-137 .pagebreak}[]{#pg-138 .pagebreak}[]{#pg-139 .pagebreak}[]{#pg-140 .pagebreak}[]{#pg-141 .pagebreak}[]{#pg-142 .pagebreak}[]{#pg-143 .pagebreak}[]{#pg-144 .pagebreak}[]{#pg-145 .pagebreak}[]{#pg-146 .pagebreak}[]{#pg-147 .pagebreak}[]{#pg-148 .pagebreak}[]{#pg-149 .pagebreak}[]{#pg-150 .pagebreak}[]{#pg-151 .pagebreak}[]{#pg-152 .pagebreak}[]{#pg-153 .pagebreak}[]{#pg-154 .pagebreak}[]{#pg-155 .pagebreak}[]{#pg-156 .pagebreak}[]{#pg-157 .pagebreak}[]{#pg-158 .pagebreak}[]{#pg-159 .pagebreak}[]{#pg-160 .pagebreak}[]{#pg-161 .pagebreak}[]{#pg-162 .pagebreak}[]{#pg-163 .pagebreak}[]{#pg-164 .pagebreak}[]{#pg-165 .pagebreak}[]{#pg-166 .pagebreak}[]{#pg-167 .pagebreak}[]{#pg-168 .pagebreak}[]{#pg-169 .pagebreak}[]{#pg-170 .pagebreak}[]{#pg-171 .pagebreak}[]{#pg-172 .pagebreak}[]{#pg-173 .pagebreak}[]{#pg-174 .pagebreak}[]{#pg-175 .pagebreak}[]{#pg-176 .pagebreak}[]{#pg-177 .pagebreak}[]{#pg-178 .pagebreak}[]{#pg-179 .pagebreak}[]{#pg-180 .pagebreak}[]{#pg-181 .pagebreak}[]{#pg-182 .pagebreak}[]{#pg-183 .pagebreak}[]{#pg-184 .pagebreak}[]{#pg-185 .pagebreak}[]{#pg-186 .pagebreak}[]{#pg-187 .pagebreak}[]{#pg-188 .pagebreak}[]{#pg-189 .pagebreak}[]{#pg-190 .pagebreak}[]{#pg-191 .pagebreak}[]{#pg-192 .pagebreak}[]{#pg-193 .pagebreak}[]{#pg-194 .pagebreak}[]{#pg-195 .pagebreak}[]{#pg-196 .pagebreak}[]{#pg-197 .pagebreak}[]{#pg-198 .pagebreak}[]{#pg-199 .pagebreak}[]{#pg-200 .pagebreak}[]{#pg-201 .pagebreak}[]{#pg-202 .pagebreak}[]{#pg-203 .pagebreak}[]{#pg-204 .pagebreak}[]{#pg-205 .pagebreak}[]{#pg-206 .pagebreak}[]{#pg-207 .pagebreak}[]{#pg-208 .pagebreak}[]{#pg-209 .pagebreak}[]{#pg-210 .pagebreak}[]{#pg-211 .pagebreak}[]{#pg-212 .pagebreak}[]{#pg-213 .pagebreak}[]{#pg-214 .pagebreak}[]{#pg-215 .pagebreak}[]{#pg-216 .pagebreak}[]{#pg-217 .pagebreak}[]{#pg-218 .pagebreak}[]{#pg-219 .pagebreak}[]{#pg-220 .pagebreak}[]{#pg-221 .pagebreak}[]{#pg-222 .pagebreak}[]{#pg-223 .pagebreak}[]{#pg-224 .pagebreak}[]{#pg-225 .pagebreak}[]{#pg-226 .pagebreak}[]{#pg-227 .pagebreak}[]{#pg-228 .pagebreak}[]{#pg-229 .pagebreak}[]{#pg-230 .pagebreak}[]{#pg-231 .pagebreak}[]{#pg-232 .pagebreak}[]{#pg-233 .pagebreak}[]{#pg-234 .pagebreak}[]{#pg-235 .pagebreak}[]{#pg-236 .pagebreak}[]{#pg-237 .pagebreak}[]{#pg-238 .pagebreak}[]{#pg-239 .pagebreak}[]{#pg-240 .pagebreak}[]{#pg-241 .pagebreak}[]{#pg-242 .pagebreak}[]{#pg-243 .pagebreak}[]{#pg-244 .pagebreak}[]{#pg-245 .pagebreak}[]{#pg-246 .pagebreak}[]{#pg-247 .pagebreak}[]{#pg-248 .pagebreak}[]{#pg-249 .pagebreak}[]{#pg-250 .pagebreak}[]{#pg-251 .pagebreak}[]{#pg-252 .pagebreak}[]{#pg-253 .pagebreak}[]{#pg-254 .pagebreak}[]{#pg-255 .pagebreak}[]{#pg-256 .pagebreak}[]{#pg-257 .pagebreak}[]{#pg-258 .pagebreak}[]{#pg-259 .pagebreak}[]{#pg-260 .pagebreak}[]{#pg-261 .pagebreak}[]{#pg-262 .pagebreak}[]{#pg-263 .pagebreak}[]{#pg-264 .pagebreak}[]{#pg-265 .pagebreak}[]{#pg-266 .pagebreak}[]{#pg-267 .pagebreak}[]{#pg-268 .pagebreak}[]{#pg-269 .pagebreak}[]{#pg-270 .pagebreak}[]{#pg-271 .pagebreak}[]{#pg-272 .pagebreak}[]{#pg-273 .pagebreak}[]{#pg-274 .pagebreak}[]{#pg-275 .pagebreak}[]{#pg-276 .pagebreak}[]{#pg-277 .pagebreak}[]{#pg-278 .pagebreak}[]{#pg-279 .pagebreak}[]{#pg-280 .pagebreak}[]{#pg-281 .pagebreak}[]{#pg-282 .pagebreak}[]{#pg-283 .pagebreak}[]{#pg-284 .pagebreak}[]{#pg-285 .pagebreak}[]{#pg-286 .pagebreak}[]{#pg-287 .pagebreak}[]{#pg-288 .pagebreak}[]{#pg-289 .pagebreak}[]{#pg-290 .pagebreak}[]{#pg-291 .pagebreak}[]{#pg-292 .pagebreak}[]{#pg-293 .pagebreak}[]{#pg-294 .pagebreak}[]{#pg-295 .pagebreak}[]{#pg-296 .pagebreak}[]{#pg-297 .pagebreak}[]{#pg-298 .pagebreak}[]{#pg-299 .pagebreak}[]{#pg-300 .pagebreak}[]{#pg-301 .pagebreak}[]{#pg-302 .pagebreak}[]{#pg-303 .pagebreak}[]{#pg-304 .pagebreak}[]{#pg-305 .pagebreak}[]{#pg-306 .pagebreak}[]{#pg-307 .pagebreak}[]{#pg-308 .pagebreak}[]{#pg-309 .pagebreak}[]{#pg-310 .pagebreak}[]{#pg-311 .pagebreak}[]{#pg-312 .pagebreak}[]{#pg-313 .pagebreak}[]{#pg-314 .pagebreak}[]{#pg-315 .pagebreak}[]{#pg-316 .pagebreak}[]{#pg-317 .pagebreak}[]{#pg-318 .pagebreak}[]{#pg-319 .pagebreak}[]{#pg-320 .pagebreak}[]{#pg-321 .pagebreak}[]{#pg-322 .pagebreak}[]{#pg-323 .pagebreak}[]{#pg-324 .pagebreak}[]{#pg-325 .pagebreak}[]{#pg-326 .pagebreak}[]{#pg-327 .pagebreak}[]{#pg-328 .pagebreak}[]{#pg-329 .pagebreak}[]{#pg-330 .pagebreak}[]{#pg-331 .pagebreak}[]{#pg-332 .pagebreak}[]{#pg-333 .pagebreak}[]{#pg-334 .pagebreak}[]{#pg-335 .pagebreak}[]{#pg-336 .pagebreak}[]{#pg-337 .pagebreak}[]{#pg-338 .pagebreak}[]{#pg-339 .pagebreak}[]{#pg-340 .pagebreak}[]{#pg-341 .pagebreak}[]{#pg-342 .pagebreak}[]{#pg-343 .pagebreak}[]{#pg-344 .pagebreak}[]{#pg-345 .pagebreak}[]{#pg-346 .pagebreak}[]{#pg-347 .pagebreak}[]{#pg-348 .pagebreak}[]{#pg-349 .pagebreak}[]{#pg-350 .pagebreak}[]{#pg-351 .pagebreak}[]{#pg-352 .pagebreak}[]{#pg-353 .pagebreak}[]{#pg-354 .pagebreak}[]{#pg-355 .pagebreak}[]{#pg-356 .pagebreak}[]{#pg-357 .pagebreak}[]{#pg-358 .pagebreak}[]{#pg-359 .pagebreak}[]{#pg-360 .pagebreak}[]{#pg-361 .pagebreak}[]{#pg-362 .pagebreak}[]{#pg-363 .pagebreak}[]{#pg-364 .pagebreak}[]{#pg-365 .pagebreak}[]{#pg-366 .pagebreak}[]{#pg-367 .pagebreak}[]{#pg-368 .pagebreak}[]{#pg-369 .pagebreak}[]{#pg-370 .pagebreak}[]{#pg-371 .pagebreak}[]{#pg-372 .pagebreak}[]{#pg-373 .pagebreak}[]{#pg-374 .pagebreak}[]{#pg-375 .pagebreak}[]{#pg-376 .pagebreak}[]{#pg-377 .pagebreak}[]{#pg-378 .pagebreak}[]{#pg-379 .pagebreak}[]{#pg-380 .pagebreak}[]{#pg-381 .pagebreak}[]{#pg-382 .pagebreak}[]{#pg-383 .pagebreak}[]{#pg-384 .pagebreak}[]{#pg-385 .pagebreak}[]{#pg-386 .pagebreak}[]{#pg-387 .pagebreak}[]{#pg-388 .pagebreak}[]{#pg-389 .pagebreak}[]{#pg-390 .pagebreak}[]{#pg-391 .pagebreak}[]{#pg-392 .pagebreak}[]{#pg-393 .pagebreak}[]{#pg-394 .pagebreak}[]{#pg-395 .pagebreak}[]{#pg-396 .pagebreak}[]{#pg-397 .pagebreak}[]{#pg-398 .pagebreak}[]{#pg-399 .pagebreak}[]{#pg-400 .pagebreak}[]{#pg-401 .pagebreak}[]{#pg-402 .pagebreak}[]{#pg-403 .pagebreak}[]{#pg-404 .pagebreak}[]{#pg-405 .pagebreak}[]{#pg-406 .pagebreak}[]{#pg-407 .pagebreak}[]{#pg-408 .pagebreak}[]{#pg-409 .pagebreak}[]{#pg-410 .pagebreak}[]{#pg-411 .pagebreak}[]{#pg-412 .pagebreak}[]{#pg-413 .pagebreak}[]{#pg-414 .pagebreak}[]{#pg-415 .pagebreak}[]{#pg-416 .pagebreak}[]{#pg-417 .pagebreak}[]{#pg-418 .pagebreak}[]{#pg-419 .pagebreak}[]{#pg-420 .pagebreak}[]{#pg-421 .pagebreak}[]{#pg-422 .pagebreak}[]{#pg-423 .pagebreak}[]{#pg-424 .pagebreak}[]{#pg-425 .pagebreak}[]{#pg-426 .pagebreak}[]{#pg-427 .pagebreak}[]{#pg-428 .pagebreak}[]{#pg-429 .pagebreak}[]{#pg-430 .pagebreak}[]{#pg-431 .pagebreak}[]{#pg-432 .pagebreak}[]{#pg-433 .pagebreak}[]{#pg-434 .pagebreak}[]{#pg-435 .pagebreak}[]{#pg-436 .pagebreak}[]{#pg-437 .pagebreak}[]{#pg-438 .pagebreak}[]{#pg-439 .pagebreak}[]{#pg-440 .pagebreak}[]{#pg-441 .pagebreak}[]{#pg-442 .pagebreak}[]{#pg-443 .pagebreak}[]{#pg-444 .pagebreak}[]{#pg-445 .pagebreak}[]{#pg-446 .pagebreak}[]{#pg-447 .pagebreak}[]{#pg-448 .pagebreak}[]{#pg-449 .pagebreak}[]{#pg-450 .pagebreak}[]{#pg-451 .pagebreak}[]{#pg-452 .pagebreak}[]{#pg-453 .pagebreak}[]{#pg-454 .pagebreak}[]{#pg-455 .pagebreak}[]{#pg-456 .pagebreak}[]{#pg-457 .pagebreak}[]{#pg-458 .pagebreak}[]{#pg-459 .pagebreak}[]{#pg-460 .pagebreak}[]{#pg-461 .pagebreak}[]{#pg-462 .pagebreak}[]{#pg-463 .pagebreak}[]{#pg-464 .pagebreak}[]{#pg-465 .pagebreak}[]{#pg-466 .pagebreak}[]{#pg-467 .pagebreak}[]{#pg-468 .pagebreak}[]{#pg-469 .pagebreak}[]{#pg-470 .pagebreak}[]{#pg-471 .pagebreak}[]{#pg-472 .pagebreak}[]{#pg-473 .pagebreak}[]{#pg-474 .pagebreak}[]{#pg-475 .pagebreak}[]{#pg-476 .pagebreak}[]{#pg-477 .pagebreak}[]{#pg-478 .pagebreak}[]{#pg-479 .pagebreak}[]{#pg-480 .pagebreak}[]{#pg-481 .pagebreak}[]{#pg-482 .pagebreak}[]{#pg-483 .pagebreak}[]{#pg-484 .pagebreak}[]{#pg-485 .pagebreak}[]{#pg-486 .pagebreak}[]{#pg-487 .pagebreak}[]{#pg-488 .pagebreak}[]{#pg-489 .pagebreak}[]{#pg-490 .pagebreak}[]{#pg-491 .pagebreak}[]{#pg-492 .pagebreak}[]{#pg-493 .pagebreak}[]{#pg-494 .pagebreak}[]{#pg-495 .pagebreak}[]{#pg-496 .pagebreak}[]{#pg-497 .pagebreak}[]{#pg-498 .pagebreak}[]{#pg-499 .pagebreak}[]{#pg-500 .pagebreak}[]{#pg-501 .pagebreak}[]{#pg-502 .pagebreak}[]{#pg-503 .pagebreak}[]{#pg-504 .pagebreak}[]{#pg-505 .pagebreak}ابن أبى الحديد عز الدين أبوحامد عبدالحميد بن أبى الحسن شرح نهج البلاغة ( ٥٨٦ - ٦٥٦ هـ ) .... ١٢٠ - ١٣٩
+[]{#pg-504 .pagebreak}[]{#pg-505 .pagebreak}ابن أبى الحديد عز الدين أبوحامد عبدالحميد بن أبى الحسن شرح نهج البلاغة ( ٥٨٦ - ٦٥٦ هـ ) .... ١٢٠ - ١٣٩
 
 ابن الأثير عز الدين أبو الحسن محمد الشيباني الكامل فى التاريخ ( ٥٠٠ - ٦٣٠ هـ ) .... ٩٠٦ - ٩٢٢
 
@@ -321,7 +514,80 @@
 
 برناردان دى سان بيبر = جاك هنرى بول وفرجينى ( ١٧٣٧ - ١٨١٤ م ) .... ٣٧٣ - ٣٩٠
 
-بسكال الخواطر ( ٦٢٣ - ١٦٦٢ م ) .... ٧٥ - ٨٥ []{#pg-506 .pagebreak}[]{#pg-507 .pagebreak}لوي باستير
+بسكال الخواطر ( ٦٢٣ - ١٦٦٢ م ) .... ٧٥ - ٨٥ []{#pg-506 .pagebreak}البيروني أبو الريحان
+استخراج الأوتار في الدائرة (٣٦٢ - ٤٤٠هـ) ١٥٤ - ١٦٩
+القانون المسعودي ... ... ... ... ... ٤٠٥ - ٤٢٠
+
+تستل
+إضافات إلى جيولوجية وحفريات الصحراء الليبية (١٨٣٩ - ١٩٠٤م) ٥٠ - ٥٦
+
+نشارلس ديكنز
+دافيد كيرفيلد (١٨١٢ - ١٨٧٠م) ٥٨٣ - ٥٩٦
+
+الجاحظ أبو عثمان بن بحر بن محجوب البصرى
+كتاب الحيوان (٧٧٨ - ٨٦٨م) ٢١٥ - ٢٢٧
+
+جاك هنرى = برناردان دى سان بيير
+جان راسين = راسين
+جلال الدين السيوطى = السيوطى
+جورج وليم فردریک هیکل هيجل = هيجل
+جونته
+فارست (١٧٤٩ - ١٨٣٢م) ٨٤٩ - ٨٨٠
+
+جيا كومو ليبواردزی = ليبواردزی
+جيبون
+سقوط الإمبراطورية الرومانية (١٧٣٧-١٧٩٤م) ٨٦ - ١٠٠
+الحسن بن عبدالله بن سهل أبو هلال العسكرى = أبو هلال العسكرى
+داروين
+أصل الأنواع (١٨٠٩ - ١٨٨٢م) ٩٧٣ - ٩٩٠
+
+دستويفسكي
+الاخوة كارامازوف (١٨٢١ - ١٨٨١م) ٩٩١ - ١٠٠٩
+راسين
+أندروماك (١٦٣٩ - م) ٢٧٠ - ٢٩٦
+سبينوزا
+علم الأخلاق (١٦٣٢ - ١٦٧٧م) ٩٣٣ - ٩٥٥
+
+ستاندال هنرى بيل
+الأحمر والأسود (١٧٨٣ - ١٨٤٢م) ٥٣١ - ٥٤٨
+سعدى الشرازي مشرف بن مصلح
+البستان (- ٦٩١ هـ) ٨٣٣ - ٨٤٨
+
+سوفو كليس
+أوديب ملكا (بين ٩٤٧، ٤٩٤، ٤٠٦، ٤٤٠ ق.م) ٩٥٦ - ٩٧٢
+السيوطى جلال الدين
+حسن المحاضرة (٨٤٩ - ٥٩١١ هـ) ٣٦٠ - ٦٤٤
+شارلوت برونتى
+جين إير (١٨١٦ - ١٨٥٥م) ٧٤٧ - ٧٦٠
+شوبنور
+العالم إرادة وتمثلا (١٧٨٨ - ١٨٦٠م) ١١٥ - ١٢٤
+
+ضياء الدين بن الأثير أبو الفتح
+المغل فى أدب الكاتب ١٠١ - ١١٤ (٥٥٨ - ٦٣٧ هـ)
+الطرطوشي
+سراج الملوك (بين سنتى ٤٥٠ ، ٤٥١ - ٥٢٠ هـ) ٧٩٢ - ٨٠٣
+ظهير الدين محمد بابر
+بابر نامه (٨٨٨ - ٩٣٧ هـ) ١٨١ - ١٩٣
+
+عز الدين ابن أبى الحديد أبو حامد عبد الحميد بن أبى الحسن = بن الأثير
+عزرا باوند
+الشعر الشرق (١٨٨٥م) ١٤٠ - ١٥٣
+القارانى أبو نصر محمد
+آراء أهل المدينة الفاضلة (٢٥٩ - ٣٣٩ هـ) ٥٦٩ - ٥٨٢
+
+فنشه
+نداءات إلى الأمة الألمانية (١٧٦٢ - ١٨١٤م) ١٩٤ - ٢١٤
+فرانسيس بيكون
+الأورجانون الجديد (١٥٦١ - ١٦٢٦) ٨٨١ - ٩٠٥
+فردریک شيلر يوهان كريستوف
+فى التربية الجمالية للإنسان (١٧٥٩ - ١٨٠٥م) ٨١٦ - ٨٣٢
+فردریک هنريش = ألكسندر فون هومبولت
+كاتولولوس كايوس فالبيروس كاتولولوس
+ديوان شعر كاتولولوس (٨٤ - ق.م) ٧٣٢ - ٧٤٦
+كنفشيوس
+الكتب الخمسة (٥٥١ - ٤٧٩ ق.م) ٧٨٠ - ٧٩١
+لوكريتيوس كيتوس كاروس
+عن طبيعة الأشياء (بين سنتى ٩٩ ، ٩٣ ، ٥٥٥ ، ٥٠ ق.م) ٣٩١ - ٤٠٤ []{#pg-507 .pagebreak}لوي باستير
 النظرية الميكروبية للمرض (١٨٢٢-١٨٩٥م) ٢٩٧ - ٣٠٧
 
 لويس كارول
@@ -369,4 +635,154 @@
 
 يوهان كريستوف فردریک شيلر = فردریک شيلر
 
-[]{#pg-508 .pagebreak}[]{#pg-509 .pagebreak}
+# الباحثون
+
+[]{#pg-508 .pagebreak}إبراهيم الابياري
+شرح نهج البلاغة . . . . . . . . . . . . . . . ١٢٥ - ١٣٩
+عيون الأخبار . . . . . . . . . . . . . . . ٣٣٠ - ٣٤٠
+حسن المغافرة . . . . . . . . . . . . . . . ٦٣٠ - ٦٤٤
+
+إبراهيم سكر
+أوديب ملكاً . . . . . . . . . . . . . . . . . ٩٥٦ - ٩٧٢
+
+أحمد إبراهيم الشريف
+مقطع الزنده . . . . . . . . . . . . . . . . . ٥٧ - ٧٤
+
+أحمد حماد الحسيني
+كتاب الحيوان . . . . . . . . . . . . . . . ٢١٥ - ٢٢٧
+
+أحمد حمدي محمود
+في التربية الجمالية للإنسان . . . . . . . . . ٨١٦ - ٨٣٢
+
+أحمد سعيد الدمرداش
+استخراج الأوتار في الدائرة . . . . . . . . . ١٥٤ - ١٦٩
+
+أحمد عبد الرحيم أبو زيد
+عن طبيعة الأشياء . . . . . . . . . . . . . . ٣٩١ - ٤٠٤
+ديوان شعر كاتولوس . . . . . . . . . . . . . ٧٣٢ - ٧٤٦
+
+أحمد فؤاد الأهواني
+مقالات الإسلاميين . . . . . . . . . . . . . ٣٥٧ - ٣٧٢
+العلم والدين . . . . . . . . . . . . . . . . ٦٩٩ - ٧١٤
+
+أحمد محمود الساداتي
+بابرنامه . . . . . . . . . . . . . . . . . . . ١٨١ - ١٩٣
+أين اكبرى . . . . . . . . . . . . . . . . . . ٤٦٨ - ٤٨٢
+
+إمام إبراهيم أحمد
+القانون المسعودي . . . . . . . . . . . . . . ٤٠٥ - ٤٢٠
+
+أنور عبد العليم
+نشأة الحياة على الأرض . . . . . . . . . . . ١٨٠ - ١٧٠
+
+إيليا نعمان حكيم
+الخواطر . . . . . . . . . . . . . . . . . . . ٧٥ - ٨٥
+بول وفرجيني . . . . . . . . . . . . . . . . ٣٧٣ - ٣٩٠
+بدوى طبانه
+المثل السائر في أدب الكاتب . . . . . . . . . ١٠١ - ١١٤
+
+جمال الدين الشيال
+سراج الملوك . . . . . . . . . . . . . . . . . ٧٩٢ - ٨٠٣
+
+حسن شحاته سعفمان
+الكتب الخمسة . . . . . . . . . . . . . . . . ٧٨٠ - ٧٩١
+
+زكريا إبراهيم
+التطور الخاللق . . . . . . . . . . . . . . . ٤٣٦ - ٤٥٣
+اعترافات القديس أوغسطين . . . . . . . . . ٦٤٥ - ٦٦٦
+
+سعيد عبد الفتاح عاشور
+الكامل في التاريخ . . . . . . . . . . . . . . ٩٠٦ - ٩٢٢
+
+سليم أنطون
+الكون . . . . . . . . . . . . . . . . . . . . . ٢٤٦ - ٢٥٦
+
+سيد بدوى
+أصل الأنواع . . . . . . . . . . . . . . . . . ٩٧٣ - ٩٩٠
+
+صوفى عبد الله
+ذهب مع الربيع . . . . . . . . . . . . . . . ٤٥٤ - ٤٦٧
+جين إير . . . . . . . . . . . . . . . . . . . ٧٤٧ - ٧٦٠
+
+عائشة عبد الرحمن ( بنت الشاطئ )
+رسالة الغفران . . . . . . . . . . . . . . . ٤٢١ - ٤٣٥
+
+عبد الحليم منتصر
+الشفاء . . . . . . . . . . . . . . . . . . . . ٢٥٧ - ٢٦٩
+
+عبد الحميد الدوَاخلى
+الأحمر والأسود . . . . . . . . . . . . . . . ٥٣١ - ٥٤٨
+
+عبد الرحمن بدوى
+ما بعد الطبيعة . . . . . . . . . . . . . . . ٥٢٢ - ٥٣٠
+
+عبد الرحمن صدقي
+أندروماك . . . . . . . . . . . . . . . . . . ٢٧٠ - ٢٩٦
+
+عثمان أمين
+نداءات إلى الأمة الألمانية . . . . . . . . . ١٩٤ - ٢١٤
+رسالة التوحيد . . . . . . . . . . . . . . . ٧٦١ - ٧٧٩
+
+على أدهم
+الإخوة كار امازوف . . . . . . . . . . . . . ٩٩١ - ١٠٠٨
+سقوط الإمبراطورية الرومانية . . . . . . . . ٨٦ - ١٠٠
+محاورات ليوباردى . . . . . . . . . . . . . ٣٤١ - ٣٥٦
+يوميات اميل . . . . . . . . . . . . . . . . ٦٨١ - ٦٩٨ []{#pg-509 .pagebreak}على درويش
+الليالي .......................................... ٣٣ - ٤٩
+البخيل .......................................... ٢٢٨ - ٢٤٥
+النساء الحمالات .................................... ٥٤٩ - ٥٦٨
+
+# على عبد الواحد وافي
+أراه أهل المدينة الفاضلة ............................. ٥٦٩ - ٥٨٢
+
+فؤاد زكريا
+العالم إرادة وتمثلا ................................. ١١٥ - ١٢٤
+الأرجونوت الجديد ................................... ٨٨١ - ٩٠٥
+مذهب الذرات الروحية « المونادولوجيا » .................... ٥٩٧ - ٦١٠
+
+# محمد إسماعيل الندوى
+جيتا .......................................... ٦٦٧ - ٦٨٠
+
+# محمد خليفة التونسي
+العقد الفريد .................................... ١٤ - ٣٢
+اليستان ........................................ ٨٣٣ - ٨٤٨
+
+محمد سليم سالم
+فن الشعر ...................................... ٩٢٣ - ٩٣٢
+قصيدة الأعمال والأيام ............................. ٤٨٣ - ٤٩٢
+الفرس ........................................ ٦٢٠ - ٦٢٩
+
+# محمد طاهر الجبلاوي
+كتاب الصناعتين ................................. ٤٩٣ - ٥٠٨
+
+# محمد عوض محمد
+فاوست ........................................ ٨٤٩ - ٨٨٠
+
+# محمد فتحي الشنيطى
+ظاهريات الفكر ................................. ٧١٥ - ٧٣١
+
+# محمد محمود الصياد
+رحلة ماركو بولو ................................. ٨٠٤ - ٨١٥
+
+# محمد مصطفى حلمى
+علم الأخلاق ................................... ٩٣٣ - ٩٥٥
+
+# محمد مصطفى زيادة
+السلوك ........................................ ٥٠٩ - ٥٢١
+
+# محمد يوسف حسن
+إضافات إلى جيولوجية وحفريات الصحراء الليبية ............. ٥٠ - ٥٦
+
+# محمود قاسم
+دروس فى الفلسفة الوضعية ............................. ٣ - ١٣
+
+# مصطفى ماهـر
+حكايات الأخوين جريم ............................... ٦١١ - ٦١٩
+
+# مصطفى محمود حافظ
+النظرية الميكروبية المرض ............................ ٢٩٧ - ٣٠٧
+
+نظمى لوقا
+الشعر الشرق ................................. ١٤٠ - ١٥٣
+أليس فى أرض العجائب ............................. ٣١٨ - ٣٢٩
+دافيد كوبر فيلد ................................ ٥٨٣ - ٥٩٦
