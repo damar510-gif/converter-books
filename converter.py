@@ -265,9 +265,18 @@ def ink_ratio(pix):
 THINKING = {"gemini-3.1-flash-lite": types.ThinkingLevel.MINIMAL}
 
 
+# Requests a minute per model, well under the free tier's own limits (the user's decision,
+# 2026-10-23: "no hurry, the key is free: do not press it to its limit"; a per-minute 429
+# had stopped both readers). 500 Lite requests a day at 5 a minute last 100 minutes.
+LITE_RPM = 5
+FLASH_RPM = 1
+GEMMA_RPM = 4
+
+
 def model_rpm(model, default_rpm):
-    # Lite models allow 15 requests a minute; Gemma and the full Flash models fewer.
-    return default_rpm if "flash-lite" in model else 4
+    if "flash-lite" in model:
+        return min(default_rpm, LITE_RPM)
+    return GEMMA_RPM if "gemma" in model else FLASH_RPM
 
 
 class ModelPool:
@@ -2103,7 +2112,7 @@ def main():
                         help="For pages both Gemini models refuse")
     parser.add_argument("--extra-models", default=os.environ.get("GEMINI_EXTRA_MODELS")
                         or os.environ.get("GEMINI_ARBITER_MODELS")
-                        or "gemini-3.8-flash,gemini-3.7-flash,gemini-3.6-flash,gemini-3-flash,gemini-2.5-flash",
+                        or "gemini-3.8-flash,gemini-3.7-flash,gemini-3.6-flash,gemini-3-flash",
                         help="The other free models (small daily quotas): they read and settle pages once "
                              "both Lite readers are out")
     parser.add_argument("--single", dest="dual", action="store_false",

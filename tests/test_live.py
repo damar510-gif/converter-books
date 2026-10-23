@@ -424,7 +424,7 @@ class DailyLimitChecks(unittest.TestCase):
         text, _ = pool.read(None, "x", "gemini-9-flash-lite")
         self.assertEqual(text, TRUE.strip())
         self.assertNotIn("gemini-9-flash-lite", pool.exhausted)
-        self.assertEqual([s >= c.DAY_CHECK_SECONDS for s in self.slept if s >= 1], [True])
+        self.assertEqual(len([s for s in self.slept if s >= c.DAY_CHECK_SECONDS]), 1)
         self.assertEqual(pool.quota_day, "")
 
     def test_the_third_in_a_row_is_the_daily_limit(self):
