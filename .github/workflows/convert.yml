@@ -50,7 +50,7 @@ on:
         type: string
       # The helper on the user's computer (docs/helper-boxes-plan.md).
       helper:
-        description: 'Drive inbox only: the book''s helper folder ID, with ":transcribe", ":read", ":settle" or ":import"'
+        description: 'Drive inbox only: the book''s helper folder ID, with what its models do (":read1+read2+settle", any of the three; older ":transcribe", ":read", ":settle") or ":import"; or a review folder ID with ":review" (the free models judge the unsure places)'
         required: false
         type: string
       judge:
@@ -264,6 +264,35 @@ jobs:
           fi
           ls -l review-in
 
+      # A review round with free models in the status page's review box: they judge the
+      # unsure places (freereview.py), next to the user's own models' verdicts in the book's
+      # review folder; their answers join the saved ones, which the round applies.
+      - name: Free models review the unsure places
+        if: inputs.compare_models == '' && inputs.text_check_models == '' && env.RESULT_DIR != ''
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          HELPER: ${{ inputs.helper }}
+          FREE_BOXES: ${{ inputs.models }}
+          PYTHONUNBUFFERED: '1'
+        run: |
+          [[ "$HELPER" =~ ^([A-Za-z0-9_-]{10,100}):review$ ]] || exit 0
+          FOLDER="${BASH_REMATCH[1]}"
+          BOXES_RE='^(read1|read2|settle|review|out)=[a-z0-9.,-]*(;(read1|read2|settle|review|out)=[a-z0-9.,-]*)*$'
+          [[ "$FREE_BOXES" =~ $BOXES_RE ]] || exit 0
+          mkdir -p review-src
+          git --work-tree=review-src checkout origin/results -- "$RESULT_DIR/review" 2>/dev/null || { echo "No places to review."; exit 0; }
+          git reset -q
+          DRIVE_TOKEN=$(jq -r '.inputs.drive_token // ""' "$GITHUB_EVENT_PATH")
+          [ -n "$DRIVE_TOKEN" ] && echo "::add-mask::$DRIVE_TOKEN"
+          before=$(cat review-in/judge.json 2>/dev/null | md5sum)
+          ARGS=(--items "review-src/$RESULT_DIR/review/items.json" --folder "$FOLDER" --boxes "$FREE_BOXES"
+                --judge review-in/judge.json --summary free-review.json)
+          [ -n "$LIVE_FILE" ] && ARGS+=(--live "$LIVE_FILE")
+          DRIVE_TOKEN="$DRIVE_TOKEN" python freereview.py "${ARGS[@]}" || echo "::warning::The free review stopped."
+          # New answers are kept with the saved ones (review/judge-answers.json) by the save below.
+          [ "$(cat review-in/judge.json 2>/dev/null | md5sum)" != "$before" ] && echo "JUDGE_SAVE=1" >> "$GITHUB_ENV"
+          exit 0
+
       # Pages already read in earlier runs are kept here, so a run stopped by the
       # daily limit continues tomorrow from where it stopped.
       - name: Restore saved progress
@@ -353,9 +382,10 @@ jobs:
           set +e
           ARGS=(-o "$EPUB_OUTPUT" --work-dir work --report report.md --status status.json --keep-markdown
                 --review-out review-out)
-          # Every mode Code.gs sends (helperInput_): the helper's models read and settle, only
-          # read, only settle, or their work so far is imported.
-          if [[ "$HELPER" =~ ^[A-Za-z0-9_-]+:(transcribe|read|settle|import)$ ]]; then
+          # Every mode Code.gs sends (helperInput_): what the helper's models do (first
+          # readings, second readings, settling: any of the three), or their work so far is
+          # imported. (":review" is the free review's, above.)
+          if [[ "$HELPER" =~ ^[A-Za-z0-9_-]+:((read1|read2|settle)(\+(read1|read2|settle))*|transcribe|read|import)$ ]]; then
             ARGS+=(--helper "$HELPER")
           fi
           # The live view: what the run does, written to the user's Drive every few seconds;
@@ -364,7 +394,7 @@ jobs:
           [ -n "$LIVE_FILE" ] && [ -n "$LIVE_CONTROL" ] && ARGS+=(--control "$LIVE_CONTROL")
           # The status page's boxes: which free models read first, read second and settle, and
           # those found out of quota today (freeInput_ in Code.gs).
-          BOXES_RE='^(read1|read2|settle|out)=[a-z0-9.,-]*(;(read1|read2|settle|out)=[a-z0-9.,-]*)*$'
+          BOXES_RE='^(read1|read2|settle|review|out)=[a-z0-9.,-]*(;(read1|read2|settle|review|out)=[a-z0-9.,-]*)*$'
           if [[ "$FREE_BOXES" =~ $BOXES_RE ]]; then
             ARGS+=(--boxes "$FREE_BOXES")
           fi
@@ -439,6 +469,10 @@ jobs:
           jq --argjson id "$GITHUB_RUN_ID" --argjson n "$GITHUB_RUN_NUMBER" \
              --arg at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
              '. + {run_id: $id, run_number: $n, updated_at: $at}' status.json > status.tmp && mv status.tmp status.json
+          # What the free models' review did (the status page decides on the next one).
+          if [ -f free-review.json ] && jq -e . free-review.json >/dev/null 2>&1; then
+            jq --slurpfile f free-review.json '. + {free_review: $f[0]}' status.json > status.tmp && mv status.tmp status.json
+          fi
           URL="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
           TMP=$(mktemp -d)
           if git ls-remote --exit-code --heads origin results >/dev/null 2>&1; then

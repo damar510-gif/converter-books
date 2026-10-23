@@ -117,6 +117,8 @@ var CONFIG = {
   // The free models in the status page's boxes (FREE_BOXES): most in one box, and most
   // models the page offers (from the runs' status.json, FREE_MODELS).
   FREE_BOX_MAX: 12,
+  // Most models in one box of the board (free and the user's own).
+  BOX_MAX: 24,
   FREE_MAX_MODELS: 40
 };
 
@@ -142,6 +144,8 @@ var CHIP_RE = /^(grok|agy|codex|claude)\|[A-Za-z0-9._-]{1,60}$/;
 // 2026-10-23). The workflow takes them as read1=…;read2=…;settle=…;out=… (freeInput_).
 var FREE_MODEL_RE = /^(gemini|gemma)-[a-z0-9.-]{1,60}$/;
 var FREE_KEYS = ['read1', 'read2', 'settle'];
+// The status page's boxes: the first reading, the second, settling, and the review of the unsure places.
+var BOX_KEYS = ['read1', 'read2', 'settle', 'review'];
 // The converter's own choice until a run says it (free_default in status.json): each Lite
 // reader gives the readings the other cannot.
 var FREE_DEFAULT = {
@@ -339,6 +343,7 @@ function getStatus() {
     out.journal = journalAfter_(0).slice(-20);
     out.usage = usage_();
     out.free = freeInfo_();
+    out.boxes = boxesInfo_();
 
     var folders = out.setUp ? existingFolders_() : null;
     if (folders) {
@@ -620,70 +625,42 @@ function helperRequest(json) {
 }
 
 /**
- * From the page: the models the user put in the left box of each section, as JSON
- * {transcribe: [ids], review: [ids]}. They go into requests.json, where the helper finds
- * them within a minute or two. Returns {ok, boxes} or {ok: false, error}.
+ * The status page's boxes (the user's rule, 2026-10-23: one board, every model in it, free
+ * or on the user's computer): {read1: [ids], read2: [ids], settle: [ids], review: [ids],
+ * times: {id: {start, stop}}}. Only the models in a box work, side by side (no order between
+ * them); an empty box means nobody does that step. A free model ("gemini-…", "gemma-…") works
+ * in the runs on GitHub, a model of the user's ("<tool>|<model>") on their computer.
  */
-function setHelperBoxes(json) {
+function setBoxes(json) {
   try {
     var r = parseJson_(json);
     if (!r || typeof r !== 'object' || Array.isArray(r)) return JSON.stringify({ ok: false, error: 'طلب غير مفهوم' });
     var boxes = {};
     var bad = false;
-    ['transcribe', 'settle', 'review'].forEach(function (k) {
+    BOX_KEYS.forEach(function (k) {
       var list = Array.isArray(r[k]) ? r[k].map(String) : [];
-      if (list.length > CONFIG.HELPER_MAX_CHIPS || list.some(function (id) { return !CHIP_RE.test(id); })) bad = true;
+      if (list.length > CONFIG.BOX_MAX || list.some(function (id) { return !CHIP_RE.test(id) && !FREE_MODEL_RE.test(id); })) bad = true;
       boxes[k] = list.filter(function (id, i) { return list.indexOf(id) === i; });
     });
     if (bad) return JSON.stringify({ ok: false, error: 'نموذج غير معروف' });
-    // When each model may work: {id: {start, stop}} (times; '' = now / never).
-    boxes.times = cleanTimes_(r.times, boxes.transcribe.concat(boxes.settle, boxes.review));
+    // When each of the user's models may work: {id: {start, stop}} ('' = now / never).
+    boxes.times = cleanTimes_(r.times, chipsOf_(boxes.read1.concat(boxes.read2, boxes.settle, boxes.review)));
     var lock = LockService.getUserLock();
     if (!lock.tryLock(20000)) return JSON.stringify({ ok: false, error: 'مشغول، أعد المحاولة بعد دقيقة.' });
     try {
       boxes.at = now_().toISOString();
-      props_().setProperty('HELPER_BOXES', JSON.stringify(boxes));
+      props_().setProperty('MODEL_BOXES', JSON.stringify(boxes));
       // A model put in the review box starts within a minute: what it must not review
       // (a book deleted, or closed, since the last check) goes first.
-      var reviews = boxes.review.length ? helperSub_(CONFIG.HELPER_REVIEWS, false) : null;
+      var reviews = chipsOf_(boxes.review).length ? helperSub_(CONFIG.HELPER_REVIEWS, false) : null;
       if (reviews) dropHelperReviews_(reviews);
-      writeRequests_();
+      if (props_().getProperty('HELPER_INSTALL_ID')) writeRequests_();
     } finally {
       lock.releaseLock();
     }
-    return JSON.stringify({ ok: true, boxes: helperBoxes_() });
+    return JSON.stringify({ ok: true, boxes: boxesInfo_() });
   } catch (err) {
-    Logger.log('setHelperBoxes failed: ' + (err && err.stack ? err.stack : err));
-    return JSON.stringify({ ok: false, error: String(err && err.message ? err.message : err) });
-  }
-}
-
-/**
- * The free models' boxes from the page: {read1: [ids], read2: [ids], settle: [ids]} in the
- * user's order (an empty box: nobody does that step); or {reset: true} for the converter's
- * own choice. The next run works with them (dispatch_).
- */
-function setFreeBoxes(json) {
-  try {
-    var r = parseJson_(json);
-    if (!r || typeof r !== 'object' || Array.isArray(r)) return JSON.stringify({ ok: false, error: 'طلب غير مفهوم' });
-    if (r.reset) {
-      props_().deleteProperty('FREE_BOXES');
-      return JSON.stringify({ ok: true, free: freeInfo_() });
-    }
-    var boxes = {};
-    var bad = '';
-    FREE_KEYS.forEach(function (k) {
-      var list = Array.isArray(r[k]) ? r[k].map(String) : [];
-      if (list.length > CONFIG.FREE_BOX_MAX || list.some(function (id) { return !FREE_MODEL_RE.test(id); })) bad = 'نموذج غير معروف';
-      boxes[k] = list.filter(function (id, i) { return list.indexOf(id) === i; });
-    });
-    if (bad) return JSON.stringify({ ok: false, error: bad });
-    boxes.at = now_().toISOString();
-    props_().setProperty('FREE_BOXES', JSON.stringify(boxes));
-    return JSON.stringify({ ok: true, free: freeInfo_() });
-  } catch (err) {
-    Logger.log('setFreeBoxes failed: ' + (err && err.stack ? err.stack : err));
+    Logger.log('setBoxes failed: ' + (err && err.stack ? err.stack : err));
     return JSON.stringify({ ok: false, error: String(err && err.message ? err.message : err) });
   }
 }
@@ -722,7 +699,7 @@ function runTick_() {
     // The book holding the slot waits for a new Pacific day with no run going: the user's
     // answers, and the verdicts of their models, are applied meanwhile (rounds with no
     // model request), so a finished review does not wait days for that book.
-    var meanwhile = applyNext_(ctx) || helperJudgeNext_(ctx);
+    var meanwhile = applyNext_(ctx) || helperJudgeNext_(ctx) || freeReviewNext_(ctx);
     if (meanwhile) notes.push(meanwhile);
   }
   // A finished job frees the slot, so the next book can start in the same check.
@@ -732,7 +709,7 @@ function runTick_() {
     // whose quota has renewed (oldest first), then books an older version parked for the
     // judges (delivered now), then books the helper's models work on (the free models'
     // share, or what the helper's models finished), then new books.
-    var applied = applyNext_(ctx) || helperJudgeNext_(ctx);
+    var applied = applyNext_(ctx) || helperJudgeNext_(ctx) || freeReviewNext_(ctx);
     var resumed = applied || resumeReaderNext_(ctx) || boxNext_(ctx) || judgeNext_(ctx) || helperNext_(ctx);
     var started = resumed || startNext_(ctx);
     notes.push(started);
@@ -786,6 +763,8 @@ function handleStatus_(ctx, job, s) {
     : waiting === 'reader' ? 'readerWait' : waiting === 'time' ? 'time' : waiting === 'boxes' ? 'boxWait' : s.state;
   switch (state) {
     case 'done':
+      // A conversion run (not a review round): the free models' review looks at its places again.
+      job.convertedAt = now_().toISOString();
       return deliver_(ctx, job, s, false);
 
     case 'incomplete':
@@ -793,6 +772,7 @@ function handleStatus_(ctx, job, s) {
         saveJobs_(ctx.jobs);
         return 'incomplete, retry: ' + dispatch_(ctx, job, true, 'بقيت صفحات لم تُقرأ، فيعيدها');
       }
+      job.convertedAt = now_().toISOString();
       return deliver_(ctx, job, s, true);
 
     case 'time':
@@ -1062,6 +1042,39 @@ function finalize_(ctx, job, mail) {
   sendMail_('مكتمل: ' + job.title, lines);
 }
 
+/**
+ * The free models in the review box judge the unsure places of a delivered book (freereview.py
+ * in a review round): a book their review has not seen yet, when the review box changed, when
+ * the book was converted again since, or the next day when places were left for lack of quota.
+ * Returns '' when there is none.
+ */
+function freeReviewNext_(ctx) {
+  var models = freeInfo_().boxes.review;
+  var out = freeOut_();
+  if (!models.some(function (id) { return out.indexOf(id) < 0; })) return '';
+  var sig = models.slice().sort().join(',');
+  var today = pacificDay_(now_());
+  var pick = null;
+  var open = openForHelper_();
+  Object.keys(open).forEach(function (id) {
+    var rv = open[id], j = ctx.jobs[id];
+    if (!j || j.stage !== 'delivered') return;
+    var fr = rv.fr || null;
+    var due = !fr || fr.sig !== sig || String(j.convertedAt || '') > String(fr.at || '') ||
+      (Number(fr.left) > 0 && !fr.failed && pacificDay_(new Date(Date.parse(fr.at))) < today);
+    if (due && (!pick || String(j.finishedAt || '') < String(pick.finishedAt || ''))) pick = j;
+  });
+  if (!pick) return '';
+  // The book's review folder, where the user's models' verdicts are too (made when there is no helper).
+  var root = helperFolder_();
+  var parent = liveFolder_(root, CONFIG.HELPER_REVIEWS) || root.createFolder(CONFIG.HELPER_REVIEWS);
+  var folder = liveFolder_(parent, pick.fileId) || parent.createFolder(pick.fileId);
+  pick.freeReviewRound = true;
+  pick.freeReviewSig = sig;
+  pick.reviewFolderId = folder.getId();
+  return startReviewRound_(ctx, pick, false);
+}
+
 /** Dispatches the oldest book waiting for a model in the boxes, once the boxes changed and someone can work; or returns ''. */
 function boxNext_(ctx) {
   var sig = null;
@@ -1172,6 +1185,8 @@ function dispatch_(ctx, job, countAttempt, why) {
   // The helper on the user's computer (docs/helper-boxes-plan.md): the book's folder,
   // and the verdicts of its models, which go with every run like the user's answers.
   var helper = helperInput_(ctx, job);
+  // A review round of the free models: the book's review folder, where every model's verdicts are.
+  if (job.freeReviewRound && job.reviewFolderId) helper = job.reviewFolderId + ':review';
   if (helper) body.inputs.helper = helper;
   var verdicts = verdictsFile_(job.fileId);
   if (verdicts) body.inputs.judge = verdicts.getId();
@@ -1226,12 +1241,13 @@ function dispatch_(ctx, job, countAttempt, why) {
 /** "A run started", in the user's words: what kind of run, and who works on the book in it. */
 function startText_(job, helper) {
   if (job.judgeRound) return 'بدأت جولة تطبيق أحكام نماذجك';
+  if (job.freeReviewRound) return 'بدأت مراجعة المشكوك فيه بالنماذج المجانية';
   if (job.prepareRound) return 'بدأ تجهيز مواضع المراجعة';
   if (job.humanRound) return 'بدأت جولة تطبيق مراجعتك';
-  var mode = /:(\w+)$/.exec(helper || '');
-  var who = !mode ? '' : mode[1] === 'transcribe' ? ' مع نماذجك (القراءة والحسم)' : mode[1] === 'read' ? ' مع نماذجك (القراءة)'
-    : mode[1] === 'settle' ? ' مع نماذجك (الحسم)' : '';
-  return 'بدأ تشغيل على GitHub' + who;
+  var mode = /:([\w+]+)$/.exec(helper || '');
+  var names = { read1: 'القراءة الأولى', read2: 'القراءة الثانية', settle: 'الحسم' };
+  var parts = mode && mode[1] !== 'import' ? mode[1].split('+').map(function (k) { return names[k]; }).filter(Boolean) : [];
+  return 'بدأ تشغيل على GitHub' + (parts.length ? ' مع نماذجك (' + parts.join('، ') + ')' : '');
 }
 
 // ============================================================================
@@ -1530,7 +1546,8 @@ function startReviewRound_(ctx, job, prepare) {
   job.pendingCount = false;
   saveJobs_(ctx.jobs);
   return (prepare ? 'preparing ' : 'review ') + job.fileId + ': ' + dispatch_(ctx, job, false,
-    prepare ? 'كتاب أقدم من خاصية المراجعة' : job.judgeRound ? 'أنهت نماذجك أحكامها' : 'أرسلتَ تصحيحاتك');
+    prepare ? 'كتاب أقدم من خاصية المراجعة' : job.judgeRound ? 'أنهت نماذجك أحكامها'
+      : job.freeReviewRound ? 'في مربع المراجعة نماذج مجانية' : 'أرسلتَ تصحيحاتك');
 }
 
 function advanceReview_(ctx, job) {
@@ -1551,7 +1568,8 @@ function advanceReview_(ctx, job) {
 }
 
 function clearReviewRound_(job) {
-  ['humanRound', 'prepareRound', 'judgeRound', 'humanFolderId', 'oldEpubId', 'oldReportId', 'rvDonePrev', 'downloadFails']
+  ['humanRound', 'prepareRound', 'judgeRound', 'freeReviewRound', 'freeReviewSig', 'reviewFolderId', 'humanFolderId',
+    'oldEpubId', 'oldReportId', 'rvDonePrev', 'downloadFails']
     .forEach(function (k) { delete job[k]; });
 }
 
@@ -1562,6 +1580,24 @@ function clearReviewRound_(job) {
  */
 function reviewFailed_(ctx, job, why) {
   Logger.log('review round of ' + job.fileId + ' did not finish: ' + why);
+  if (job.freeReviewRound) {
+    // The free models' review: the user's own review is not touched, and the book waits
+    // for a change (the boxes, a new conversion) before they try again.
+    var sig = job.freeReviewSig || '';
+    job.stage = 'delivered';
+    job.epubId = job.oldEpubId || job.epubId || '';
+    job.reportId = job.oldReportId || job.reportId || '';
+    job.pausedDay = '';
+    clearReviewRound_(job);
+    var frv = loadRv_(job.fileId);
+    if (frv) {
+      frv.fr = { at: now_().toISOString(), sig: sig, left: 0, failed: true };
+      saveRv_(job.fileId, frv);
+    }
+    saveJobs_(ctx.jobs);
+    journal_('error', 'لم تكتمل مراجعة النماذج المجانية (' + why + ')، فبقي الكتاب كما كان.', job.title);
+    return 'free review failed (' + why + ')';
+  }
   var prepare = !!job.prepareRound;
   var donePrev = job.rvDonePrev;
   job.stage = 'delivered';
@@ -1598,11 +1634,14 @@ function reviewFailed_(ctx, job, why) {
 /** Delivery of a review round: the book stays in its folder, its old files are replaced. */
 function deliverReview_(ctx, job, s) {
   var prepare = !!job.prepareRound;
-  // A round that applied the verdicts of the helper's models (helperJudgeNext_).
-  var judged = !!job.judgeRound;
+  // A round that applied the verdicts of the helper's models (helperJudgeNext_), or of the
+  // free models in the review box (freeReviewNext_).
+  var free = job.freeReviewRound ? { sig: job.freeReviewSig || '', review: s.free_review || {} } : null;
+  var judged = !!job.judgeRound || !!free;
   var used = (Number(s.review_applied) || 0) + (Number(s.review_kept) || 0);
-  // A preparation round that applied no answer keeps the book the user already has.
-  var keepOld = prepare && !used;
+  // A preparation round, or a free models' review, that applied no answer keeps the book
+  // the user already has, and says nothing.
+  var keepOld = (prepare || !!free) && !used;
   // The new EPUB goes to "3- جاهز"; finalize_ moves it on when nothing is unsure.
   var folder = ctx.folders.ready;
   if (!keepOld && !job.epubId) {
@@ -1655,11 +1694,21 @@ function deliverReview_(ctx, job, s) {
     rv = { t: job.title, x: 'no-data' };
     saveRv_(job.fileId, rv);
   }
+  if (free) {
+    // What the free models' review did: the next one waits for a change (freeReviewNext_).
+    rv.fr = { at: now_().toISOString(), sig: free.sig, left: Number(free.review.left) || 0, asked: Number(free.review.asked) || 0 };
+    saveRv_(job.fileId, rv);
+  }
   var finalNow = !unsure.length;
   if (finalNow) finalize_(ctx, job, false);
   saveJobs_(ctx.jobs);
+  if (free && !used) {
+    journal_('deliver', 'راجعت النماذج المجانية المواضع المفتوحة (' + (Number(free.review.asked) || 0) +
+      ' طلباً)، ولم تُطبَّق إجابة جديدة.', job.title);
+    return 'free review: nothing applied';
+  }
   journal_('deliver', prepare ? 'جُهّزت مواضع المراجعة: ' + (rv.o || 0) + ' موضعاً.'
-    : (judged ? 'طُبّقت أحكام نماذجك: ' : 'طُبّقت مراجعتك: ') + (Number(s.review_applied) || 0) + ' تصحيحاً و' +
+    : (free ? 'طُبّقت أحكام النماذج المجانية: ' : judged ? 'طُبّقت أحكام نماذجك: ' : 'طُبّقت مراجعتك: ') + (Number(s.review_applied) || 0) + ' تصحيحاً و' +
       (Number(s.review_kept) || 0) + ' تأكيداً؛ الصفحات المشكوك فيها ' + before + ' ← ' + unsure.length +
       (finalNow ? '، ونُقل إلى «' + CONFIG.FOLDERS.final + '»' : '') + '.', job.title);
 
@@ -2182,14 +2231,46 @@ function helperTick_() {
  * only settle), review = the unsure places.
  */
 function helperBoxes_() {
-  var v = parseJson_(props_().getProperty('HELPER_BOXES')) || {};
-  var clean = function (list) {
-    list = Array.isArray(list) ? list.map(String) : [];
-    return list.filter(function (id, i) { return CHIP_RE.test(id) && list.indexOf(id) === i; })
-      .slice(0, CONFIG.HELPER_MAX_CHIPS);
-  };
-  var out = { transcribe: clean(v.transcribe), settle: clean(v.settle), review: clean(v.review) };
-  out.times = cleanTimes_(v.times, out.transcribe.concat(out.settle, out.review));
+  var b = modelBoxes_();
+  var read1 = chipsOf_(b.read1), read2 = chipsOf_(b.read2);
+  // transcribe: for a helper older than the boxes' first and second readings.
+  return { transcribe: read1.concat(read2.filter(function (id) { return read1.indexOf(id) < 0; })),
+    read1: read1, read2: read2, settle: chipsOf_(b.settle), review: chipsOf_(b.review), times: b.times };
+}
+
+/** The models of the user's computer ("<tool>|<model>") in a list. */
+function chipsOf_(list) {
+  return (list || []).filter(function (id) { return CHIP_RE.test(id); });
+}
+
+/** The free models ("gemini-…", "gemma-…") in a list. */
+function freeOf_(list) {
+  return (list || []).filter(function (id) { return FREE_MODEL_RE.test(id); });
+}
+
+/**
+ * The boxes as saved (MODEL_BOXES), or, before the user changed them on the one board, what
+ * the two boards held: the free models' (their own or the converter's) and the user's models'
+ * (their reading box gave both readings).
+ */
+function modelBoxes_() {
+  var props = props_();
+  var v = parseJson_(props.getProperty('MODEL_BOXES'));
+  var saved = !!v && typeof v === 'object' && !Array.isArray(v);
+  if (!saved) {
+    var f = legacyFreeBoxes_();
+    var h = parseJson_(props.getProperty('HELPER_BOXES')) || {};
+    var t = Array.isArray(h.transcribe) ? h.transcribe : [];
+    v = { read1: f.read1.concat(t), read2: f.read2.concat(t), settle: f.settle.concat(h.settle || []),
+      review: [].concat(h.review || []), times: h.times };
+  }
+  var out = { saved: saved };
+  BOX_KEYS.forEach(function (k) {
+    var list = Array.isArray(v[k]) ? v[k].map(String) : [];
+    out[k] = list.filter(function (id, i) { return (CHIP_RE.test(id) || FREE_MODEL_RE.test(id)) && list.indexOf(id) === i; })
+      .slice(0, CONFIG.BOX_MAX);
+  });
+  out.times = cleanTimes_(v.times, chipsOf_(out.read1.concat(out.read2, out.settle, out.review)));
   return out;
 }
 
@@ -2220,14 +2301,16 @@ function helperStatusOf_(ctx) {
  * of the reading or settling box are on the computer, and the helper was seen within the hour.
  */
 function helperWork_(status) {
-  var read = helperTranscribes_(status, 'transcribe'), settle = helperTranscribes_(status, 'settle');
-  return read || settle ? { read: read, settle: settle } : false;
+  var read1 = helperTranscribes_(status, 'read1'), read2 = helperTranscribes_(status, 'read2');
+  var settle = helperTranscribes_(status, 'settle');
+  return read1 || read2 || settle ? { read1: read1, read2: read2, read: read1 || read2, settle: settle } : false;
 }
 
 /** True when some models of this box (the reading box by default) can work now. */
 function helperTranscribes_(status, key) {
   var all = helperBoxes_();
-  var boxes = key === 'settle' ? all.settle : key === 'any' ? all.transcribe.concat(all.settle) : all.transcribe;
+  var boxes = key === 'settle' ? all.settle : key === 'read1' ? all.read1 : key === 'read2' ? all.read2
+    : key === 'any' ? all.transcribe.concat(all.settle) : all.transcribe;
   var at = status ? Date.parse(status.at) : NaN;
   if (!boxes.length || !isFinite(at) || now_().getTime() - at > CONFIG.HELPER_GONE_MS) return false;
   var found = (Array.isArray(status.models) ? status.models : []).map(function (m) { return m && String(m.id); });
@@ -2315,17 +2398,19 @@ function helperNext_(ctx) {
 }
 
 /**
- * The run's helper input: the book's folder, with ":transcribe" (the helper's models read
- * and settle), ":read" (they only read) or ":settle" (they only settle; the free models read
- * every page) when they work on books (the folder is made then), or ":import" so their work
- * so far is used. Nothing for review and improvement rounds, which read nothing.
+ * The run's helper input: the book's folder, with what the user's models do in the run
+ * (":read1+read2+settle", any of the three: the boxes they are in) when they work on books
+ * (the folder is made then), or ":import" so their work so far is used. Nothing for review
+ * and improvement rounds, which read nothing.
  */
 function helperInput_(ctx, job) {
   if (job.humanRound || job.refining || !props_().getProperty('HELPER_INSTALL_ID')) return '';
   var work = extOf_(job.driveName || job.name) === 'pdf' && !job.helperOff && helperWork_(helperStatusOf_(ctx));
   var f = bookFolder_(job.fileId, !!work);
   if (!f) return '';
-  return f.getId() + (!work ? ':import' : work.read && work.settle ? ':transcribe' : work.read ? ':read' : ':settle');
+  if (!work) return f.getId() + ':import';
+  // What the user's models do in this run: the boxes they are in (first and second readings, settling).
+  return f.getId() + ':' + ['read1', 'read2', 'settle'].filter(function (k) { return work[k]; }).join('+');
 }
 
 /** A folder in the helper's folder ("كتب", "مراجعة", "أحكام"), made when create is true. */
@@ -2781,11 +2866,8 @@ function freeName_(id, ids) {
   return id;
 }
 
-/**
- * The free models' boxes for the page: {boxes: {read1, read2, settle}, custom (the user set
- * them), at, models: what the page offers (the account's, then any other in a box)}.
- */
-function freeInfo_() {
+/** The free models' boxes before the one board: the user's (FREE_BOXES), or the converter's own. */
+function legacyFreeBoxes_() {
   var props = props_();
   var known = parseJson_(props.getProperty('FREE_MODELS')) || {};
   var ids = freeList_(known.ids, CONFIG.FREE_MAX_MODELS);
@@ -2801,15 +2883,36 @@ function freeInfo_() {
     d.read1 = d.read1.concat(d.read2);
     d.read2 = d.read2.concat(d.read1);
   }
-  var boxes = {};
+  var out = {};
   FREE_KEYS.forEach(function (k) {
-    boxes[k] = (custom ? freeList_(saved[k]) : d[k])
+    out[k] = (custom ? freeList_(saved[k]) : d[k])
       .map(function (id) { return freeName_(id, ids); })
       .filter(function (id, i, all) { return all.indexOf(id) === i; });
   });
+  return out;
+}
+
+/** The free models in the boxes: {boxes: {read1, read2, settle, review}, models: those the page offers}. */
+function freeInfo_() {
+  var b = modelBoxes_();
+  var boxes = {};
+  BOX_KEYS.forEach(function (k) { boxes[k] = freeOf_(b[k]); });
+  return { boxes: boxes, custom: b.saved, models: freeCatalog_(b) };
+}
+
+/** The free models the page offers: the account's (from the runs), then any other in a box. */
+function freeCatalog_(b) {
+  var known = parseJson_(props_().getProperty('FREE_MODELS')) || {};
+  var ids = freeList_(known.ids, CONFIG.FREE_MAX_MODELS);
   var models = (ids.length ? ids : FREE_DEFAULT_MODELS).slice();
-  boxes.read1.concat(boxes.read2, boxes.settle).forEach(function (id) { if (models.indexOf(id) < 0) models.push(id); });
-  return { boxes: boxes, custom: custom, at: custom ? String(saved.at || '') : '', models: models };
+  BOX_KEYS.forEach(function (k) { freeOf_(b[k]).forEach(function (id) { if (models.indexOf(id) < 0) models.push(id); }); });
+  return models;
+}
+
+/** The board for the page: the boxes, the times, and the free models it offers. */
+function boxesInfo_() {
+  var b = modelBoxes_();
+  return { read1: b.read1, read2: b.read2, settle: b.settle, review: b.review, times: b.times, free: freeCatalog_(b) };
 }
 
 /**
@@ -2820,7 +2923,7 @@ function freeInfo_() {
 function freeInput_(info) {
   if (!info) return '';
   var out = freeOut_();
-  return FREE_KEYS.map(function (k) { return k + '=' + info.boxes[k].join(','); }).join(';') +
+  return BOX_KEYS.map(function (k) { return k + '=' + info.boxes[k].join(','); }).join(';') +
     (out.length ? ';out=' + out.join(',') : '');
 }
 
@@ -2849,9 +2952,9 @@ function anyoneWorks_(ctx) {
 
 /** What the boxes are now (free and on the computer): a book waiting for the user to put a model in one runs when this changes. */
 function boxesSig_(ctx) {
-  var h = helperBoxes_();
+  var b = modelBoxes_();
   var w = helperWork_(helperStatusOf_(ctx)) || {};
-  return JSON.stringify([freeInfo_().boxes, h.transcribe, h.settle, !!w.read, !!w.settle]);
+  return JSON.stringify([b.read1, b.read2, b.settle, !!w.read1, !!w.read2, !!w.settle]);
 }
 
 /** The live file the runs write ("بيانات البث/live.json"), made on first use when create is true. */
@@ -3105,7 +3208,7 @@ function retryFree(id) {
   if (!lock.tryLock(30000)) return JSON.stringify({ ok: false, busy: true, error: 'يوجد فحص يعمل الآن، أعد المحاولة بعد دقيقة.' });
   try {
     var info = freeInfo_();
-    if (!FREE_KEYS.some(function (k) { return info.boxes[k].indexOf(id) >= 0; })) {
+    if (!BOX_KEYS.some(function (k) { return info.boxes[k].indexOf(id) >= 0; })) {
       return JSON.stringify({ ok: false, error: 'ضعه في «يعمل هنا» في أحد المربعات أولاً.' });
     }
     var name = modelLabel_(id);

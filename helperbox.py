@@ -130,11 +130,15 @@ class HelperBox:
     and settle), "read" (they only read), "settle" (they only settle: the free models read
     every page) or "import" (their work so far is used, and the free models do the rest)."""
 
-    def __init__(self, folder, transcribe, drive, cache_dir, reads=None, settles=None):
+    def __init__(self, folder, transcribe, drive, cache_dir, reads=None, settles=None, reads1=None, reads2=None):
         self.folder = folder
-        # The helper's models work on the book: they read (reads), settle (settles), or both.
+        # The helper's models work on the book: they give first readings (reads1), second
+        # readings (reads2), settle (settles), or any of these (the status page's boxes).
         self.transcribe = transcribe
         self.reads = transcribe if reads is None else reads
+        self.reads1 = self.reads if reads1 is None else reads1
+        self.reads2 = self.reads if reads2 is None else reads2
+        self.reads = self.reads1 or self.reads2
         self.settles = transcribe if settles is None else settles
         self.drive = drive
         self.dir = os.path.join(cache_dir, "helper")
@@ -153,8 +157,10 @@ class HelperBox:
         if not FOLDER_ID.match(folder) or not token:
             print("Helper folder ignored: " + ("no Drive token" if not token else "bad folder id"))
             return None
-        reads, settles = mode in ("transcribe", "read"), mode in ("transcribe", "settle")
-        return cls(folder, reads or settles, Drive(token), cache_dir, reads, settles)
+        # "read1+read2+settle" (the status page's boxes since 2026-10-23), or the older names.
+        parts = {"transcribe": {"read1", "read2", "settle"}, "read": {"read1", "read2"}}.get(mode, set(mode.split("+")))
+        r1, r2, settles = "read1" in parts, "read2" in parts, "settle" in parts
+        return cls(folder, r1 or r2 or settles, Drive(token), cache_dir, r1 or r2, settles, r1, r2)
 
     def note(self, text):
         with self.lock:

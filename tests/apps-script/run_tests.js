@@ -670,7 +670,7 @@ test('new PDF: moved to قيد التحويل and dispatched with the contract i
       // The free models' boxes as the page shows them (the converter's own until the user
       // changes them): each Lite reader gives the readings the other cannot.
       models: 'read1=gemini-3.5-flash-lite,gemini-3.1-flash-lite;read2=gemini-3.1-flash-lite,gemini-3.5-flash-lite;' +
-        'settle=gemini-3.8-flash,gemini-3.7-flash,gemini-3.6-flash,gemini-3-flash,gemini-3.5-flash-lite,gemini-3.1-flash-lite'
+        'settle=gemini-3.8-flash,gemini-3.7-flash,gemini-3.6-flash,gemini-3-flash,gemini-3.5-flash-lite,gemini-3.1-flash-lite;review='
     }
   });
   const live = JSON.parse(env.drive.DriveApp.getFileById(liveId(d)).getBlob().getDataAsString());
@@ -1365,8 +1365,7 @@ test('Page.html loads nothing from outside and supports dark mode', () => {
   assert.ok(/\.runNow\(fileId\)/.test(PAGE));
   // Every function the page calls is a public function of Code.gs (google.script.run cannot call private ones).
   const called = new Set((PAGE.match(/\.(\w+)\((?:[^()]|\([^()]*\))*\);?\s*(?:\n|\})/g) || []).map((x) => /\.(\w+)\(/.exec(x)[1]));
-  ['getStatus', 'getLive', 'checkNow', 'runNow', 'getReview', 'getReviewImage', 'saveAnswers', 'sendReview', 'helperRequest', 'setHelperBoxes',
-    'setFreeBoxes', 'retryFree']
+  ['getStatus', 'getLive', 'checkNow', 'runNow', 'getReview', 'getReviewImage', 'saveAnswers', 'sendReview', 'helperRequest', 'setBoxes', 'retryFree']
     .forEach((fn) => {
       assert.ok(new RegExp('\\.' + fn + '\\(').test(PAGE), 'the page calls ' + fn);
       assert.ok(new RegExp('\\nfunction ' + fn + '\\(').test(CODE), fn + ' is public in Code.gs');
@@ -1853,8 +1852,8 @@ function pageSandbox(env, initial) {
       withSuccessHandler(f) { call.ok = f; return chain; },
       withFailureHandler(f) { call.fail = f; return chain; }
     };
-    ['getStatus', 'tick', 'getReview', 'getReviewImage', 'saveAnswers', 'sendReview', 'setHelperBoxes', 'helperRequest',
-      'getLive', 'checkNow', 'runNow', 'setFreeBoxes', 'retryFree'].forEach((name) => {
+    ['getStatus', 'tick', 'getReview', 'getReviewImage', 'saveAnswers', 'sendReview', 'setBoxes', 'helperRequest',
+      'getLive', 'checkNow', 'runNow', 'retryFree'].forEach((name) => {
       chain[name] = (...args) => { call.name = name; call.args = args; calls.push(call); };
     });
     return chain;
@@ -2205,10 +2204,29 @@ const GEMINI = 'agy|gemini-3.8-flash';
 const GROK = 'grok|grok-4.7';
 const MODELS = [{ id: GEMINI, label: 'Gemini 3.8 Flash', tool: 'Antigravity' }, { id: GROK, label: 'Grok 4.7', tool: 'Grok Build' }];
 
+// The board («النماذج», setBoxes) as the two older boards set it: the user's models (their
+// reading box gave both readings) and the free models, each leaving the other's alone.
+function setHelperBoxes(env, json) {
+  const o = JSON.parse(json);
+  const b = env.ctx.boxesInfo_();
+  const free = (l) => (l || []).filter((id) => id.indexOf('|') < 0);
+  const t = o.transcribe || [];
+  return env.ctx.setBoxes(JSON.stringify({ read1: free(b.read1).concat(t), read2: free(b.read2).concat(t),
+    settle: free(b.settle).concat(o.settle || []), review: free(b.review).concat(o.review || []), times: o.times || {} }));
+}
+
+function setFreeBoxes(env, json) {
+  const o = JSON.parse(json);
+  const b = env.ctx.boxesInfo_();
+  const mine = (l) => (l || []).filter((id) => id.indexOf('|') >= 0);
+  return env.ctx.setBoxes(JSON.stringify({ read1: (o.read1 || []).concat(mine(b.read1)), read2: (o.read2 || []).concat(mine(b.read2)),
+    settle: (o.settle || []).concat(mine(b.settle)), review: (o.review || []).concat(mine(b.review)), times: b.times }));
+}
+
 function boxesEnv(boxes) {
   const env = helperEnv();
   status(env);
-  const r = JSON.parse(env.ctx.setHelperBoxes(JSON.stringify(boxes)));
+  const r = JSON.parse(setHelperBoxes(env, JSON.stringify(boxes)));
   assert.strictEqual(r.ok, true, JSON.stringify(r));
   writeHelperStatus(env, { models: MODELS });
   return env;
@@ -2223,22 +2241,30 @@ function bookFolderOf(env, fileId) {
   return books ? sub(env, books, fileId) : undefined;
 }
 
-test('boxes: the page saves the models of each box; requests.json carries them; unknown ones are refused', () => {
+test('boxes: the board saves the models of each box; requests.json carries the user\'s; unknown ones are refused', () => {
   const env = helperEnv();
   status(env);
-  const bad = JSON.parse(env.ctx.setHelperBoxes(JSON.stringify({ transcribe: ['rm|-rf'], review: [] })));
+  const bad = JSON.parse(env.ctx.setBoxes(JSON.stringify({ read1: ['rm|-rf'], read2: [], settle: [], review: [] })));
   assert.strictEqual(bad.ok, false);
-  const r = JSON.parse(env.ctx.setHelperBoxes(JSON.stringify({ transcribe: [GEMINI, GROK, GEMINI], review: [GROK] })));
-  assert.deepStrictEqual(r.boxes, { transcribe: [GEMINI, GROK], settle: [], review: [GROK], times: {} });
-  assert.deepStrictEqual(requestsFile(env).boxes, { transcribe: [GEMINI, GROK], settle: [], review: [GROK], times: {} });
+  assert.strictEqual(JSON.parse(env.ctx.setBoxes(JSON.stringify({ read1: ['gemini-x;rm'] }))).ok, false);
+  const r = JSON.parse(env.ctx.setBoxes(JSON.stringify({ read1: [GEMINI, 'gemini-3.5-flash-lite', GEMINI], read2: [GROK],
+    settle: ['gemini-3.8-flash', GEMINI], review: [GROK, 'gemma-4-31b-it'] })));
+  assert.strictEqual(r.ok, true, r.error);
+  assert.deepStrictEqual([r.boxes.read1, r.boxes.read2, r.boxes.settle, r.boxes.review],
+    [[GEMINI, 'gemini-3.5-flash-lite'], [GROK], ['gemini-3.8-flash', GEMINI], [GROK, 'gemma-4-31b-it']]);
+  // The helper gets its own models, by box (and "transcribe" for an older helper).
+  assert.deepStrictEqual(requestsFile(env).boxes, { transcribe: [GEMINI, GROK], read1: [GEMINI], read2: [GROK], settle: [GEMINI],
+    review: [GROK], times: {} });
+  // The runs get the free ones.
+  assert.strictEqual(env.ctx.freeInput_(env.ctx.freeInfo_()), 'read1=gemini-3.5-flash-lite;read2=;settle=gemini-3.8-flash;review=gemma-4-31b-it');
   assert.strictEqual(env.userLockHeld, false);
   writeHelperStatus(env, { models: MODELS.concat([{ id: 'bad id', label: 'x' }]),
     chips: { [GEMINI]: { state: 'working', text: 'يقرأ ص 3' }, [GROK]: { state: 'odd', text: 'x' } } });
-  const h = status(env).helper;
-  assert.deepStrictEqual(h.models.map((m) => m.id), [GEMINI, GROK]);
-  assert.deepStrictEqual(h.boxes, { transcribe: [GEMINI, GROK], settle: [], review: [GROK], times: {} });
-  assert.deepStrictEqual(h.chips[GEMINI], { state: 'working', text: 'يقرأ ص 3' });
-  assert.strictEqual(h.chips[GROK].state, 'idle');
+  const s = status(env);
+  assert.deepStrictEqual(s.helper.models.map((m) => m.id), [GEMINI, GROK]);
+  assert.deepStrictEqual(s.helper.chips[GEMINI], { state: 'working', text: 'يقرأ ص 3' });
+  assert.strictEqual(s.helper.chips[GROK].state, 'idle');
+  assert.deepStrictEqual(s.boxes.review, [GROK, 'gemma-4-31b-it']);
 });
 
 test('transcribe: with models in the box the run gets the book folder; the book waits for the helper without holding the slot', () => {
@@ -2247,7 +2273,7 @@ test('transcribe: with models in the box the run gets the book folder; the book 
   tick(env);
   const folderA = bookFolderOf(env, a.id);
   assert.ok(folderA, 'book folder made under كتب');
-  assert.strictEqual(lastDispatch(env).body.inputs.helper, folderA.id + ':read');
+  assert.strictEqual(lastDispatch(env).body.inputs.helper, folderA.id + ':read1+read2');
   assert.strictEqual(lastDispatch(env).body.inputs.judge, undefined);
 
   const b = addBook(env, 'ثان.pdf');
@@ -2279,7 +2305,7 @@ test('transcribe: with models in the box the run gets the book folder; the book 
   tick(env);
   assert.strictEqual(env.gh.dispatches.length, 3);
   assert.strictEqual(lastDispatch(env).body.inputs.drive_file_id, a.id);
-  assert.strictEqual(lastDispatch(env).body.inputs.helper, folderA.id + ':read');
+  assert.strictEqual(lastDispatch(env).body.inputs.helper, folderA.id + ':read1+read2');
 
   minutes(env, 10);
   writeStatus(env, a.id, 'done', { epub: 'أول.epub' });
@@ -2331,14 +2357,14 @@ test('transcribe: the free models come back to the book while the helper works o
   }
   assert.strictEqual(env.gh.dispatches.length, 2);
   assert.ok(formatDate(env.clock, 'America/Los_Angeles', 'yyyy-MM-dd') > parkedDay, 'not before their quota renews');
-  assert.strictEqual(lastDispatch(env).body.inputs.helper, folderA.id + ':read');
+  assert.strictEqual(lastDispatch(env).body.inputs.helper, folderA.id + ':read1+read2');
   // They stopped for time with quota left: the next run starts in the same check.
   minutes(env, 40);
   writeStatus(env, a.id, 'paused', { waiting_for: 'helper', epub: 'كبير.epub', pages_total: 923, pages_done: 400,
     pages_helper: [60, 61], free_left: true });
   tick(env);
   assert.strictEqual(env.gh.dispatches.length, 3);
-  assert.strictEqual(lastDispatch(env).body.inputs.helper, folderA.id + ':read');
+  assert.strictEqual(lastDispatch(env).body.inputs.helper, folderA.id + ':read1+read2');
 });
 
 test('transcribe: an empty box, a computer away for an hour, or a helper that stopped moving hands the book to the free model', () => {
@@ -2353,7 +2379,7 @@ test('transcribe: an empty box, a computer away for an hour, or a helper that st
   const folderA = bookFolderOf(env, a.id);
 
   // The user empties the box: the book goes on with the free model, the folder's work used.
-  env.ctx.setHelperBoxes(JSON.stringify({ transcribe: [], review: [] }));
+  setHelperBoxes(env, JSON.stringify({ transcribe: [], review: [] }));
   minutes(env, 10);
   tick(env);
   assert.strictEqual(lastDispatch(env).body.inputs.drive_file_id, a.id);
@@ -2423,7 +2449,7 @@ test('transcribe: no helper, no box or not a PDF: runs as before; a book paused 
   writeHelperStatus(env3, { models: MODELS, books: { [f.id]: { need: 3, finished: 3, book_at: bookAt } } });
   tick(env3);
   assert.strictEqual(env3.gh.dispatches.length, 2, 'resumed the same day');
-  assert.ok(/:read$/.test(lastDispatch(env3).body.inputs.helper));
+  assert.ok(/:read1\+read2$/.test(lastDispatch(env3).body.inputs.helper));
 });
 
 test('review: with models in the review box the places are copied for the helper, and its finished verdicts are applied in a round', () => {
@@ -2477,6 +2503,86 @@ test('review: with models in the review box the places are copied for the helper
   minutes(env, 10);
   tick(env);
   assert.strictEqual(sub(env, sub(env, helperFolder(env), 'مراجعة'), f.id), undefined);
+});
+
+test('review: free models in the review box judge the open places in a round on GitHub, once until something changes', () => {
+  const env = readyEnv({ start: '2026-10-23T07:03:00Z' });
+  env.ctx.setBoxes(JSON.stringify({ read1: ['gemini-3.5-flash-lite'], read2: ['gemini-3.1-flash-lite'], settle: ['gemini-3.8-flash'],
+    review: ['gemma-4-31b-it'] }));
+  const f = addBook(env, 'مجاني.pdf');
+  tick(env);
+  minutes(env, 30);
+  putItems(env, f.id, reviewItems(3));
+  writeStatus(env, f.id, 'done', { epub: 'b.epub', pages_unsure: [3], review_items: 3, review_seen: '' });
+  writeEpub(env, f.id, 'b.epub', Buffer.from('PK first'));
+  tick(env);
+  // Delivered: in the same check, a review round for the free models.
+  const before = env.gh.dispatches.length - 1;
+  const d = lastDispatch(env).body.inputs;
+  assert.strictEqual(jobs(env)[f.id].stage, 'running');
+  const folder = sub(env, sub(env, helperFolder(env), 'مراجعة'), f.id);
+  assert.ok(folder, 'the book\'s review folder, where every model\'s verdicts are');
+  assert.strictEqual(d.helper, folder.id + ':review');
+  assert.ok(/:only$/.test(d.review), 'no conversion: the places only');
+  assert.ok(/;review=gemma-4-31b-it/.test(d.models), d.models);
+  assert.ok(/مراجعة المشكوك فيه بالنماذج المجانية/.test(journal(env).pop().x));
+  // It applied two answers: the book is delivered again, and the next round waits for a change.
+  minutes(env, 8);
+  writeStatus(env, f.id, 'done', { epub: 'مجاني.epub', pages_unsure: [3], review_items: 1, review_applied: 2,
+    free_review: { asked: 2, answers: 2, left: 0 } });
+  writeEpub(env, f.id, 'مجاني.epub');
+  tick(env);
+  assert.strictEqual(jobs(env)[f.id].stage, 'delivered');
+  assert.ok(env.mails.some((m) => /طُبّقت أحكام النماذج/.test(m.subject)));
+  assert.deepStrictEqual(Object.keys(JSON.parse(env.props.get('RV_' + f.id)).fr).sort(), ['asked', 'at', 'left', 'sig']);
+  minutes(env, 60);
+  tick(env);
+  assert.strictEqual(env.gh.dispatches.length, before + 1, 'nothing changed: no round for nothing');
+  // Another free model in the review box: it judges too.
+  env.ctx.setBoxes(JSON.stringify(Object.assign(env.ctx.boxesInfo_(), { review: ['gemma-4-31b-it', 'gemini-3.8-flash'] })));
+  tick(env);
+  assert.strictEqual(env.gh.dispatches.length, before + 2);
+  // A round that applied nothing keeps the book as it was and sends no mail.
+  const mails = env.mails.length;
+  minutes(env, 8);
+  writeStatus(env, f.id, 'done', { epub: 'مجاني.epub', pages_unsure: [3], review_items: 1, free_review: { asked: 1, answers: 0, left: 0 } });
+  tick(env);
+  assert.strictEqual(env.mails.length, mails);
+  assert.ok(/لم تُطبَّق إجابة جديدة/.test(journal(env).pop().x));
+  // Out of quota today: no round.
+  env.ctx.setBoxes(JSON.stringify(Object.assign(env.ctx.boxesInfo_(), { review: ['gemini-2.5-flash'] })));
+  const u = { day: '2026-10-23', m: { 'gemini-2.5-flash': { n: 20, out: true } }, runs: [] };
+  env.props.set('USAGE', JSON.stringify(u));
+  const n = env.gh.dispatches.length;
+  minutes(env, 10);
+  tick(env);
+  assert.strictEqual(env.gh.dispatches.length, n);
+});
+
+test('review: a free models\' round that fails leaves the user\'s own review alone', () => {
+  const env = readyEnv({ start: '2026-10-23T07:03:00Z' });
+  env.ctx.setBoxes(JSON.stringify({ read1: ['gemini-3.5-flash-lite'], read2: [], settle: [], review: ['gemma-4-31b-it'] }));
+  const f = addBook(env, 'تعثر.pdf');
+  tick(env);
+  minutes(env, 30);
+  putItems(env, f.id, reviewItems(3));
+  writeStatus(env, f.id, 'done', { epub: 'b.epub', pages_unsure: [3], review_items: 3, review_seen: '' });
+  writeEpub(env, f.id, 'b.epub', Buffer.from('PK first'));
+  tick(env);
+  assert.strictEqual(lastDispatch(env).body.inputs.helper.split(':')[1], 'review');
+  const rv = JSON.parse(env.props.get('RV_' + f.id));
+  minutes(env, 8);
+  writeStatus(env, f.id, 'failed', { reason: 'crash' });
+  tick(env);
+  const after = JSON.parse(env.props.get('RV_' + f.id));
+  assert.strictEqual(after.tries, rv.tries);
+  assert.ok(!after.x);
+  assert.strictEqual(after.fr.failed, true);
+  assert.strictEqual(jobs(env)[f.id].stage, 'delivered');
+  const n = env.gh.dispatches.length;
+  minutes(env, 60);
+  tick(env);
+  assert.strictEqual(env.gh.dispatches.length, n, 'not tried again until something changes');
 });
 
 test('review: the user and the models in the review box never do the same place twice', () => {
@@ -2567,7 +2673,7 @@ test('a deleted book: its review folder goes even while the review box is empty,
   assert.ok(sub(env, reviews(), f.id), 'copied for the models');
 
   // The box is emptied, then the book is deleted: the next check removes its folder anyway.
-  env.ctx.setHelperBoxes(JSON.stringify({ transcribe: [], review: [] }));
+  setHelperBoxes(env, JSON.stringify({ transcribe: [], review: [] }));
   env.drive.DriveApp.getFileById(f.id).setTrashed(true);
   minutes(env, 10);
   tick(env);
@@ -2576,13 +2682,13 @@ test('a deleted book: its review folder goes even while the review box is empty,
   // Deleted between two checks: putting a model in the box removes it at once.
   const { f: g } = deliverWithPlaces(env, 'ثان.pdf', 2);
   env.gh.files['drive-' + g.id + '/review/p0003-0123456789.jpg'] = Buffer.from([0xff, 0xd8, 1]);
-  env.ctx.setHelperBoxes(JSON.stringify({ transcribe: [], review: [GEMINI] }));
+  setHelperBoxes(env, JSON.stringify({ transcribe: [], review: [GEMINI] }));
   minutes(env, 10);
   tick(env);
   assert.ok(sub(env, reviews(), g.id));
-  env.ctx.setHelperBoxes(JSON.stringify({ transcribe: [], review: [] }));
+  setHelperBoxes(env, JSON.stringify({ transcribe: [], review: [] }));
   env.drive.DriveApp.getFileById(g.id).setTrashed(true);
-  env.ctx.setHelperBoxes(JSON.stringify({ transcribe: [], review: [GEMINI] }));
+  setHelperBoxes(env, JSON.stringify({ transcribe: [], review: [GEMINI] }));
   assert.strictEqual(sub(env, reviews(), g.id), undefined, 'gone before the model starts');
 });
 
@@ -2610,7 +2716,7 @@ test('the models\' finished verdicts are applied even after the user empties the
   const answers = { [items[0].id]: Object.assign(answerFor(items[0], 'keep'), { by: [GEMINI] }) };
   const file = helperFolder(env).createFolder('أحكام').createFile(f.id + '.json',
     JSON.stringify({ v: 1, fileId: f.id, answers, done: true }), 'application/json');
-  env.ctx.setHelperBoxes(JSON.stringify({ transcribe: [], review: [] }));
+  setHelperBoxes(env, JSON.stringify({ transcribe: [], review: [] }));
   const before = env.gh.dispatches.length;
   minutes(env, 10);
   tick(env);
@@ -2618,88 +2724,80 @@ test('the models\' finished verdicts are applied even after the user empties the
   assert.strictEqual(lastDispatch(env).body.inputs.judge, file.id);
 });
 
-test('the page: models move between the boxes with a tap (or a drag), are saved, and come back if saving fails', () => {
+test('the page: one board, any model in any box with a tap (or a drag), saved, and back if saving fails', () => {
   const env = boxesEnv({ transcribe: [GEMINI], review: [] });
   writeHelperStatus(env, { models: MODELS.concat([{ id: 'agy|gemini-4-argon', label: 'Gemini 4 Argon', tool: 'Antigravity',
     warn: 'لا للتفريغ: يستنفد الحدود' }]), chips: { [GEMINI]: { state: 'working', text: 'يقرأ ص 12 من «أول»' } } });
   const page = pageSandbox(env, status(env));
   const boxes = page.byId.boxes;
   assert.strictEqual(boxes.hidden, false);
-  const sections = boxes.kids.filter((k) => k.className === 'bx');
-  assert.strictEqual(sections.length, 3, 'reading, settling, review');
-  const pair = (sec) => sec.kids.find((k) => k.className === 'pair');
-  const chipIn = (box, text) => {
-    for (const k of box.kids || []) {
-      if (k.tag === 'button' && k.textContent.indexOf(text) >= 0) return k;
-      const inner = chipIn(k, text);
-      if (inner) return inner;
-    }
-    return null;
-  };
-  const [offT, onT] = pair(sections[0]).kids;
-  assert.ok(/Gemini 3\.8 Flash/.test(onT.textContent) && /يقرأ ص 12/.test(onT.textContent), onT.textContent);
-  assert.ok(/Grok 4\.7/.test(offT.textContent) && /يستنفد الحدود/.test(offT.textContent));
-  assert.deepStrictEqual(offT.kids.filter((k) => k.className === 'grp').map((g) => g.kids[0].textContent),
-    ['Grok Build', 'Antigravity'], 'in rows under the name of their program');
-  assert.ok(/فارغ: النماذج المجانية تحسم/.test(pair(sections[1]).kids[1].textContent));
-  assert.ok(/فارغ: المواضع تبقى لك/.test(pair(sections[2]).kids[1].textContent));
+  const sections = () => boxes.kids.filter((k) => k.className === 'bx');
+  assert.deepStrictEqual(sections().map((x) => x.kids[0].kids[0].textContent),
+    ['القراءة الأولى', 'القراءة الثانية', 'الحسم', 'مراجعة المشكوك فيه']);
+  const pair = (i) => sections()[i].kids.find((k) => k.className === 'pair');
+  const find = (node, pred) => { if (pred(node)) return node; for (const k of node.kids || []) { const f = find(k, pred); if (f) return f; } return null; };
+  const buttonIn = (root, text) => find(root, (k) => k.tag === 'button' && k.textContent.indexOf(text) >= 0);
+  const cardOf = (box, text) => box.kids.find((k) => /\b(mcard|mrow)\b/.test(k.className) && k.textContent.indexOf(text) >= 0);
+  // The first reading: Gemini (the user's) and the two Lite readers (free) work there.
+  let [off, on] = pair(0).kids;
+  assert.ok(/Gemini 3\.8 Flash/.test(on.textContent) && /يقرأ ص 12/.test(on.textContent), on.textContent);
+  assert.ok(/Gemini 3\.5 Flash-Lite/.test(on.textContent), 'the free models are on the same board');
+  // «المتاحة» is folded under one button while the box has models.
+  assert.ok(!/Grok 4\.7/.test(off.textContent), off.textContent);
+  page.click(buttonIn(off, 'أضف نموذجاً'));
+  off = pair(0).kids[0];
+  assert.ok(/Grok 4\.7/.test(off.textContent) && /يستنفد الحدود/.test(off.textContent), off.textContent);
+  assert.deepStrictEqual(off.kids.filter((k) => k.className === 'grp').map((g) => g.kids[0].textContent),
+    ['مجانية (على GitHub)', 'Grok Build', 'Antigravity'], 'in rows: the free ones, then by program');
+  // An empty box says nobody works there, and shows what can.
+  assert.ok(/لا أحد يعمل في «مراجعة المشكوك فيه»/.test(pair(3).kids[1].textContent));
+  assert.ok(/Gemma 4 31B/.test(pair(3).kids[0].textContent) && /Grok 4\.7/.test(pair(3).kids[0].textContent));
 
-  // A tap on Grok in the right box puts it to work.
-  page.click(chipIn(offT, 'Grok 4.7'));
-  const call = page.pending('setHelperBoxes')[0];
-  assert.deepStrictEqual(JSON.parse(call.args[0]), { transcribe: [GEMINI, GROK], settle: [], review: [], times: {} });
-  let now = pair(boxes.kids.filter((k) => k.className === 'bx')[0]).kids[1];
-  assert.ok(/Grok 4\.7/.test(now.textContent), 'shown in the left box at once');
-  page.answer(call, env.ctx.setHelperBoxes(call.args[0]));
-  assert.deepStrictEqual(JSON.parse(env.props.get('HELPER_BOXES')).transcribe, [GEMINI, GROK]);
+  // A tap on Grok puts it to work in the first reading.
+  page.click(buttonIn(off, 'Grok 4.7'));
+  let call = page.pending('setBoxes')[0];
+  assert.deepStrictEqual(JSON.parse(call.args[0]).read1.slice(-2), [GEMINI, GROK]);
+  assert.ok(/Grok 4\.7/.test(pair(0).kids[1].textContent), 'shown in «تعمل الآن» at once');
+  page.answer(call, env.ctx.setBoxes(call.args[0]));
+  assert.deepStrictEqual(JSON.parse(env.props.get('MODEL_BOXES')).read1.slice(-2), [GEMINI, GROK]);
 
   // A start time: Grok begins tomorrow at 14:30 (local time). The times open under its card.
-  const find = (node, pred) => { if (pred(node)) return node; for (const k of node.kids || []) { const f = find(k, pred); if (f) return f; } return null; };
-  const cardOf = (box, text) => box.kids.find((k) => /\bmcard\b/.test(k.className) && k.textContent.indexOf(text) >= 0);
-  const buttonIn = (root, text) => find(root, (k) => k.tag === 'button' && k.textContent.trim() === text);
-  let onBox = pair(boxes.kids.filter((k) => k.className === 'bx')[0]).kids[1];
-  assert.ok(/يبدأ: الآن · يتوقف: لا يتوقف/.test(cardOf(onBox, 'Grok 4.7').textContent));
-  page.click(buttonIn(cardOf(onBox, 'Grok 4.7'), 'المواعيد'));
-  onBox = pair(boxes.kids.filter((k) => k.className === 'bx')[0]).kids[1];
-  const startRow = find(cardOf(onBox, 'Grok 4.7'), (k) => k.className === 'times').kids[0];
+  on = pair(0).kids[1];
+  assert.ok(/يبدأ: الآن · يتوقف: لا يتوقف/.test(cardOf(on, 'Grok 4.7').textContent));
+  page.click(buttonIn(cardOf(on, 'Grok 4.7'), 'المواعيد'));
+  const startRow = find(cardOf(pair(0).kids[1], 'Grok 4.7'), (k) => k.className === 'times').kids[0];
   const daySel = find(startRow, (k) => k.tag === 'select');
   const clock = find(startRow, (k) => k.tag === 'input');
   daySel.value = '0';
   clock.value = '00:00';
   page.click(buttonIn(startRow, 'حدّد'));
-  assert.strictEqual(page.pending('setHelperBoxes').length, 0, 'a time already past is not saved');
+  assert.strictEqual(page.pending('setBoxes').length, 0, 'a time already past is not saved');
   assert.ok(/مضى/.test(page.byId.toasts.textContent));
   daySel.value = '1';
   clock.value = '14:30';
   page.click(buttonIn(startRow, 'حدّد'));
-  const timed = JSON.parse(page.pending('setHelperBoxes')[0].args[0]);
+  const timed = JSON.parse(page.pending('setBoxes')[0].args[0]);
   const expect = new Date();
   expect.setDate(expect.getDate() + 1);
   expect.setHours(14, 30, 0, 0);
   assert.strictEqual(Date.parse(timed.times[GROK].start), expect.getTime(), 'tomorrow at 14:30');
-  page.answer(page.pending('setHelperBoxes')[0], env.ctx.setHelperBoxes(JSON.stringify(timed)));
-  assert.strictEqual(JSON.parse(env.props.get('HELPER_BOXES')).times[GROK].start, timed.times[GROK].start);
-
-  now = pair(boxes.kids.filter((k) => k.className === 'bx')[0]).kids[1];
-  const grok = cardOf(now, 'Grok 4.7').textContent;
+  page.answer(page.pending('setBoxes')[0], env.ctx.setBoxes(JSON.stringify(timed)));
+  assert.strictEqual(JSON.parse(env.props.get('MODEL_BOXES')).times[GROK].start, timed.times[GROK].start);
+  const grok = cardOf(pair(0).kids[1], 'Grok 4.7').textContent;
   assert.ok(/مجدول/.test(grok) && /يبدأ: [^·]*:30/.test(grok) && !/يبدأ خلال دقيقة/.test(grok), grok);
 
-  // Its stop button sends Gemini back; saving fails: it comes back.
-  page.click(buttonIn(cardOf(now, 'Gemini 3.8 Flash'), 'أوقف'));
-  assert.deepStrictEqual(JSON.parse(page.pending('setHelperBoxes')[0].args[0]).transcribe, [GROK]);
-  page.fail(page.pending('setHelperBoxes')[0], 'offline');
-  now = pair(boxes.kids.filter((k) => k.className === 'bx')[0]).kids[1];
-  assert.ok(/Gemini 3\.8 Flash/.test(now.textContent), now.textContent);
+  // «أخرجه» on Gemini; saving fails: it comes back.
+  page.click(buttonIn(cardOf(pair(0).kids[1], 'Gemini 3.8 Flash'), 'أخرجه'));
+  assert.ok(JSON.parse(page.pending('setBoxes')[0].args[0]).read1.indexOf(GEMINI) < 0);
+  page.fail(page.pending('setBoxes')[0], 'offline');
+  assert.ok(/Gemini 3\.8 Flash/.test(pair(0).kids[1].textContent));
   assert.ok(/تعذّر الحفظ/.test(page.byId.toasts.textContent));
-
-  // A drop on the left box of the settling section, then of the review section.
-  const settleOn = pair(boxes.kids.filter((k) => k.className === 'bx')[1]).kids[1];
-  settleOn.handlers.drop[0]({ preventDefault() {}, dataTransfer: { getData: () => JSON.stringify({ id: GEMINI }) } });
-  assert.deepStrictEqual(JSON.parse(page.pending('setHelperBoxes')[0].args[0]).settle, [GEMINI]);
-  page.fail(page.pending('setHelperBoxes')[0], 'offline');
-  const reviewOn = pair(boxes.kids.filter((k) => k.className === 'bx')[2]).kids[1];
-  reviewOn.handlers.drop[0]({ preventDefault() {}, dataTransfer: { getData: () => JSON.stringify({ id: GEMINI }) } });
-  assert.deepStrictEqual(JSON.parse(page.pending('setHelperBoxes')[0].args[0]).review, [GEMINI]);
+  // A drop on «تعمل الآن» of settling, then of the review.
+  pair(2).kids[1].handlers.drop[0]({ preventDefault() {}, dataTransfer: { getData: () => JSON.stringify({ id: GEMINI }) } });
+  assert.ok(JSON.parse(page.pending('setBoxes')[0].args[0]).settle.indexOf(GEMINI) >= 0);
+  page.fail(page.pending('setBoxes')[0], 'offline');
+  pair(3).kids[1].handlers.drop[0]({ preventDefault() {}, dataTransfer: { getData: () => JSON.stringify({ id: 'gemma-4-31b-it' }) } });
+  assert.deepStrictEqual(JSON.parse(page.pending('setBoxes')[0].args[0]).review, ['gemma-4-31b-it']);
 });
 
 test('the page: the waiting books by name in their order, and how each finished book ended', () => {
@@ -3048,11 +3146,12 @@ test('the page: the free models one by one, the run\'s events as they come, and 
     ] }));
   const pg = liveSandbox(env);
   pg.sandbox.gotLive(JSON.parse(env.ctx.getLive('{}')));
-  const free = pg.byId.free.textContent;
-  const firstBox = pg.byId.free.kids.filter((k) => k.className === 'bx')[0];
+  const firstBox = pg.byId.boxes.kids.filter((k) => k.className === 'bx')[0];
   assert.ok(/القراءة الأولى/.test(firstBox.textContent), firstBox.textContent);
   const working = firstBox.kids.find((k) => k.className === 'pair').kids[1].textContent;
   assert.ok(/Gemini 3\.5 Flash-Lite/.test(working) && /يعمل الآن/.test(working), working);
+  // The board's cards are the free models' own; «النماذج المجانية» has the run's news.
+  const free = pg.byId.boxes.textContent + pg.byId.free.textContent;
   assert.ok(/الآن:\s+ص 233 \(القراءة الأولى\)/.test(free), free);
   assert.ok(/في الانتظار:\s+طلبان/.test(free), free);
   assert.ok(/اليوم:\s+نحو 120 من 500 طلباً/.test(free), free);
@@ -3082,7 +3181,7 @@ test('the page: the free models one by one, the run\'s events as they come, and 
   assert.ok(/قُرئت قراءتين وتنتظر الحسم *441/.test(text), text);
   // Each free model in a box that is out today has «أعد المحاولة الآن».
   pg.sandbox.gotLive(JSON.parse(env.ctx.getLive('{}')));
-  const again = pg.find(pg.byId.free, (n) => n.tag === 'button' && /أعد المحاولة الآن/.test(n.textContent));
+  const again = pg.find(pg.byId.boxes, (n) => n.tag === 'button' && /أعد المحاولة الآن/.test(n.textContent));
   assert.ok(again, 'a free model\'s «أعد المحاولة الآن»');
   again.click();
   const asks = pg.calls.filter((c) => c.fn === 'retryFree').pop();
@@ -3104,7 +3203,7 @@ test('the page: a waiting book says what the user\'s own settling models could d
   env.clock = Date.parse('2026-10-23T09:00:00Z');
   status(env);
   writeHelperStatus(env, { models: [{ id: 'agy|gemini-3.8-flash', label: 'Gemini 3.8 Flash', tool: 'Antigravity' }] });
-  env.ctx.setHelperBoxes(JSON.stringify({ transcribe: [], settle: ['agy|gemini-3.8-flash'], review: [] }));
+  setHelperBoxes(env, JSON.stringify({ transcribe: [], settle: ['agy|gemini-3.8-flash'], review: [] }));
   const f = addBook(env, 'تراث.pdf');
   tick(env);
   minutes(env, 60);
@@ -3121,14 +3220,15 @@ test('the page: a waiting book says what the user\'s own settling models could d
 const ACCOUNT = ['gemini-3.5-flash-lite', 'gemini-3.1-flash-lite', 'gemini-3.8-flash', 'gemini-3-flash-preview', 'gemma-4-31b-it',
   'gemma-4-26b-a4b-it'];
 
-test('the free models\' boxes: the converter\'s own until the user changes them, then sent with every run', () => {
+function freeInputOf(env) { return env.ctx.freeInput_(env.ctx.freeInfo_()); }
+
+test('the board\'s free models: the converter\'s own until the user changes them, then sent with every run', () => {
   const env = readyEnv();
   let s = status(env);
-  assert.strictEqual(s.free.custom, false);
   // Each Lite reader gives the readings the other cannot, as the converter does without boxes.
-  assert.deepStrictEqual([s.free.boxes.read1, s.free.boxes.read2],
-    [['gemini-3.5-flash-lite', 'gemini-3.1-flash-lite'], ['gemini-3.1-flash-lite', 'gemini-3.5-flash-lite']]);
-  assert.ok(s.free.models.indexOf('gemma-4-31b-it') >= 0, 'Gemma can be picked before any run said so');
+  assert.deepStrictEqual([s.boxes.read1, s.boxes.read2, s.boxes.review],
+    [['gemini-3.5-flash-lite', 'gemini-3.1-flash-lite'], ['gemini-3.1-flash-lite', 'gemini-3.5-flash-lite'], []]);
+  assert.ok(s.boxes.free.indexOf('gemma-4-31b-it') >= 0, 'Gemma can be picked before any run said so');
   const f = addBook(env, 'أول.pdf');
   tick(env);
   assert.ok(/^read1=gemini-3\.5-flash-lite,gemini-3\.1-flash-lite;/.test(lastDispatch(env).body.inputs.models),
@@ -3139,44 +3239,33 @@ test('the free models\' boxes: the converter\'s own until the user changes them,
     read2: ['gemini-3.1-flash-lite'], settle: ['gemini-3.8-flash', 'gemini-3-flash-preview', 'gemini-3.5-flash-lite', 'gemini-3.1-flash-lite'] } });
   tick(env);
   s = status(env);
-  assert.deepStrictEqual(s.free.models, ACCOUNT);
-  assert.deepStrictEqual(s.free.boxes.settle, ['gemini-3.8-flash', 'gemini-3-flash-preview', 'gemini-3.5-flash-lite', 'gemini-3.1-flash-lite']);
-  // An empty box is allowed (nobody does that step); only free models' names go in.
-  let r = JSON.parse(env.ctx.setFreeBoxes(JSON.stringify({ read1: [], read2: ['gemini-3.1-flash-lite'], settle: [] })));
+  assert.deepStrictEqual(s.boxes.free, ACCOUNT);
+  assert.deepStrictEqual(s.boxes.settle, ['gemini-3.8-flash', 'gemini-3-flash-preview', 'gemini-3.5-flash-lite', 'gemini-3.1-flash-lite']);
+  // An empty box is allowed (nobody does that step); only models' names go in.
+  let r = JSON.parse(env.ctx.setBoxes(JSON.stringify({ read1: [], read2: ['gemini-3.1-flash-lite'], settle: [], review: [] })));
   assert.strictEqual(r.ok, true, r.error);
-  assert.deepStrictEqual([r.free.boxes.read1, r.free.boxes.settle], [[], []]);
-  assert.strictEqual(freeInputOf(env), 'read1=;read2=gemini-3.1-flash-lite;settle=');
-  env.props.delete('FREE_BOXES');
-  r = JSON.parse(env.ctx.setFreeBoxes(JSON.stringify({ read1: ['gemma-4-31b-it;rm -rf'], read2: ['a'], settle: ['b'] })));
+  assert.strictEqual(freeInputOf(env), 'read1=;read2=gemini-3.1-flash-lite;settle=;review=');
+  r = JSON.parse(env.ctx.setBoxes(JSON.stringify({ read1: ['gemma-4-31b-it;rm -rf'], read2: ['a'], settle: ['b'] })));
   assert.strictEqual(r.ok, false);
-  assert.strictEqual(env.props.get('FREE_BOXES'), undefined);
   // Gemma reads first; a model may be in two boxes (each once).
-  r = JSON.parse(env.ctx.setFreeBoxes(JSON.stringify({ read1: ['gemma-4-31b-it', 'gemma-4-31b-it'],
-    read2: ['gemini-3.5-flash-lite', 'gemini-3.1-flash-lite'], settle: ['gemini-3.8-flash', 'gemini-3.5-flash-lite'] })));
+  r = JSON.parse(env.ctx.setBoxes(JSON.stringify({ read1: ['gemma-4-31b-it', 'gemma-4-31b-it'],
+    read2: ['gemini-3.5-flash-lite', 'gemini-3.1-flash-lite'], settle: ['gemini-3.8-flash', 'gemini-3.5-flash-lite'], review: ['gemini-3.8-flash'] })));
   assert.strictEqual(r.ok, true);
-  assert.strictEqual(r.free.custom, true);
-  assert.deepStrictEqual(r.free.boxes.read1, ['gemma-4-31b-it']);
+  assert.deepStrictEqual(r.boxes.read1, ['gemma-4-31b-it']);
   // The next run takes them, in the form the workflow lets through to the converter.
   assert.strictEqual(JSON.parse(env.ctx.runNow(f.id)).started, true);
   const input = lastDispatch(env).body.inputs.models;
-  assert.strictEqual(input, 'read1=gemma-4-31b-it;read2=gemini-3.5-flash-lite,gemini-3.1-flash-lite;settle=gemini-3.8-flash,gemini-3.5-flash-lite');
+  assert.strictEqual(input, 'read1=gemma-4-31b-it;read2=gemini-3.5-flash-lite,gemini-3.1-flash-lite;' +
+    'settle=gemini-3.8-flash,gemini-3.5-flash-lite;review=gemini-3.8-flash');
   const yml = fs.readFileSync(path.join(ROOT, '.github', 'workflows', 'convert.yml'), 'utf8');
   assert.ok(/^\s+models:$/m.test(yml), 'the workflow takes the input');
   const re = new RegExp(/BOXES_RE='([^']+)'/.exec(yml)[1]);
   assert.ok(re.test(input), input);
   assert.ok(!re.test('read1=a;rm -rf /') && !re.test('read1=$(id)'));
-  assert.ok(re.test('read1=;read2=a;settle=b,c;out=d'), 'empty boxes and the models out today pass');
-  // Back to the converter's own.
-  r = JSON.parse(env.ctx.setFreeBoxes(JSON.stringify({ reset: true })));
-  assert.strictEqual(r.free.custom, false);
-  assert.deepStrictEqual(r.free.boxes.read1, ['gemini-3.5-flash-lite', 'gemini-3.1-flash-lite']);
-  assert.ok(/^read1=gemini-3\.5-flash-lite,gemini-3\.1-flash-lite;read2=gemini-3\.1-flash-lite,gemini-3\.5-flash-lite;settle=gemini-3\.8-flash,/.test(freeInputOf(env)),
-    freeInputOf(env));
+  assert.ok(re.test('read1=;read2=a;settle=b,c;review=;out=d'), 'empty boxes and the models out today pass');
 });
 
-function freeInputOf(env) { return env.ctx.freeInput_(env.ctx.freeInfo_()); }
-
-test('the page: the free models go into the three boxes with a tap or a drag, in the user\'s order, and out again', () => {
+test('the page: the free models go into any box with a tap or a drag, and out again, the last one too', () => {
   const env = readyEnv();
   const f = addBook(env, 'أول.pdf');
   tick(env);
@@ -3184,65 +3273,39 @@ test('the page: the free models go into the three boxes with a tap or a drag, in
   writeStatus(env, f.id, 'paused', { free_models: ACCOUNT });
   tick(env);
   const page = pageSandbox(env, status(env));
-  const sections = () => page.byId.free.kids.filter((k) => k.className === 'bx');
-  assert.deepStrictEqual(sections().map((x) => x.kids[0].kids[0].textContent), ['القراءة الأولى', 'القراءة الثانية', 'الحسم']);
-  const boxes = (i) => sections()[i].kids.find((k) => k.className === 'pair').kids;
-  const chipIn = (box, text) => page.button(text, box);
+  const sections = () => page.byId.boxes.kids.filter((k) => k.className === 'bx');
+  const pair = (i) => sections()[i].kids.find((k) => k.className === 'pair').kids;
+  const find = (node, pred) => { if (pred(node)) return node; for (const k of node.kids || []) { const x = find(k, pred); if (x) return x; } return null; };
+  const buttonIn = (root, text) => find(root, (k) => k.tag === 'button' && k.textContent.indexOf(text) >= 0);
   const cardIn = (box, text) => box.kids.find((k) => /\bmrow\b/.test(k.className) && k.textContent.indexOf(text) >= 0);
-  const saved = () => JSON.parse(page.pending('setFreeBoxes')[0].args[0]);
-  assert.ok(/Gemini 3\.5 Flash-Lite/.test(boxes(0)[1].textContent));
-  assert.ok(/Gemma 4 31B/.test(boxes(0)[0].textContent), 'every model of the account can be picked');
-
-  // A tap on Gemma 4 31B in the first reading's «المتاحة»: it works there after the Lite readers.
-  page.click(chipIn(boxes(0)[0], 'Gemma 4 31B'));
+  const saved = () => JSON.parse(page.pending('setBoxes')[0].args[0]);
+  const answer = () => { const c = page.pending('setBoxes')[0]; page.answer(c, env.ctx.setBoxes(c.args[0])); };
+  assert.ok(/Gemini 3\.5 Flash-Lite/.test(pair(0)[1].textContent));
+  // Gemma 4 31B joins the first reading: a tap in «المتاحة» (opened with its button).
+  page.click(buttonIn(pair(0)[0], 'أضف نموذجاً'));
+  page.click(buttonIn(pair(0)[0], 'Gemma 4 31B'));
   assert.deepStrictEqual(saved().read1, ['gemini-3.5-flash-lite', 'gemini-3.1-flash-lite', 'gemma-4-31b-it']);
-  assert.ok(cardIn(boxes(0)[1], 'Gemma 4 31B'), 'shown in the box at once');
-  let call = page.pending('setFreeBoxes')[0];
-  page.answer(call, env.ctx.setFreeBoxes(call.args[0]));
-  // «قدّمه» twice: Gemma reads first.
-  page.click(page.button('قدّمه', cardIn(boxes(0)[1], 'Gemma 4 31B')));
-  call = page.pending('setFreeBoxes')[0];
-  page.answer(call, env.ctx.setFreeBoxes(call.args[0]));
-  page.click(page.button('قدّمه', cardIn(boxes(0)[1], 'Gemma 4 31B')));
-  assert.deepStrictEqual(saved().read1, ['gemma-4-31b-it', 'gemini-3.5-flash-lite', 'gemini-3.1-flash-lite']);
-  call = page.pending('setFreeBoxes')[0];
-  page.answer(call, env.ctx.setFreeBoxes(call.args[0]));
-  assert.deepStrictEqual(JSON.parse(env.props.get('FREE_BOXES')).read1, ['gemma-4-31b-it', 'gemini-3.5-flash-lite', 'gemini-3.1-flash-lite']);
-  // «أخرجه»: the Lite readers no longer read first.
-  ['Gemini 3.5 Flash-Lite', 'Gemini 3.1 Flash-Lite'].forEach((name) => {
-    page.click(page.button('أخرجه', cardIn(boxes(0)[1], name)));
-    call = page.pending('setFreeBoxes')[0];
-    page.answer(call, env.ctx.setFreeBoxes(call.args[0]));
+  assert.ok(cardIn(pair(0)[1], 'Gemma 4 31B'), 'shown in the box at once');
+  answer();
+  // No order between the models of a box: no «قدّمه».
+  assert.ok(!buttonIn(pair(0)[1], 'قدّمه'));
+  // «أخرجه» on each: the last one may go too (the user's rule), nobody gives first readings then.
+  ['Gemini 3.5 Flash-Lite', 'Gemini 3.1 Flash-Lite', 'Gemma 4 31B'].forEach((name) => {
+    page.click(buttonIn(cardIn(pair(0)[1], name), 'أخرجه'));
+    answer();
   });
-  assert.deepStrictEqual(JSON.parse(env.props.get('FREE_BOXES')).read1, ['gemma-4-31b-it']);
-  // The last one may go too (the user's rule): nobody gives first readings then.
-  boxes(0)[0].handlers.drop[0]({ preventDefault() {}, dataTransfer: { getData: () => JSON.stringify({ id: 'gemma-4-31b-it' }) } });
-  call = page.pending('setFreeBoxes')[0];
-  assert.deepStrictEqual(JSON.parse(call.args[0]).read1, []);
-  page.answer(call, env.ctx.setFreeBoxes(call.args[0]));
-  assert.ok(/لا نموذج هنا: لا يعمل أحد في «القراءة الأولى»/.test(boxes(0)[1].textContent), boxes(0)[1].textContent);
-  assert.ok(/لا يعمل أحد في هذه المرحلة/.test(page.byId.toasts.textContent), page.byId.toasts.textContent);
-  // There is no «خارج المربعات»: no model works outside the boxes.
-  assert.ok(!/خارج المربعات/.test(page.byId.free.textContent));
-  // Gemma 4 26B dragged onto the second card of the settling box goes before it.
-  const settle = boxes(2)[1];
-  const second = settle.kids.filter((k) => /\bmrow\b/.test(k.className))[1];
-  second.handlers.drop[0]({ preventDefault() {}, dataTransfer: { getData: () => JSON.stringify({ id: 'gemma-4-26b-a4b-it' }) } });
-  assert.deepStrictEqual(saved().settle.slice(0, 3), ['gemini-3.8-flash', 'gemma-4-26b-a4b-it', 'gemini-3.7-flash']);
+  assert.deepStrictEqual(JSON.parse(env.props.get('MODEL_BOXES')).read1, []);
+  assert.ok(/لا أحد يعمل في «القراءة الأولى»/.test(pair(0)[1].textContent), pair(0)[1].textContent);
+  assert.ok(/لا أحد يعمل فيه الآن/.test(page.byId.toasts.textContent), page.byId.toasts.textContent);
+  // Gemma 4 26B dropped on the settling box joins it.
+  pair(2)[1].handlers.drop[0]({ preventDefault() {}, dataTransfer: { getData: () => JSON.stringify({ id: 'gemma-4-26b-a4b-it' }) } });
+  assert.ok(saved().settle.indexOf('gemma-4-26b-a4b-it') >= 0);
   // Saving fails: the box is as it was.
-  page.fail(page.pending('setFreeBoxes')[0], 'offline');
-  assert.ok(!cardIn(boxes(2)[1], 'Gemma 4 26B'));
+  page.fail(page.pending('setBoxes')[0], 'offline');
+  assert.ok(!cardIn(pair(2)[1], 'Gemma 4 26B'));
   assert.ok(/تعذّر الحفظ/.test(page.byId.toasts.textContent));
-  // The user's own models (on their computer) never go in these boxes.
-  boxes(1)[1].handlers.drop[0]({ preventDefault() {}, dataTransfer: { getData: () => JSON.stringify({ id: 'agy|gemini-3.8-flash' }) } });
-  assert.strictEqual(page.pending('setFreeBoxes').length, 0);
-  // Back to the converter's own boxes.
-  page.click(page.button('ارجع إلى الترتيب الافتراضي', page.byId.free));
-  call = page.pending('setFreeBoxes')[0];
-  assert.deepStrictEqual(JSON.parse(call.args[0]), { reset: true });
-  page.answer(call, env.ctx.setFreeBoxes(call.args[0]));
-  assert.deepStrictEqual(boxes(0)[1].kids.filter((k) => /\bmrow\b/.test(k.className))
-    .map((k) => k.kids[0].kids.find((x) => x.tag === 'b').textContent), ['Gemini 3.5 Flash-Lite', 'Gemini 3.1 Flash-Lite']);
+  // There is no «خارج المربعات»: no model works outside the boxes.
+  assert.ok(!/خارج المربعات/.test(page.byId.boxes.textContent + page.byId.free.textContent));
 });
 
 function controlOf(env) {
@@ -3294,20 +3357,20 @@ test('«أعد المحاولة الآن» on a free model: its out mark goes, a
 test('empty boxes: nobody works, no run starts for a scanned book, and a book waiting for a model runs once there is one', () => {
   let env = readyEnv({ start: '2026-10-23T07:03:00Z' });
   const none = JSON.stringify({ read1: [], read2: [], settle: [] });
-  assert.strictEqual(JSON.parse(env.ctx.setFreeBoxes(none)).ok, true);
+  assert.strictEqual(JSON.parse(setFreeBoxes(env, none)).ok, true);
   // A text file needs no model.
   addBook(env, 'نص.txt');
   tick(env);
   assert.strictEqual(env.gh.dispatches.length, 1);
   env = readyEnv({ start: '2026-10-23T07:03:00Z' });
-  env.ctx.setFreeBoxes(none);
+  setFreeBoxes(env, none);
   const g = addBook(env, 'ممسوح.pdf');
   tick(env);
   assert.strictEqual(env.gh.dispatches.length, 0, 'no run for nothing');
   assert.deepStrictEqual(names(env, 'inbox'), ['ممسوح.pdf']);
   // One model in one box: it starts. Its waiting pages no model in any box can take further:
   // it waits for one, with no daily pause counted, and runs as soon as the boxes change.
-  env.ctx.setFreeBoxes(JSON.stringify({ read1: ['gemini-3.5-flash-lite'], read2: [], settle: [] }));
+  setFreeBoxes(env, JSON.stringify({ read1: ['gemini-3.5-flash-lite'], read2: [], settle: [] }));
   tick(env);
   assert.strictEqual(env.gh.dispatches.length, 1);
   minutes(env, 20);
@@ -3321,7 +3384,7 @@ test('empty boxes: nobody works, no run starts for a scanned book, and a book wa
   tick(env);
   assert.strictEqual(env.gh.dispatches.length, 1, 'waits for the user, not for a new day');
   assert.strictEqual(status(env).parked[0].stage, 'boxWait');
-  env.ctx.setFreeBoxes(JSON.stringify({ read1: ['gemini-3.5-flash-lite'], read2: ['gemini-3.1-flash-lite'], settle: ['gemini-3.8-flash'] }));
+  setFreeBoxes(env, JSON.stringify({ read1: ['gemini-3.5-flash-lite'], read2: ['gemini-3.1-flash-lite'], settle: ['gemini-3.8-flash'] }));
   tick(env);
   assert.strictEqual(env.gh.dispatches.length, 2);
   assert.strictEqual(jobs(env)[g.id].stage, 'running');
@@ -3335,11 +3398,11 @@ test('a paused book does not run on its new day when nobody can work', () => {
   minutes(env, 60);
   writeStatus(env, f.id, 'paused', { quota_day: '2026-10-23', models_out: LITES });
   tick(env);
-  env.ctx.setFreeBoxes(JSON.stringify({ read1: [], read2: [], settle: [] }));
+  setFreeBoxes(env, JSON.stringify({ read1: [], read2: [], settle: [] }));
   env.clock = Date.parse('2026-10-24T07:20:00Z');
   tick(env);
   assert.strictEqual(env.gh.dispatches.length, 1);
-  env.ctx.setFreeBoxes(JSON.stringify({ reset: true }));
+  setFreeBoxes(env, JSON.stringify({ read1: ['gemini-3.5-flash-lite'], read2: ['gemini-3.1-flash-lite'], settle: ['gemini-3.8-flash'] }));
   tick(env);
   assert.strictEqual(env.gh.dispatches.length, 2);
 });

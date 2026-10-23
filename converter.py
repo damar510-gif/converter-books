@@ -330,6 +330,8 @@ class ModelPool:
         # One request at a time per model (the user's rule, 2026-10-23): the next one leaves
         # only once the last one is answered. Requests to different models go side by side.
         self.turns = {}
+        # Where each box's turn is (share).
+        self.turns_at = {}
         # Models the user sent back to work during this run (revive).
         self.revived = set()
 
@@ -412,13 +414,15 @@ class ModelPool:
         return any(self.available(m) for m in self.reading(kind) if m != besides)
 
     def settlers(self, lite=True):
-        """Who settles a page, as good as can be: the models in the settling box on the status
-        page, in the user's order; else the Flash models strongest first, then the Lite readers
-        (fewer requests first, to spread their quotas). lite False: the helper's models are on
-        and settle instead of the Lite readers (and of Gemma, in a box)."""
+        """Who settles a page: the models in the settling box on the status page, every one of
+        them (they share the pages, share); else the Flash models strongest first, then the Lite
+        readers (fewer requests first, to spread their quotas). lite False, without the boxes:
+        the helper's models are on and settle instead of the Lite readers."""
         box = self.boxes.get("settle")
-        if box or self.strict:
-            return [m for m in box or [] if self.available(m) and (lite or model_rank(m) > (0,))]
+        if self.strict:
+            return [m for m in box or [] if self.available(m)]
+        if box:
+            return [m for m in box if self.available(m) and (lite or model_rank(m) > (0,))]
         out = [m for m in self.extra if self.available(m)]
         if lite:
             out += sorted((m for m in (self.model, self.second) if self.available(m)),
@@ -429,6 +433,20 @@ class ModelPool:
         """No free reader has quota left today (Gemma only rescues refused pages, unless the
         user put it in a reading box)."""
         return not any(self.available(m) for m in self.reading("a") + self.reading("b"))
+
+    def share(self, models, role=""):
+        """The models of a box share its work (the user's rule, 2026-10-23: no order between
+        them): those with no request in flight first, from a point that moves on with every
+        call, so each gets pages. Without the status page's boxes the order stays as given."""
+        models = [m for m in models if m]
+        if not self.strict or len(models) < 2:
+            return models
+        key = (role,) + tuple(models)
+        with self.lock:
+            self.turns_at[key] = start = (self.turns_at.get(key, -1) + 1) % len(models)
+        turn = models[start:] + models[:start]
+        idle = [m for m in turn if not self._turn(m).locked()]
+        return idle + [m for m in turn if m not in idle]
 
     def rescue_for(self):
         """The model that reads a page Gemini refused: Gemma, unless the boxes say who works."""
@@ -792,7 +810,7 @@ def read_page(pool, doc, index, cache_dir, total, dual):
     prompt = OCR_PROMPT.format(spread=SPREAD_HINT if spread else "")
     if need_a:
         with live.doing(page_no, "a"):
-            status, reading, error = read_with(pool, pool.reading("a"), page, png, pix, prompt, ink,
+            status, reading, error = read_with(pool, pool.share(pool.reading("a"), "a"), page, png, pix, prompt, ink,
                                                rescue=pool.rescue_for())
         if status == "pending":
             return None
@@ -805,7 +823,7 @@ def read_page(pool, doc, index, cache_dir, total, dual):
         # The second reading comes from a different model, so its mistakes fall elsewhere.
         # Gemma may give it only when Gemini refused this page (and, with the status page's
         # boxes, only from a box).
-        others = [m for m in pool.reading("b") if m != rec["a"]["model"]]
+        others = [m for m in pool.share(pool.reading("b"), "b") if m != rec["a"]["model"]]
         rescue = pool.rescue_for() if rec["a"].get("refused") and rec["a"]["model"] != pool.rescue else ""
         with live.doing(page_no, "b"):
             status, reading, error = read_with(pool, others, page, png, pix, prompt, ink, rescue=rescue)
@@ -887,7 +905,7 @@ def check_page(pool, doc, rec, tess, vocab, lite=True):
     prompt = crosscheck.reconcile_prompt(rules, a, b, diffs, list(dict.fromkeys(miss_a + miss_b)))
     answered = errored = False
     with live.doing(page_no, "settle"):
-        for model in pool.settlers(lite):
+        for model in pool.share(pool.settlers(lite), "settle"):
             try:
                 text, finish = pool.read(png, prompt, model)
             except QuotaExhausted:
@@ -1885,7 +1903,7 @@ def tell_helper(box, args, total, recs, lite_out, share=()):
     helper is off for this run, so it stops working on the book."""
     need = sorted(p for p, r in recs.items() if helper_can(r, box) and p not in share) if box.transcribe else []
     box.put_json("book.json", {"v": 1, "title": args.title, "total": total, "need": need,
-                               "need_a": [p for p in need if helperbox.needs_first_reading(recs[p])],
+                               "need_a": [p for p in need if box.reads1 and helperbox.needs_first_reading(recs[p])],
                                "lite_out": bool(lite_out), "at": helperbox.now(),
                                "run": os.environ.get("GITHUB_RUN_ID", "")})
     return need
@@ -1924,16 +1942,16 @@ def run_stops(token, now=None, left=None):
 def nobody_for(pool, box, records, dual):
     """True when no model in any box, free or on the user's computer (box), could take the
     next step of a page left waiting, whatever its quota: the user emptied those boxes."""
-    reads = bool(box and box.reads)
+    reads1, reads2 = bool(box and box.reads1), bool(box and box.reads2)
     settles = bool(box and box.settles)
     for r in records:
         if review.pin_of(r) or r.get("status") in ("empty", "text-layer"):
             continue
         if r.get("status") != "ok":
-            if pool.reading("a") or reads:
+            if pool.reading("a") or reads1:
                 return False
         elif dual and (r.get("b") or {}).get("status") != "ok":
-            if [m for m in pool.reading("b") if m != (r.get("a") or {}).get("model")] or reads:
+            if [m for m in pool.reading("b") if m != (r.get("a") or {}).get("model")] or reads2:
                 return False
         elif (r.get("check") or {}).get("v") != CHECK_VERSION:
             if pool.boxes.get("settle") or settles or r["a"].get("refused"):
@@ -1941,18 +1959,22 @@ def nobody_for(pool, box, records, dual):
     return True
 
 
-def free_share(recs, half=True, can=None):
+def free_share(recs, half=True, can=None, dev=None):
     """The pages the free models take in a run while the helper's models work on the book:
     those every model in the helper's box handed back, then the later half of the pages left
-    (the helper's models read from the start of the book), the last page first. half=False:
-    the helper's models do not read, so the free models read every page left. can(rec): the
-    free models can take this page's next step now (free_can); the others are not taken, so
-    the helper's models get them at once instead of after a run that could not touch them."""
+    (the helper's models work from the start of the book), the last page first. half=False:
+    every page left. can(rec): the free models can take this page's next step now (free_can);
+    the others are not taken, so the helper's models get them at once. dev(rec): the helper's
+    models can take it too (helper_can); only those pages are shared by halves, the free
+    models take the others whole."""
     ok = (lambda p: True) if can is None else (lambda p: can(recs[p]))
     left = sorted(p for p, r in recs.items() if helperbox.needs_helper(r, CHECK_VERSION) and ok(p))
     back = sorted((p for p, r in recs.items() if r and r.get("hskip") and r.get("status") not in ("empty", "text-layer")
                    and not review.pin_of(r) and not helperbox.settled(r, CHECK_VERSION) and ok(p)), reverse=True)
-    return back + sorted(left[(len(left) + 1) // 2:] if half else left, reverse=True)
+    if half:
+        both = [p for p in left if dev is None or dev(recs[p])]
+        left = sorted(set(left) - set(both)) + both[(len(both) + 1) // 2:]
+    return back + sorted(left, reverse=True)
 
 
 def free_can(pool, rec, lite):
@@ -1970,12 +1992,15 @@ def free_can(pool, rec, lite):
 
 
 def helper_can(rec, box):
-    """The helper's models can still do something on this page: read it (box.reads), or
-    settle its two readings (box.settles)."""
+    """The helper's models can take this page's next step: its first reading (box.reads1),
+    its second (box.reads2), or settling its two readings (box.settles)."""
     if not helperbox.needs_helper(rec, CHECK_VERSION):
         return False
-    both = bool(rec) and rec.get("status") == "ok" and (rec.get("b") or {}).get("status") == "ok"
-    return box.settles if both else box.reads
+    if not rec or rec.get("status") != "ok":
+        return box.reads1
+    if (rec.get("b") or {}).get("status") != "ok":
+        return box.reads2
+    return box.settles
 
 
 def free_pass(pool, filepath, share, outs, cache_dir, total, workers, deadline, vocab, lite=False, on_back=None):
@@ -2138,7 +2163,8 @@ def generate_epub_from_pdf(filepath, output_path, args):
         # Only the pages the free models can move on now (a model in their box with quota):
         # the others are the helper's models' at once.
         can = lambda r: free_can(pool, r, not box.settles)
-        share = free_share(start, half=box.reads, can=can) if transcribe else []
+        dev = lambda r: helper_can(r, box)
+        share = free_share(start, can=can, dev=dev) if transcribe else []
         need = tell_helper(box, args, len(doc), start, False, share)
         if transcribe:
             box.start_images(sorted(set(need) | set(share)), lambda p: page_jpeg(filepath, p))
@@ -2146,7 +2172,8 @@ def generate_epub_from_pdf(filepath, output_path, args):
             # Drive token ran out first sent 494 images and no reading: nothing to settle on).
             send_readings(box, filepath, [r for r in start.values() if r], cache_dir, lv, pages=set(need))
             print(f"Free models: {len(share)} pages from the end of the book; the helper's models: {len(need)}")
-            lv.set_phase("free", pages=len(share), helper=len(need), reads=box.reads, settles=box.settles)
+            lv.set_phase("free", pages=len(share), helper=len(need), reads=box.reads, settles=box.settles,
+                         reads1=box.reads1, reads2=box.reads2)
             # A page the free models leave during the pass (a model ran out) goes to the helper's
             # models within a minute, with its readings, not at the end of the run.
             handed, hand_lock, hand_at = set(), threading.Lock(), [0.0]
@@ -2220,7 +2247,7 @@ def generate_epub_from_pdf(filepath, output_path, args):
     if pool and not args.review_only:
         lv.set_phase("check", pages=sum(1 for r in records if page_state(r) in ("read2", "read1")))
         helper_wait = check_pages(pool, filepath, records, cache_dir, dual, args.workers,
-                                  transcribe and box.reads, transcribe and box.settles)
+                                  transcribe and box.reads2, transcribe and box.settles)
     free_left = False
     if transcribe:
         # Every page left goes back to the helper's models; the free models take their share
@@ -2231,7 +2258,7 @@ def generate_epub_from_pdf(filepath, output_path, args):
         # Worth another run right away: the free models finished pages (or the user sent one
         # back to work) and still have something they can do.
         free_left = (bool(free_moved) or bool(pool.revived)) and \
-            bool(free_share(left, half=box.reads, can=lambda r: free_can(pool, r, not box.settles)))
+            bool(free_share(left, can=lambda r: free_can(pool, r, not box.settles), dev=lambda r: helper_can(r, box)))
     if box:
         box.wait_images()
         notes = notes + [f"المساعد: {n}" for n in box.notes]
