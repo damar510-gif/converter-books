@@ -50,11 +50,16 @@ on:
         type: string
       # The helper on the user's computer (docs/helper-boxes-plan.md).
       helper:
-        description: 'Drive inbox only: the book''s helper folder ID, with ":transcribe" or ":import"'
+        description: 'Drive inbox only: the book''s helper folder ID, with ":transcribe", ":read", ":settle" or ":import"'
         required: false
         type: string
       judge:
         description: 'Drive inbox only: the file ID of the helper models'' verdicts on the unsure places'
+        required: false
+        type: string
+      # The status page's live view (live.py, docs/drive-inbox.md).
+      live:
+        description: 'Drive inbox only: the Drive file ID where the run writes what it is doing, every few seconds'
         required: false
         type: string
 
@@ -81,6 +86,19 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+
+      # The status page shows at once that the run has started (live.py needs no package).
+      - name: Tell the status page
+        if: inputs.live != ''
+        env:
+          LIVE: ${{ inputs.live }}
+        run: |
+          if [[ "$LIVE" =~ ^[A-Za-z0-9_-]{10,100}$ ]]; then
+            DRIVE_TOKEN=$(jq -r '.inputs.drive_token // ""' "$GITHUB_EVENT_PATH")
+            [ -n "$DRIVE_TOKEN" ] && echo "::add-mask::$DRIVE_TOKEN"
+            echo "LIVE_FILE=$LIVE" >> "$GITHUB_ENV"
+            DRIVE_TOKEN="$DRIVE_TOKEN" python live.py mark setup || true
+          fi
 
       - name: Install Pandoc and Tesseract
         run: sudo apt-get update && sudo apt-get install -y pandoc tesseract-ocr tesseract-ocr-ara
@@ -286,13 +304,20 @@ jobs:
           set +e
           ARGS=(-o "$EPUB_OUTPUT" --work-dir work --report report.md --status status.json --keep-markdown
                 --review-out review-out)
-          if [[ "$HELPER" =~ ^[A-Za-z0-9_-]+:(transcribe|import)$ ]]; then
-            # The converter exchanges files with the helper's folder with the run's Drive
-            # token, read from the event file and masked like the book's own download.
+          # Every mode Code.gs sends (helperInput_): the helper's models read and settle, only
+          # read, only settle, or their work so far is imported.
+          if [[ "$HELPER" =~ ^[A-Za-z0-9_-]+:(transcribe|read|settle|import)$ ]]; then
+            ARGS+=(--helper "$HELPER")
+          fi
+          # The live view: what the run does, written to the user's Drive every few seconds.
+          [ -n "$LIVE_FILE" ] && ARGS+=(--live "$LIVE_FILE")
+          if [[ " ${ARGS[*]} " == *" --helper "* || -n "$LIVE_FILE" ]]; then
+            # The converter exchanges files with the helper's folder, and writes the live
+            # file, with the run's Drive token, read from the event file and masked like the
+            # book's own download.
             DRIVE_TOKEN=$(jq -r '.inputs.drive_token // ""' "$GITHUB_EVENT_PATH")
             [ -n "$DRIVE_TOKEN" ] && echo "::add-mask::$DRIVE_TOKEN"
             export DRIVE_TOKEN
-            ARGS+=(--helper "$HELPER")
           fi
           [ -n "$BOOK_TITLE" ] && ARGS+=(--title "$BOOK_TITLE")
           [ -n "$BOOK_PAGES" ] && ARGS+=(--pages "$BOOK_PAGES")
@@ -401,6 +426,15 @@ jobs:
           done
           exit 1
 
+      # The results are in: the status page (watching the live file) runs its next check at
+      # once instead of waiting up to ten minutes.
+      - name: Tell the status page the results are saved
+        if: always() && env.LIVE_FILE != ''
+        run: |
+          DRIVE_TOKEN=$(jq -r '.inputs.drive_token // ""' "$GITHUB_EVENT_PATH")
+          [ -n "$DRIVE_TOKEN" ] && echo "::add-mask::$DRIVE_TOKEN"
+          DRIVE_TOKEN="$DRIVE_TOKEN" python live.py mark saved --status status.json || true
+
       - name: Fail if the book is not finished
         if: inputs.compare_models == '' && inputs.text_check_models == '' && steps.convert.outputs.code != '0'
         env:
@@ -410,6 +444,7 @@ jobs:
             3) echo "Paused: today's Gemini quota is used up. Progress is saved; run the same book again tomorrow." ;;
             5) echo "The pages left are with the helper's models on the user's computer; the free models take their share again in the next run (the Drive inbox runs the book again)." ;;
             6) echo "Some free readers are out for today: some pages wait for their second reading tomorrow; the next book can start with the readers left." ;;
+            7) echo "The run stopped before its Drive token ran out, with quota left: the Drive inbox starts the next run at once." ;;
             2) echo "Some pages could not be read (see report.md). Run the same book again to retry them." ;;
             *) echo "The conversion failed (see the log above)." ;;
           esac

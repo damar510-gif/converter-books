@@ -353,6 +353,65 @@
   .tin select { flex: 1 1 120px; }
   .tin input { flex: 0 1 112px; }
 
+  /* ───────── The live view: what the run does now, second by second ───────── */
+  .live { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--mute); white-space: nowrap; }
+  .live .dot { width: 7px; height: 7px; }
+  .live.is-on { color: var(--ok); }
+  .live.is-on .dot { background: var(--ok); animation: pulse 1.2s ease-in-out infinite; }
+  .live.is-quiet { color: var(--gold-soft); }
+  .live.is-quiet .dot { background: var(--gold); }
+  .bar { display: flex; height: 8px; border-radius: 4px; overflow: hidden; background: var(--line-faint); margin-top: 10px; }
+  .bar > i { display: block; height: 100%; transition: width .5s ease; }
+  .bar .s-done { background: var(--gold); }
+  .bar .s-unsure { background: var(--gold-soft); opacity: .75; }
+  .bar .s-read2 { background: var(--gold-light); opacity: .45; }
+  .bar .s-helper { background: var(--ok); opacity: .7; }
+  .bar .s-read1 { background: var(--gold-light); opacity: .22; }
+  .bar .s-failed { background: var(--alert); }
+  .legend { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 8px; font-size: 12.5px; color: var(--dim); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .legend i { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+  .legend b { color: var(--cream); font-weight: 600; font-variant-numeric: tabular-nums; }
+  .phase { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 12px; padding: 9px 12px; border-radius: 4px;
+    background: rgba(201,165,92,.08); border: 1px solid var(--line-soft); font-size: 14px; line-height: 1.7; }
+  .phase .ic { color: var(--gold); }
+  .phase b { color: var(--cream); font-weight: 600; }
+  .phase small { color: var(--mute); font-size: 12px; }
+  .feed { list-style: none; margin-top: 8px; max-height: 420px; overflow: auto; border: 1px solid var(--line-faint); border-radius: 4px;
+    background: var(--field-2); }
+  .feed.is-short { max-height: none; border: 0; background: none; }
+  .feed li { display: flex; align-items: baseline; gap: 8px; padding: 6px 10px; border-top: 1px solid var(--line-faint); font-size: 13.5px;
+    line-height: 1.65; animation: fade .4s ease; }
+  .feed li:first-child { border-top: 0; }
+  .feed.is-short li { padding: 4px 0; }
+  .feed time { flex: none; font-size: 12px; color: var(--mute); font-variant-numeric: tabular-nums; direction: ltr; min-width: 4.6em; }
+  .feed .ev-m { flex: none; font-size: 12px; color: var(--gold-soft); white-space: nowrap; }
+  .feed .ev-t { flex: 1; min-width: 0; color: var(--dim); overflow-wrap: anywhere; }
+  .feed .is-ok .ev-t { color: var(--cream); }
+  .feed .is-bad .ev-t { color: var(--alert); }
+  .feed .is-hold .ev-t { color: var(--gold-light); }
+  .feed .is-quiet .ev-t { color: var(--mute); }
+  .feed .ev-b { color: var(--gold-light); }
+  .mrows { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; margin-top: 12px; }
+  .mrow { background: var(--panel-2); border: 1px solid var(--line-faint); border-inline-start: 3px solid var(--mute); border-radius: 4px;
+    padding: 10px 12px; min-width: 0; }
+  .mrow.is-run { border-inline-start-color: var(--ok); }
+  .mrow.is-hold { border-inline-start-color: var(--gold); }
+  .mrow.is-bad { border-inline-start-color: var(--alert); }
+  .mrow-h { display: flex; align-items: flex-start; gap: 8px; flex-wrap: wrap; }
+  .mrow-h b { flex: 1 1 140px; min-width: 0; font-weight: 700; font-size: 14.5px; color: var(--cream); }
+  .mrow-r { font-size: 12px; color: var(--mute); margin-top: 1px; }
+  .mrow-l { font-size: 13px; color: var(--dim); margin-top: 6px; line-height: 1.7; overflow-wrap: anywhere; }
+  .mrow-l em { font-style: normal; color: var(--cream); }
+  .mrow .meter { height: 4px; margin-top: 6px; }
+  .mrow-x { list-style: none; margin-top: 6px; font-size: 12.5px; color: var(--mute); }
+  .mrow-x li { line-height: 1.7; }
+  .steps { list-style: none; margin-top: 8px; display: flex; flex-direction: column; gap: 3px; font-size: 13px; color: var(--dim); }
+  .steps li { display: flex; align-items: center; gap: 8px; }
+  .steps .dot { width: 7px; height: 7px; }
+  .steps .is-now { color: var(--cream); font-weight: 600; }
+  .jrn-more { margin-top: 6px; }
+
   /* ───────── The helper ───────── */
   .hl { font-size: 14px; color: var(--dim); margin-top: 6px; overflow-wrap: anywhere; }
   .hl a, .note a { margin-inline-start: 6px; }
@@ -512,6 +571,7 @@
             <div class="eyebrow" id="today"></div>
             <h1 class="title">تحويل الكتب</h1>
             <div class="sync" id="sub"></div>
+            <div class="live" id="live-badge"></div>
           </div>
         </div>
         <div class="vh-tools">
@@ -540,6 +600,7 @@
         </section>
         <section class="card" id="helper" hidden></section>
       </div>
+      <section class="card" id="free"></section>
       <footer class="foot" id="foot"></footer>
     </main>
 
@@ -603,6 +664,8 @@
     calendar: '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',
     maximize: '<path d="M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M16 21h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/>',
     terminal: '<path d="m4 17 6-6-6-6M12 19h8"/>',
+    radio: '<circle cx="12" cy="12" r="2"/><path d="M16.24 7.76a6 6 0 0 1 0 8.49M7.76 16.24a6 6 0 0 1 0-8.49M19.07 4.93a10 10 0 0 1 0 14.14M4.93 19.07a10 10 0 0 1 0-14.14"/>',
+    list: '<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>',
     grid: '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/>'
   };
 
@@ -786,6 +849,12 @@
       return;
     }
 
+    // What the script did: the page's copy follows the status, then the live view adds to it.
+    if (s.journal && s.journal.length) {
+      var lastI = s.journal[s.journal.length - 1].i;
+      if (lastI > LIVE.after) { LIVE.journal = s.journal.slice(); LIVE.after = lastI; }
+    }
+    if (s.usage) LIVE.usage = s.usage;
     renderNotices(s);
     renderNow(s);
     renderQueue(s);
@@ -796,6 +865,7 @@
     renderFoot(s);
     renderFigs(s);
     renderNav(s);
+    renderLive();
   }
 
   // When the script last checked the folders: green within its 10 minutes, then gold, then red.
@@ -843,7 +913,7 @@
   function activeState(s, a) {
     if (a.stage === 'queued') return { kind: 'wait', label: 'ينتظر البدء' };
     if (a.paused && helperOn(s, a)) return { kind: 'run', label: 'نماذجك تعمل عليه' };
-    if (a.paused) return { kind: 'hold', label: 'متوقف حتى الغد' };
+    if (a.paused) return { kind: 'hold', label: 'ينتظر تجدد الرصيد' };
     return { kind: 'run', label: 'يُحوَّل الآن' };
   }
 
@@ -857,6 +927,16 @@
   // (already counted in done; the next run adds them to the book).
   function activePages(s, a) {
     return { done: a.pagesDone, total: a.pagesTotal, helper: a.helperDone || 0 };
+  }
+
+  // The best count of the book's finished pages: the run's own, live; else its last run's stages.
+  function bookPages(s, a) {
+    var lv = LIVE.data;
+    if (liveCurrent() && LIVE.job.fileId === a.fileId && lv.pages && lv.pages.total) {
+      return { done: (lv.pages.done || 0) + (lv.pages.unsure || 0), total: lv.pages.total };
+    }
+    if (a.stages && a.pagesTotal && !a.helperDone) return { done: (a.stages.done || 0) + (a.stages.unsure || 0), total: a.pagesTotal };
+    return activePages(s, a);
   }
 
   function progress(p) {
@@ -926,6 +1006,8 @@
         acts.appendChild(link(s.links.inbox, 'افتح «1- جديد»', 'btn btn-sm', 'folder'));
         box.appendChild(acts);
       }
+      LIVE_EL.now = box.appendChild(el('div'));
+      LIVE_EL.nowFor = null;
       return;
     }
     if (a) renderActive(s, a, box, top);
@@ -959,24 +1041,32 @@
     box.appendChild(el('div', 'hero-title', '«' + a.title + '»'));
     var lines = el('div', 'hero-lines');
     var line = function (t) { lines.appendChild(el('div', '', t)); };
+    var round = { review: 'جولة تطبيق مراجعتك', judge: 'جولة تطبيق أحكام نماذجك', prepare: 'تجهيز مواضع المراجعة' }[a.round];
     if (a.stage === 'queued') {
-      line('ينتظر بدء التحويل.');
+      line('ينتظر أن يقبل GitHub بدء التشغيل.');
     } else if (a.paused && helperOn(s, a)) {
       line('نماذجك على جهازك تعمل عليه الآن، والنماذج المجانية متوقفة حتى يتجدد رصيدها.');
       line('تعود النماذج المجانية نحو ' + when(a.resumeAt) + '، أو قبل ذلك حين تنهي نماذجك صفحاتها. ما أُنجز محفوظ.');
     } else if (a.paused) {
-      line('متوقف حتى الغد: انتهت حصة القراءة المجانية لهذا اليوم.');
-      line('يكمل تلقائياً نحو ' + when(a.resumeAt) + '. ما أُنجز محفوظ.');
+      line('متوقف: ' + (a.why || 'نفد رصيد النماذج المجانية لهذا اليوم') + '.');
+      line('يكمل وحده نحو ' + when(a.resumeAt) + ' حين يتجدد الرصيد. ما أُنجز محفوظ.');
     } else {
-      line('قيد التحويل منذ ' + duration(a.minutes) + (a.attempts > 1 ? ' (المحاولة رقم ' + a.attempts + ')' : '') + '.');
+      line((round || 'يعمل التشغيل على GitHub') + ' منذ ' + duration(a.minutes) + (a.attempts > 1 ? ' (المحاولة رقم ' + a.attempts + ')' : '') + '.');
     }
     box.appendChild(lines);
     if (a.stage === 'queued' && a.lastError) {
       box.appendChild(note('hold', 'تعذّر بدء التحويل على GitHub، وسأحاول مرة أخرى تلقائياً. (' + a.lastError + ')'));
     }
+    // Waiting for the quota: what the user's own models could do now, and the button for it.
+    if (a.paused && !helperOn(s, a)) {
+      var hint = ownModelsHint(s, a.stages);
+      if (hint) box.appendChild(note('ok', hint));
+    }
+    if (a.canRun) box.appendChild(runNowButton(a.fileId, el('div', 'hero-acts')));
 
-    var p = activePages(s, a);
-    if (p.total) box.appendChild(progress(p));
+    // Filled by renderLive(): where the pages stand, and what the run does now.
+    LIVE_EL.now = box.appendChild(el('div'));
+    LIVE_EL.nowFor = a;
 
     var facts = el('dl', 'facts');
     var any = false;
@@ -989,6 +1079,48 @@
     if (a.attempts > 1) fact('المحاولة', 'رقم ' + a.attempts);
     if (a.paused) fact('يعود المجاني', when(a.resumeAt));
     if (any) box.appendChild(facts);
+  }
+
+  // What the user's own models could take on now, when the free models wait for their quota.
+  function ownModelsHint(s, stages) {
+    var h = s.helper, b = h && h.boxes;
+    if (!stages || !b || !h.seen) return '';
+    if (stages.read2 && (b.settle || []).length) {
+      return 'نماذجك في مربع «الحسم» تستطيع حسم ' + count(stages.read2, 'صفحة واحدة', 'صفحتين', 'صفحات', 'صفحة') +
+        ' قُرئت قراءتين الآن، دون انتظار الغد: اضغط «شغّل الآن» فيرسلها التشغيل إليها.';
+    }
+    if ((stages.unread || stages.read1) && (b.transcribe || []).length) {
+      return 'نماذجك في مربع «القراءة» تستطيع قراءة ما بقي الآن: اضغط «شغّل الآن» فيرسل التشغيل الصفحات إليها.';
+    }
+    return '';
+  }
+
+  // "شغّل الآن": a run starts now instead of waiting for the quota's new day (or the next check).
+  function runNowButton(fileId, holder) {
+    var b = button('btn-gold', 'شغّل الآن', function () {
+      b.disabled = true;
+      setLabel(b, 'جارٍ البدء…');
+      setMsg('جارٍ بدء التشغيل…');
+      google.script.run
+        .withSuccessHandler(function (text) {
+          var r = parse(text);
+          b.disabled = false;
+          setLabel(b, 'شغّل الآن');
+          setMsg(r.ok && r.started ? 'بدأ التشغيل على GitHub. تراه هنا خطوة بخطوة خلال دقيقة أو دقيقتين.'
+            : 'تعذّر البدء: ' + (r.error || 'خطأ غير معروف'), r.ok && r.started ? 'ok' : r.busy ? 'info' : 'bad');
+          refresh();
+          pollLive(true);
+        })
+        .withFailureHandler(function (err) {
+          b.disabled = false;
+          setLabel(b, 'شغّل الآن');
+          setMsg('تعذّر البدء: ' + errText(err));
+        })
+        .runNow(fileId);
+    }, 'play');
+    b.title = 'يبدأ تشغيلاً جديداً الآن: يتأكد من رصيد النماذج المجانية، ويعطي نماذجك ما تستطيع عمله.';
+    holder.appendChild(b);
+    return holder;
   }
 
   // No run now: the helper's models work on the book from its start, and the free models
@@ -1005,7 +1137,11 @@
     line(w.freeAt ? 'تعود إليه النماذج المجانية من آخره نحو ' + when(w.freeAt) + '، حين يتجدد رصيدها.'
       : 'تعود إليه النماذج المجانية من آخره في الفحص القادم.');
     box.appendChild(lines);
+    if (w.canRun) box.appendChild(runNowButton(w.fileId, el('div', 'hero-acts')));
     if (w.total) box.appendChild(progress({ done: w.done, total: w.total, helper: w.helperDone }));
+    // The journal (what the script did) under the book.
+    LIVE_EL.now = box.appendChild(el('div'));
+    LIVE_EL.nowFor = null;
   }
 
   // Books waiting: in «1- جديد», and parked in «2- قيد التحويل».
@@ -1047,7 +1183,10 @@
       b.appendChild(el('div', 'rw-m', p.stage === 'readerWait' ? 'ينتظر تجدد رصيد القارئ الثاني، ثم يكمل قبل غيره.'
         : 'يُسلَّم في الفحص القادم.'));
       li.appendChild(b);
-      li.appendChild(st('hold', p.stage === 'readerWait' ? 'ينتظر القارئ الثاني' : 'يُسلَّم قريباً'));
+      var acts = el('div', 'rw-a');
+      acts.appendChild(st('hold', p.stage === 'readerWait' ? 'ينتظر القارئ الثاني' : 'يُسلَّم قريباً'));
+      if (p.canRun) runNowButton(p.fileId, acts);
+      li.appendChild(acts);
       list.appendChild(li);
     });
     box.appendChild(list);
@@ -1097,7 +1236,7 @@
     add(s.links.root, 'كل المجلدات');
     var words = [];
     if (s.tokenExpires) words.push('صلاحية رمز GitHub حتى ' + when(s.tokenExpires) + '.');
-    words.push('تتحدّث الصفحة وحدها كل دقيقتين.');
+    words.push('تتحدّث الصفحة وحدها: ما يفعله التشغيل كل ثانيتين ونصف تقريباً، والباقي كل دقيقة.');
     foot.appendChild(el('div', 'foot-l', words.join(' ')));
   }
 
@@ -1121,7 +1260,7 @@
     };
     var a = s.active, wb = (s.working || [])[0];
     if (a || wb) {
-      var state = a ? activeState(s, a) : workingState(s, wb), p = a ? activePages(s, a) : { done: wb.done, total: wb.total };
+      var state = a ? activeState(s, a) : workingState(s, wb), p = a ? bookPages(s, a) : { done: wb.done, total: wb.total };
       add('now', state.kind, 'book', 'الكتاب الحالي', p.total ? String(pct(p.done, p.total)) : '—', p.total ? '%' : '',
         state.label + (p.total ? ' · ' + p.done + ' من ' + p.total : ''));
     } else {
@@ -1153,7 +1292,7 @@
   function renderNav(s) {
     var h = s.helper;
     var a = s.active, wb = (s.working || [])[0];
-    var p = a ? activePages(s, a) : wb ? { done: wb.done, total: wb.total } : null;
+    var p = a ? bookPages(s, a) : wb ? { done: wb.done, total: wb.total } : null;
     var n = places(s);
     var w = working(h);
     var items = [
@@ -1162,7 +1301,9 @@
       { id: 'reviews', name: 'مراجعة المشكوك فيه', short: 'المراجعة', ic: 'pen', n: n || '', hold: n > 0, off: !(s.reviews || []).length },
       { id: 'boxes', name: 'نماذجك على الجهاز', short: 'نماذجك', ic: 'cpu', n: w || '', off: !h || !h.seen },
       { id: 'recent-card', name: 'آخر الكتب', ic: 'archive', n: s.recent.length || '' },
-      { id: 'helper', name: 'المساعد على جهازك', short: 'المساعد', ic: 'monitor', dot: h && h.seen ? (h.connected ? 'ok' : 'bad') : '', off: !h }
+      { id: 'helper', name: 'المساعد على جهازك', short: 'المساعد', ic: 'monitor', dot: h && h.seen ? (h.connected ? 'ok' : 'bad') : '', off: !h },
+      // What the free models do now (the live view), under the helper as the user asked.
+      { id: 'free', name: 'النماذج المجانية', short: 'المجانية', ic: 'radio', dot: liveCurrent() ? 'ok' : liveGoing() ? 'hold' : '', n: '' }
     ].filter(function (x) { return !x.off; });
     NAV = items.map(function (x) { return x.id; });
     NAV_EL = [];
@@ -1243,33 +1384,452 @@
       .getStatus();
   }
 
+  // "افحص الآن": one check, and what it did in words (or what the books wait for).
   document.getElementById('check').addEventListener('click', function () {
     var btn = this;
     btn.disabled = true;
     setBusy(true);
     setMsg('جارٍ الفحص…');
     google.script.run
-      .withSuccessHandler(function (result) {
+      .withSuccessHandler(function (text) {
+        var r = parse(text);
+        gotJournal(r.journal);
         refresh(function () {
           btn.disabled = false;
-          setMsg(result === 'busy' ? 'يوجد فحص يعمل الآن، حدّثت الصفحة.' : 'تم الفحص.', result === 'busy' ? 'info' : 'ok');
+          setMsg(checkText(r), r.busy ? 'info' : 'ok');
         });
+        pollLive(true);
       })
       .withFailureHandler(function (err) {
         btn.disabled = false;
         setBusy(false);
         setMsg('تعذّر الفحص: ' + errText(err));
       })
-      .tick();
+      .checkNow();
   });
+
+  function checkText(r) {
+    if (r.busy) return 'يعمل فحص آخر الآن، فحدّثت الصفحة فقط.';
+    var lines = (r.journal || []).map(function (e) { return (e.b ? '«' + e.b + '»: ' : '') + e.x; });
+    return lines.length ? 'تم الفحص: ' + lines.join(' ') : 'تم الفحص، ولا جديد. ' + (r.line || '');
+  }
 
   // Keep the page current while it is open (not during a review or while typing), and when the user comes back to it.
   function typing() {
     var t = document.activeElement;
     return !!t && /^(INPUT|SELECT|TEXTAREA)$/.test(t.tagName || '');
   }
-  setInterval(function () { if (!document.hidden && !RV && !typing()) refresh(); }, 120000);
-  document.addEventListener('visibilitychange', function () { if (!document.hidden && !RV) refresh(); });
+  setInterval(function () { if (!document.hidden && !RV && !typing()) refresh(); }, 60000);
+  document.addEventListener('visibilitychange', function () {
+    if (document.hidden || RV) return;
+    refresh();
+    pollLive(true);
+  });
+
+  // ------------------------------------------------------------------------
+  // The live view: the run's own news (its live file, every two seconds or
+  // so), what the script did (the journal), and the free models one by one.
+  // ------------------------------------------------------------------------
+  var LIVE = { data: null, key: '', run: '', ev: 0, events: [], after: 0, journal: [], job: null, ghRun: null,
+    usage: null, helper: {}, skew: 0, got: 0, busy: false, n: 0, kicked: 0, timer: 0, allJournal: false };
+  // Where renderLive() draws under «الآن» (made again by each render()).
+  var LIVE_EL = { now: null, nowFor: null };
+
+  var KINDS = { a: 'القراءة الأولى', b: 'القراءة الثانية', settle: 'الحسم' };
+  var ROLES = { read1: 'القارئ الأول', read2: 'القارئ الثاني', settle: 'يحسم الخلاف بين القراءتين',
+    rescue: 'للصفحات التي يرفضها Gemini' };
+  var PHASES = { queued: 'ينتظر أن يبدأ على GitHub', setup: 'يجهّز جهاز GitHub ويثبّت الأدوات', start: 'يستعد ويقرأ ما أُنجز',
+    apply: 'يطبّق الإجابات ويبني الكتاب', free: 'النماذج المجانية تقرأ وتحسم من آخر الكتاب',
+    read: 'يقرأ الصفحات: قراءتان لكل صفحة من نموذجين', helper: 'يتبادل الصفحات مع نماذجك على جهازك',
+    check: 'يقارن القراءتين ويحسم الخلاف على صورة الصفحة', build: 'يبني ملف الكتاب', end: 'انتهى العمل، ويحفظ النتائج',
+    saved: 'حُفظت النتائج' };
+  var ENDS = { done: 'اكتمل الكتاب', paused: 'نفد رصيد النماذج المجانية، ويكمل بعد تجدده',
+    time: 'انتهى وقت التشغيل والرصيد باقٍ، فيبدأ تشغيل جديد', helper: 'بقي العمل لنماذجك على جهازك',
+    reader: 'ينتظر تجدد رصيد القارئ الثاني', incomplete: 'بقيت صفحات لم تُقرأ', failed: 'تعثّر التشغيل' };
+  // The workflow's steps on GitHub, while the run itself has nothing to say yet.
+  var STEPS = { 'Set up job': 'تجهيز الجهاز', 'Checkout Repository': 'تنزيل البرنامج', 'Set up Python': 'تجهيز Python',
+    'Tell the status page': 'إبلاغ هذه الصفحة', 'Install Pandoc and Tesseract': 'تثبيت الأدوات',
+    'Install Python Dependencies': 'تثبيت المكتبات', 'Pick the book file': 'تنزيل الكتاب من Drive',
+    'Restore review state': 'استعادة المراجعة', 'Restore saved progress': 'استعادة ما أُنجز',
+    'Restore permanent progress copy': 'استعادة النسخة الدائمة', 'Run Conversion Script': 'التحويل',
+    'Save progress': 'حفظ ما أُنجز', 'Save permanent progress copy': 'حفظ نسخة دائمة', 'Upload EPUB Artifact': 'رفع الكتاب',
+    'Save to results branch': 'حفظ النتائج', 'Tell the status page the results are saved': 'إبلاغ هذه الصفحة بالنتائج',
+    'Fail if the book is not finished': 'إنهاء التشغيل', 'Complete job': 'انتهى' };
+  var STAGES = [['done', 'أُنجزت'], ['unsure', 'مشكوك فيها'], ['read2', 'قُرئت قراءتين وتنتظر الحسم'], ['helper', 'مع نماذجك'],
+    ['read1', 'قُرئت مرة'], ['failed', 'تعذّرت قراءتها'], ['unread', 'لم تُقرأ']];
+
+  // "Gemini 3.5 Flash-Lite" for "gemini-3.5-flash-lite"; the user's own models by their label.
+  function modelName(id) {
+    id = String(id || '');
+    if (id.indexOf('|') > 0) {
+      var m = LAST && LAST.helper && LAST.helper.models ? modelOf(LAST.helper.models, id) : null;
+      return m ? m.label : id.split('|')[1];
+    }
+    var preview = /-preview$/.test(id);
+    var words = id.replace(/-preview$|-latest$/, '').split('-').filter(function (w) { return w && w !== 'it'; }).map(function (w) {
+      return /^\d/.test(w) ? w.toUpperCase() : w.charAt(0).toUpperCase() + w.slice(1);
+    });
+    return words.join(' ').replace(/ Flash Lite$/, ' Flash-Lite') + (preview ? ' (معاينة)' : '');
+  }
+
+  function serverNow() { return Date.now() + LIVE.skew; }
+
+  function secs(s) {
+    s = Number(s) || 0;
+    return s >= 90 ? Math.round(s / 60) + ' د' : (Math.round(s * 10) / 10) + ' ث';
+  }
+
+  // "قبل 4 ث", "قبل دقيقتين".
+  function ago(t) {
+    var s = Math.max(0, Math.round((serverNow() - t) / 1000));
+    return s < 60 ? 'قبل ' + s + ' ث' : 'قبل ' + duration(Math.floor(s / 60));
+  }
+
+  function clock(t) {
+    var d = new Date(t);
+    var two = function (n) { return (n < 10 ? '0' : '') + n; };
+    return two(d.getHours()) + ':' + two(d.getMinutes()) + ':' + two(d.getSeconds());
+  }
+
+  function liveAt(lv) { var t = Date.parse((lv && lv.at) || ''); return isFinite(t) ? t : 0; }
+
+  // The live file is about the run going now (not one that has finished and been taken in).
+  function liveCurrent() {
+    var lv = LIVE.data, j = LIVE.job;
+    return !!(lv && j && j.stage === 'running' && !j.paused && lv.file === j.fileId && String(lv.dispatched || '') === String(j.since || ''));
+  }
+
+  function liveGoing() { return !!(LIVE.job && LIVE.job.stage === 'running' && !LIVE.job.paused) || (LAST && LAST.active && LAST.active.stage === 'queued'); }
+
+  // One event of the run, in words: [kind, text].
+  function eventView(e) {
+    var p = e.p ? 'ص ' + e.p : '';
+    var kind = KINDS[e.k] || '';
+    var took = e.s !== undefined ? ' في ' + secs(e.s) : '';
+    switch (e.r) {
+      case 'ok': return ['ok', 'قرأ ' + p + ' (' + kind + ')' + took + (e.x === 'halves' ? '، على نصفين بعد رفض' : '') + '.'];
+      case 'empty': return ['quiet', 'وجد ' + p + ' فارغة أو صورة بلا نص.'];
+      case 'short': return ['hold', 'قراءة ناقصة لـ ' + p + ' (' + kind + ').'];
+      case 'refused': return ['hold', 'رفض قراءة ' + p + '.'];
+      case 'error': return ['bad', 'تعثّر' + (p ? ' في ' + p : '') + (e.x ? ': ' + e.x : '') + '.'];
+      case 'rest': return ['hold', 'طلبت Google التمهّل ' + secs(e.s) + (p ? ' قبل ' + p : '') + ' (حد الطلبات في الدقيقة).'];
+      case 'retry': return ['hold', 'خطأ مؤقت من Google' + (p ? ' في ' + p : '') + '، يعيد بعد ' + secs(e.s) + '.'];
+      case 'out': return ['bad', 'نفد رصيده لهذا اليوم' + (e.n ? ' (حده ' + e.n + ' طلباً)' : '') + '.'];
+      case 'missing': return ['quiet', 'غير متاح لحسابك، فتُرك.'];
+      case 'settled': return ['ok', 'حسم ' + p + took + (e.n ? ' (' + count(e.n, 'موضع خلاف واحد', 'موضعا خلاف', 'مواضع خلاف', 'موضع خلاف') + ')' : '') +
+        (e.x === 'helper' ? '، على جهازك' : '') + '.'];
+      case 'unsure': return e.k === 'page' ? ['hold', p + ': بقيت مشكوكاً فيها، وتنتظر المراجعة.'] : ['hold', 'حسم ' + p + took + '، وبقي فيها شك.'];
+      case 'drops': return ['hold', 'رُفض حسمه لـ ' + p + ': حذف كلاماً اتفقت عليه القراءتان.'];
+      case 'lines': return ['hold', 'رُفض حسمه لـ ' + p + ': أسقط أسطراً من الصفحة.'];
+      case 'noanswer': return ['hold', 'لم يُجب عن ' + p + '.'];
+      case 'agreed': return ['ok', p + ': تطابقت القراءتان، فلا حاجة إلى حسم.'];
+      case 'single': return ['quiet', p + ': قراءة واحدة فقط.'];
+      case 'wait': return ['hold', count(e.n || 0, 'صفحة واحدة تنتظر', 'صفحتان تنتظران', 'صفحات تنتظر', 'صفحة تنتظر') +
+        ' من يحسمها: لا حاسم متاح في هذا التشغيل.'];
+      case 'sent': return ['ok', 'أُرسلت ' + count(e.n || 0, 'صفحة واحدة', 'صفحتان', 'صفحات', 'صفحة') + ' إلى نماذجك على جهازك.'];
+      case 'phase': return ['quiet', (PHASES[e.x] || e.x) + '.'];
+      case 'end': return [e.x === 'done' ? 'ok' : 'hold', 'انتهى التشغيل: ' + (ENDS[e.x] || e.x) + '.'];
+    }
+    return ['quiet', e.r + (p ? ' ' + p : '')];
+  }
+
+  // Events, newest first: time, model, what happened.
+  function feed(events, max, short) {
+    var ul = el('ul', 'feed' + (short ? ' is-short' : ''));
+    var list = events.slice(-max).reverse();
+    list.forEach(function (e) {
+      var v = eventView(e);
+      var li = el('li', 'is-' + v[0]);
+      li.appendChild(el('time', '', clock(e.t * 1000)));
+      if (e.m) li.appendChild(el('span', 'ev-m', modelName(e.m))).dir = 'auto';
+      li.appendChild(el('span', 'ev-t', v[1]));
+      ul.appendChild(li);
+    });
+    if (!list.length) ul.appendChild(el('li', 'is-quiet')).appendChild(el('span', 'ev-t', 'لا شيء بعد.'));
+    return ul;
+  }
+
+  // Where the pages stand: one bar in parts, and the numbers under it.
+  function stageBar(st, total) {
+    var wrap = el('div');
+    var done = (st.done || 0) + (st.unsure || 0);
+    var prog = el('div', 'prog');
+    var n = el('div', 'prog-n');
+    n.appendChild(el('b', '', String(done)));
+    n.appendChild(el('span', '', 'من ' + total + ' صفحة أُنجزت'));
+    n.appendChild(el('em', '', pct(done, total) + '%'));
+    prog.appendChild(n);
+    var bar = el('div', 'bar');
+    var legend = el('div', 'legend');
+    STAGES.forEach(function (k) {
+      if (!st[k[0]]) return;
+      var part = el('i', 's-' + k[0]);
+      part.style.width = (100 * st[k[0]] / Math.max(1, total)) + '%';
+      bar.appendChild(part);
+      var item = el('span');
+      item.appendChild(el('i', 's-' + k[0]));
+      item.appendChild(el('span', '', k[1]));
+      item.appendChild(el('b', '', String(st[k[0]])));
+      legend.appendChild(item);
+    });
+    prog.appendChild(bar);
+    prog.appendChild(legend);
+    wrap.appendChild(prog);
+    return wrap;
+  }
+
+  // The badge under the title: is the page live, and how fresh is its news.
+  function renderBadge() {
+    var b = document.getElementById('live-badge');
+    b.textContent = '';
+    var lv = LIVE.data;
+    var kind = '', text = 'لا يعمل تشغيل الآن';
+    if (liveCurrent()) {
+      var age = (serverNow() - liveAt(lv)) / 1000;
+      kind = age < 20 ? 'on' : 'quiet';
+      text = (age < 20 ? 'مباشر · ' : '') + 'آخر خبر من التشغيل ' + ago(liveAt(lv));
+    } else if (liveGoing()) {
+      kind = 'quiet';
+      text = LIVE.ghRun ? 'التشغيل على GitHub: ' + stepNow(LIVE.ghRun) : 'التشغيل يبدأ على GitHub';
+    }
+    b.className = 'live' + (kind ? ' is-' + kind : '');
+    b.appendChild(el('span', 'dot'));
+    b.appendChild(el('span', '', text));
+  }
+
+  function stepNow(run) {
+    var cur = (run.steps || []).filter(function (x) { return x.s === 'in_progress'; })[0];
+    if (cur) return (STEPS[cur.n] || cur.n) + (cur.at ? ' (منذ ' + ago(Date.parse(cur.at)).replace('قبل ', '') + ')' : '');
+    return run.status === 'queued' ? 'ينتظر جهازاً' : run.status === 'completed' ? 'انتهى' : 'يعمل';
+  }
+
+  // Under «الآن»: the pages, what the run does now, and what the script did.
+  function renderNowLive() {
+    var box = LIVE_EL.now;
+    if (!box) return;
+    box.textContent = '';
+    var a = LIVE_EL.nowFor, lv = LIVE.data;
+    if (a) {
+      var cur = liveCurrent() && LIVE.job.fileId === a.fileId;
+      var pages = cur && lv.pages && lv.pages.total ? lv.pages : null;
+      if (pages) box.appendChild(stageBar(pages, pages.total));
+      else if (a.stages && a.pagesTotal) box.appendChild(stageBar(a.stages, a.pagesTotal));
+      else if (a.pagesTotal) box.appendChild(progress(activePages(LAST, a)));
+      if (cur) {
+        var ph = el('div', 'phase');
+        ph.appendChild(icon('radio'));
+        ph.appendChild(el('b', '', PHASES[lv.phase] || lv.phase));
+        if (lv.pages && lv.pages.now && lv.pages.now.length) ph.appendChild(el('span', '', '· الآن: ص ' + lv.pages.now.join('، ')));
+        var stop = lv.stops && Date.parse(lv.stops.settle || lv.stops.read || '');
+        ph.appendChild(el('small', '', (lv.run_n ? 'التشغيل رقم ' + lv.run_n + ' · ' : '') + 'آخر خبر ' + ago(liveAt(lv)) +
+          (stop ? ' · لا يبدأ عملاً جديداً بعد ' + when(new Date(stop).toISOString(), true) : '')));
+        box.appendChild(ph);
+        box.appendChild(feed(LIVE.events, 4, true));
+      } else if (LIVE.job && LIVE.job.fileId === a.fileId && liveGoing()) {
+        var steps = el('div', 'phase');
+        steps.appendChild(icon('radio'));
+        steps.appendChild(el('b', '', LIVE.ghRun ? 'على GitHub: ' + stepNow(LIVE.ghRun) : 'ينتظر أن يبدأ التشغيل على GitHub'));
+        box.appendChild(steps);
+      }
+    }
+    // What the script did lately («آخر ما حدث»).
+    if (LIVE.journal.length) {
+      var h3 = el('div', 'h3');
+      h3.appendChild(icon('list'));
+      h3.appendChild(el('span', '', 'آخر ما حدث'));
+      box.appendChild(h3);
+      var ul = el('ul', 'feed is-short');
+      LIVE.journal.slice(LIVE.allJournal ? -40 : -4).reverse().forEach(function (e) {
+        var li = el('li', 'is-' + ({ start: 'ok', deliver: 'ok', revive: 'ok', problem: 'bad', error: 'bad', pause: 'hold', park: 'hold', end: 'hold' }[e.k] || 'quiet'));
+        li.appendChild(el('time', '', when(e.t, true)));
+        var t = li.appendChild(el('span', 'ev-t'));
+        if (e.b && (!a || e.b !== a.title)) t.appendChild(el('span', 'ev-b', '«' + e.b + '» '));
+        t.appendChild(el('span', '', e.x));
+        ul.appendChild(li);
+      });
+      box.appendChild(ul);
+      if (LIVE.journal.length > 4) {
+        box.appendChild(button('btn-sm btn-quiet jrn-more', LIVE.allJournal ? 'أقل' : 'كل السجل (' + LIVE.journal.length + ')', function () {
+          LIVE.allJournal = !LIVE.allJournal;
+          renderNowLive();
+        }, 'list'));
+      }
+    }
+  }
+
+  // The free models, one by one: what each does now, what waits, what it did today.
+  function freeRows() {
+    var lv = LIVE.data, cur = liveCurrent();
+    var today = LIVE.usage && LIVE.usage.m ? LIVE.usage.m : {};
+    // The last run's models count while it ran today (the quotas renew each Pacific day).
+    var fromToday = !!(lv && LIVE.usage && liveAt(lv) >= Date.parse(LIVE.usage.renew) - 86400000);
+    var models = (cur || fromToday) && lv && lv.models ? lv.models : {};
+    var ids = Object.keys(models);
+    Object.keys(today).forEach(function (id) { if (ids.indexOf(id) < 0 && id.indexOf('|') < 0) ids.push(id); });
+    var order = { read1: 0, read2: 1, settle: 2, rescue: 3 };
+    return ids.map(function (id, i) { return { id: id, m: models[id] || null, u: today[id] || null, i: i }; })
+      .sort(function (x, y) {
+        var a = x.m && order[x.m.role] !== undefined ? order[x.m.role] : 9, b = y.m && order[y.m.role] !== undefined ? order[y.m.role] : 9;
+        return a - b || x.i - y.i;
+      });
+  }
+
+  function freeRow(r, cur) {
+    var m = r.m || {}, u = r.u || {};
+    var now = serverNow();
+    var rest = Date.parse(m.rest || '');
+    var busy = cur ? (m.busy || []) : [];
+    var state = busy.length ? ['run', 'يعمل الآن'] : (m.out || u.out) ? ['bad', 'نفد رصيده اليوم'] : m.missing ? ['wait', 'غير متاح لحسابك']
+      : cur && rest > now ? ['hold', 'يرتاح ' + secs((rest - now) / 1000)] : cur && m.queued ? ['hold', 'ينتظر دوره']
+      : cur ? ['wait', 'لا عمل له الآن'] : ['wait', 'لا يعمل الآن'];
+    var d = el('div', 'mrow is-' + state[0]);
+    var h = el('div', 'mrow-h');
+    h.appendChild(el('b', '', modelName(r.id))).dir = 'auto';
+    h.appendChild(st(state[0], state[1]));
+    d.appendChild(h);
+    if (m.role) d.appendChild(el('div', 'mrow-r', ROLES[m.role] || ''));
+    var line = function (label, text) {
+      var x = el('div', 'mrow-l');
+      x.appendChild(el('span', '', label + ' '));
+      x.appendChild(el('em', '', text));
+      d.appendChild(x);
+    };
+    busy.forEach(function (b) {
+      line('الآن:', (b[0] ? 'ص ' + b[0] + ' ' : '') + '(' + (KINDS[b[1]] || 'طلب') + ')' + (b[2] ? '، أُرسل ' + ago(b[2] * 1000) : ''));
+    });
+    if (cur && m.queued) line('في الانتظار:', count(m.queued, 'طلب واحد', 'طلبان', 'طلبات', 'طلباً') + ' (حد الطلبات في الدقيقة)');
+    var used = (u.n || 0) + (cur ? (m.ok || 0) : 0);
+    var limit = m.limit || (/flash-lite/.test(r.id) ? 500 : 0);
+    if (used || limit) {
+      line('اليوم:', 'نحو ' + used + (limit ? ' من ' + limit : '') + ' طلباً' +
+        ((m.out || u.out) && LIVE.usage ? '، يتجدد ' + when(LIVE.usage.renew, true) : ''));
+      if (limit) d.appendChild(meter(Math.min(used, limit), limit));
+    }
+    if (cur && (m.err || m.rl)) line('في هذا التشغيل:', (m.err ? m.err + ' تعثّر' : '') + (m.err && m.rl ? '، ' : '') + (m.rl ? m.rl + ' طلب تمهّل من Google' : ''));
+    if (m.last && m.last.length) {
+      var x = el('ul', 'mrow-x');
+      m.last.slice(0, 3).forEach(function (l) {
+        var v = eventView({ r: l[0], p: l[1], k: l[2], s: l[3] === null ? undefined : l[3] });
+        x.appendChild(el('li', '', (l[4] ? clock(l[4] * 1000) + ' — ' : '') + v[1]));
+      });
+      d.appendChild(x);
+    }
+    return d;
+  }
+
+  function renderFree() {
+    var box = document.getElementById('free');
+    var keep = box.feedScroll || 0;
+    box.textContent = '';
+    var lv = LIVE.data, cur = liveCurrent();
+    var badge = el('span', 'live' + (cur ? ' is-on' : ''));
+    badge.appendChild(el('span', 'dot'));
+    badge.appendChild(el('span', '', cur ? 'مباشر · ' + ago(liveAt(lv)) : liveGoing() ? 'التشغيل يبدأ' : 'لا يعمل الآن'));
+    box.appendChild(cardHead('radio', 'النماذج المجانية', badge));
+    box.appendChild(el('div', 'sub', 'نماذج Gemini المجانية بمفتاحك، تعمل على GitHub: القارئان (Flash-Lite) يقرآن كل صفحة مرتين، ' +
+      'ونماذج Flash تحسم الخلاف بينهما، وGemma للصفحات التي يرفضها Gemini.' +
+      (LIVE.usage ? ' تتجدد حصصها كل يوم نحو ' + when(LIVE.usage.renew, true) + ' بتوقيتك.' : '')));
+    if (cur) {
+      var ph = el('div', 'phase');
+      ph.appendChild(icon('radio'));
+      ph.appendChild(el('b', '', (lv.book ? '«' + lv.book + '»: ' : '') + (PHASES[lv.phase] || lv.phase)));
+      ph.appendChild(el('small', '', (lv.run_n ? 'التشغيل رقم ' + lv.run_n + ' · ' : '') + (lv.started ? 'بدأ ' + when(lv.started, true) : '')));
+      box.appendChild(ph);
+    } else if (liveGoing()) {
+      box.appendChild(note('hold', LIVE.ghRun ? 'التشغيل على GitHub: ' + stepNow(LIVE.ghRun) + '. تظهر النماذج هنا حين يبدأ التحويل.'
+        : 'ينتظر أن يبدأ التشغيل على GitHub.'));
+    } else if (lv && lv.end && lv.book) {
+      box.appendChild(note(lv.end.state === 'done' ? 'ok' : 'hold', 'آخر تشغيل («' + lv.book + '») انتهى ' + when(lv.at) + ': ' +
+        (ENDS[lv.end.state === 'paused' && lv.end.waiting_for ? lv.end.waiting_for : lv.end.state] || lv.end.state) + '.'));
+    }
+    var rows = freeRows();
+    if (rows.length) {
+      var grid = el('div', 'mrows');
+      rows.forEach(function (r) { grid.appendChild(freeRow(r, cur)); });
+      box.appendChild(grid);
+    } else {
+      box.appendChild(el('div', 'sub', 'لم يعمل أي نموذج مجاني اليوم بعد.'));
+    }
+    if (LIVE.events.length) {
+      var h3 = el('div', 'h3');
+      h3.appendChild(icon('list'));
+      h3.appendChild(el('span', '', cur ? 'ما يحدث الآن' : 'ما حدث في آخر تشغيل'));
+      box.appendChild(h3);
+      var list = box.appendChild(feed(LIVE.events, 80, false));
+      list.addEventListener('scroll', function () { box.feedScroll = list.scrollTop; });
+      if (keep) list.scrollTop = keep;
+    }
+  }
+
+  function renderLive() {
+    renderBadge();
+    renderNowLive();
+    renderFree();
+    if (LAST && LAST.ok) renderFigs(LAST);
+  }
+
+  function gotJournal(list) {
+    (list || []).forEach(function (e) {
+      if (!e || !(e.i > LIVE.after)) return;
+      LIVE.journal.push(e);
+      LIVE.after = e.i;
+    });
+    LIVE.journal = LIVE.journal.slice(-40);
+  }
+
+  function gotLive(r) {
+    if (!r || !r.ok) return;
+    LIVE.skew = Date.parse(r.now) - Date.now();
+    LIVE.job = r.job || null;
+    if (r.usage) LIVE.usage = r.usage;
+    LIVE.ghRun = r.run || null;
+    // The user's models' own news: their cards are drawn again only when it changed.
+    var helperNews = !!r.helper && JSON.stringify(r.helper) !== JSON.stringify(LIVE.helper);
+    if (r.helper) LIVE.helper = r.helper;
+    var lv = r.live;
+    if (lv) {
+      var key = String(lv.run || '') + '|' + String(lv.dispatched || '');
+      if (key !== LIVE.key) { LIVE.events = []; LIVE.ev = 0; LIVE.key = key; }
+      LIVE.run = String(lv.run || '');
+      (lv.events || []).forEach(function (e) { if (e && e.i > LIVE.ev) { LIVE.events.push(e); LIVE.ev = e.i; } });
+      if (LIVE.events.length > 200) LIVE.events = LIVE.events.slice(-200);
+      LIVE.data = lv;
+    }
+    var news = (r.journal || []).length;
+    gotJournal(r.journal);
+    renderLive();
+    if (helperNews && LAST && LAST.helper && !typing()) renderBoxes(LAST);
+    if (r.due && Date.now() - LIVE.kicked > 30000) {
+      // The run has saved its results: a check takes them in now, not in up to ten minutes.
+      LIVE.kicked = Date.now();
+      google.script.run
+        .withSuccessHandler(function (text) { gotJournal(parse(text).journal); refresh(); pollLive(true); })
+        .withFailureHandler(function () { /* the next check does it */ })
+        .checkNow();
+    } else if (news) {
+      refresh();
+    }
+  }
+
+  // Every two and a half seconds while a run is going, every twelve otherwise; never while
+  // the page is hidden or a review is open.
+  function pollLive(soon) {
+    if (typeof setTimeout !== 'function') return;
+    if (LIVE.timer && typeof clearTimeout === 'function') clearTimeout(LIVE.timer);
+    LIVE.timer = setTimeout(askLive, soon ? 300 : liveGoing() ? 2500 : 12000);
+  }
+
+  function askLive() {
+    LIVE.timer = 0;
+    if (LIVE.busy) return;
+    if (document.hidden || RV) return pollLive();
+    LIVE.busy = true;
+    LIVE.n++;
+    google.script.run
+      .withSuccessHandler(function (text) { LIVE.busy = false; gotLive(parse(text)); pollLive(); })
+      .withFailureHandler(function () { LIVE.busy = false; pollLive(); })
+      .getLive(JSON.stringify({ after: LIVE.after, run: LIVE.run, ev: LIVE.ev, helper: LIVE.n % 3 === 1 }));
+  }
 
   // ------------------------------------------------------------------------
   // Review by hand: one place at a time, its page image zoomed on it, and two
@@ -2063,9 +2623,40 @@
     return b;
   }
 
+  // A model's own live news from the helper's worker (live-<tool>.json), when newer than its
+  // status file: {state, text, page, kind, book, since, done, last: [{page, kind, result, seconds, at}]}.
+  function liveChip(id, h) {
+    var tool = String(id).split('|')[0];
+    var f = LIVE.helper && LIVE.helper[tool];
+    var c = f && f.chips ? f.chips[id] : null;
+    if (!c || !f.at || (h.seen && Date.parse(f.at) < Date.parse(h.seen))) return null;
+    c.at = f.at;
+    return c;
+  }
+
+  var JOB_DONE = { settle: 'حسم', readB: 'قرأ', readA: 'قرأ قراءة أولى لـ', judge: 'راجع مواضع' };
+  var JOB_RESULTS = { ok: '✓', same: '✓', refused: '↩ رفض', failed: '✗ تعثّر في', quota: '⏸ نفد رصيده عند' };
+
+  // What a model of the user's is on now (since when), and what it did last.
+  function chipLive(lc, d) {
+    if (lc.state === 'working' && lc.since) d.appendChild(el('div', 'mc-w', 'بدأ هذه الصفحة ' + ago(Date.parse(lc.since)) + '.'));
+    if (lc.done) d.appendChild(el('div', 'mc-w', 'أنجز منذ بدأ: ' + count(lc.done, 'صفحة واحدة', 'صفحتين', 'صفحات', 'صفحة') + '.'));
+    if (lc.last && lc.last.length) {
+      var ul = el('ul', 'mrow-x');
+      lc.last.slice(0, 3).forEach(function (j) {
+        var ok = j.result === 'ok' || j.result === 'same';
+        ul.appendChild(el('li', '', (j.at ? when(j.at, true) + ' — ' : '') + (JOB_RESULTS[j.result] || j.result) + ' ' +
+          (ok ? (JOB_DONE[j.kind] || '') + ' ' : '') + 'ص ' + j.page + (j.seconds ? ' في ' + secs(j.seconds) : '') +
+          (j.result === 'same' ? ' (القراءتان متطابقتان)' : '')));
+      });
+      d.appendChild(ul);
+    }
+  }
+
   // A model at work: what it does, when it may work, and a button to stop it.
   function modelCard(sec, m, h) {
-    var c = (h.chips || {})[m.id];
+    var lc = liveChip(m.id, h);
+    var c = lc && lc.state ? { state: lc.state, text: lc.text } : (h.chips || {})[m.id];
     var t = BOXES.times[m.id] || {};
     var now = Date.now();
     var startAt = Date.parse(t.start || ''), stopAt = Date.parse(t.stop || '');
@@ -2096,6 +2687,7 @@
       : c && c.text ? c.text
       : 'يبدأ خلال دقيقة أو دقيقتين'));
     d.appendChild(line);
+    if ((lc || c) && h.connected && !m.gone) chipLive(lc || c, d);
     if (m.warn) d.appendChild(el('div', 'mc-w', '⚠ ' + m.warn));
     if (c && /^(exhausted|failing)$/.test(c.state) && !m.gone) d.appendChild(retryButton(m));
     if (!m.gone) d.appendChild(schedule(sec, m, t));
@@ -2372,7 +2964,7 @@
   }
 
   var KEYS_HOME = [['F', 'افحص الآن'], ['R', 'حدّث الصفحة'], ['V', 'افتح أول مراجعة'],
-    ['1 – 6', 'انتقل إلى قسم'], ['T', 'المظهر'], ['?', 'الاختصارات']];
+    ['1 – 7', 'انتقل إلى قسم'], ['T', 'المظهر'], ['?', 'الاختصارات']];
   var KEYS_REVIEW = [['1', 'القراءة صحيحة'], ['2', 'صحّح'], ['3', 'كل ما بقي في الصفحة صحيح'], ['4', 'القراءة الأخرى صحيحة'], ['5', 'القراءة الأخرى لكل ما بقي'], ['←', 'تخطَّ'], ['→', 'السابق'],
     ['Z', 'الصفحة كاملة أو الموضع'], ['Ctrl+Enter', 'احفظ التصحيح'], ['Esc', 'ألغِ التصحيح أو ارجع']];
 
@@ -2466,6 +3058,7 @@
   wire();
   render(INITIAL);
   if (INITIAL && INITIAL.openReview) openReview(INITIAL.openReview);
+  pollLive(true);
 </script>
 </body>
 </html>

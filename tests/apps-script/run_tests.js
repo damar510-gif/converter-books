@@ -97,6 +97,7 @@ function makeGitHub(env) {
     tokenExpiry: null,     // value of the GitHub-Authentication-Token-Expiration header
     files: {},             // results branch: path -> string | Buffer
     runs: [],              // convert.yml runs, newest first
+    jobs: {},              // run id -> its jobs (with their steps)
     dispatches: [],
     unknown: [],
     // Files in the default branch (the helper's program).
@@ -135,6 +136,11 @@ function makeGitHub(env) {
     if (req.method === 'GET' && p === base + '/actions/workflows/convert.yml/runs') {
       const n = Number(u.searchParams.get('per_page') || 30);
       return json(200, { total_count: gh.runs.length, workflow_runs: gh.runs.slice(0, n) });
+    }
+    const runJobs = new RegExp('^' + base + '/actions/runs/(\\d+)/jobs$').exec(p);
+    if (req.method === 'GET' && runJobs) {
+      const list = gh.jobs[runJobs[1]] || [];
+      return json(200, { total_count: list.length, jobs: list });
     }
     if (req.method === 'GET' && p.indexOf(base + '/contents/') === 0) {
       const ref = u.searchParams.get('ref');
@@ -652,9 +658,14 @@ test('new PDF: moved to قيد التحويل and dispatched with the contract i
       drive_token: 'ya29.drive-token-' + env.tokens,
       drive_file_name: 'تاريخ الأندلس.pdf',
       result_dir: 'drive-' + f.id,
-      title: 'تاريخ الأندلس'
+      title: 'تاريخ الأندلس',
+      // The live view's file (live.py), which says which run is coming until the run writes.
+      live: env.props.get('LIVE_FILE_ID')
     }
   });
+  const live = JSON.parse(env.drive.DriveApp.getFileById(d.body.inputs.live).getBlob().getDataAsString());
+  assert.deepStrictEqual(live, { v: 1, seq: 0, phase: 'queued', file: f.id, book: 'تاريخ الأندلس', dispatched: iso(env.clock), round: '' });
+  assert.strictEqual(env.drive.DriveApp.getFileById(d.body.inputs.live).getName(), 'live.json');
   assert.strictEqual(d.contentType, 'application/json');
   const req = env.requests.find((r) => r.method === 'POST');
   assert.strictEqual(req.url, 'https://api.github.com/repos/' + REPO + '/actions/workflows/convert.yml/dispatches');
@@ -1336,8 +1347,19 @@ test('Page.html loads nothing from outside and supports dark mode', () => {
   assert.ok(!/@import|url\(/i.test(PAGE));
   assert.ok(!/https?:\/\//.test(PAGE));
   assert.ok(/prefers-color-scheme:\s*dark/.test(PAGE));
-  assert.ok(/google\.script\.run[\s\S]*\.tick\(\)/.test(PAGE));
+  // "افحص الآن" is one check that says what it did; the live view and "شغّل الآن" are their own calls.
+  assert.ok(/google\.script\.run[\s\S]*\.checkNow\(\)/.test(PAGE));
   assert.ok(/\.getStatus\(\)/.test(PAGE));
+  assert.ok(/\.getLive\(JSON\.stringify/.test(PAGE));
+  assert.ok(/\.runNow\(fileId\)/.test(PAGE));
+  // Every function the page calls is a public function of Code.gs (google.script.run cannot call private ones).
+  const called = new Set((PAGE.match(/\.(\w+)\((?:[^()]|\([^()]*\))*\);?\s*(?:\n|\})/g) || []).map((x) => /\.(\w+)\(/.exec(x)[1]));
+  ['getStatus', 'getLive', 'checkNow', 'runNow', 'getReview', 'getReviewImage', 'saveAnswers', 'sendReview', 'helperRequest', 'setHelperBoxes']
+    .forEach((fn) => {
+      assert.ok(new RegExp('\\.' + fn + '\\(').test(PAGE), 'the page calls ' + fn);
+      assert.ok(new RegExp('\\nfunction ' + fn + '\\(').test(CODE), fn + ' is public in Code.gs');
+    });
+  assert.ok(called.size > 0);
 });
 
 test('the page script renders running, paused, finished and error states', () => {
@@ -1383,7 +1405,9 @@ test('the page script renders running, paused, finished and error states', () =>
   vm.runInContext(script, sandbox);
 
   let text = byId.now.textContent;
-  assert.ok(text.indexOf('موسوعة كبيرة') >= 0 && /قيد التحويل منذ ساعة و35 دقيقة/.test(text), text);
+  assert.ok(text.indexOf('موسوعة كبيرة') >= 0 && /يعمل التشغيل على GitHub منذ ساعة و35 دقيقة/.test(text), text);
+  // What the script did, under «الآن».
+  assert.ok(/آخر ما حدث/.test(text) && /اكتمل وسُلّم إلى «6- مكتمل»/.test(text), text);
   assert.ok(/منتهٍ/.test(byId.recent.textContent) && /افتح الكتاب/.test(byId.recent.textContent));
   assert.ok(/صورة\.png/.test(byId.queue.textContent));
   assert.ok(/آخر فحص/.test(byId.sub.textContent));
@@ -1392,7 +1416,7 @@ test('the page script renders running, paused, finished and error states', () =>
   tick(env);
   sandbox.render(JSON.parse(env.ctx.getStatus()));
   text = byId.now.textContent;
-  assert.ok(/متوقف حتى الغد/.test(text) && /200 من 800/.test(text), text);
+  assert.ok(/ينتظر تجدد الرصيد/.test(text) && /متوقف: نفد رصيد النماذج المجانية لهذا اليوم/.test(text) && /200 *من 800/.test(text), text);
   assert.strictEqual(find(byId.now, 'meter').kids[0].style.width, '25%');
 
   sandbox.render({ ok: false, error: 'boom' });
@@ -1817,7 +1841,8 @@ function pageSandbox(env, initial) {
       withSuccessHandler(f) { call.ok = f; return chain; },
       withFailureHandler(f) { call.fail = f; return chain; }
     };
-    ['getStatus', 'tick', 'getReview', 'getReviewImage', 'saveAnswers', 'sendReview', 'setHelperBoxes', 'helperRequest'].forEach((name) => {
+    ['getStatus', 'tick', 'getReview', 'getReviewImage', 'saveAnswers', 'sendReview', 'setHelperBoxes', 'helperRequest',
+      'getLive', 'checkNow', 'runNow'].forEach((name) => {
       chain[name] = (...args) => { call.name = name; call.args = args; calls.push(call); };
     });
     return chain;
@@ -2697,6 +2722,378 @@ test('review: a book the user deleted leaves the review list', () => {
   const { f: g } = deliverWithPlaces(env, 'آخر.pdf', 2);
   env.drive.DriveApp.getFileById(rv(env, g.id).e).setTrashed(true);
   assert.strictEqual(status(env).reviews.length, 0, 'EPUB in the trash');
+});
+
+// ---------------------------------------------------------------------------
+// The live view, the journal and "run now" (live.py, docs/drive-inbox.md)
+// ---------------------------------------------------------------------------
+
+function journal(env) {
+  return JSON.parse(env.props.get('JOURNAL') || '[]');
+}
+
+const LITES = ['gemini-3.5-flash-lite', 'gemini-3.1-flash-lite'];
+
+test('live: a run that stopped for time with quota left goes on at once; a day has at most MAX_TIME_RUNS', () => {
+  const env = readyEnv({ start: '2026-10-23T07:10:00Z' });
+  const f = addBook(env, 'طويل.pdf');
+  tick(env);
+  minutes(env, 52);
+  writeStatus(env, f.id, 'paused', { waiting_for: 'time', pages_total: 500, pages_done: 120,
+    stages: { done: 120, read2: 200, unread: 180, bogus: 3 }, requests: { 'gemini-3.5-flash-lite': 300, 'gemini-3.1-flash-lite': 290 } });
+  tick(env);
+  assert.strictEqual(env.gh.dispatches.length, 2, 'the next run at once');
+  let j = jobs(env)[f.id];
+  assert.strictEqual(j.pausedDay, '');
+  assert.strictEqual(j.attempts, 1, 'not an attempt');
+  assert.deepStrictEqual(j.stages, { done: 120, read2: 200, unread: 180 });
+  const lines = journal(env);
+  const end = lines.find((e) => e.k === 'end');
+  assert.ok(end && /انتهى وقت التشغيل/.test(end.x) && /قُرئت قراءتين وتنتظر الحسم 200/.test(end.x) && /لم تُقرأ 180/.test(end.x), end && end.x);
+  assert.strictEqual(lines[lines.length - 1].k, 'start');
+  assert.ok(/يكمل ما بقي/.test(lines[lines.length - 1].x), lines[lines.length - 1].x);
+  assert.strictEqual(status(env).usage.m['gemini-3.5-flash-lite'].n, 300);
+  assert.strictEqual(env.mails.length, 0, 'no "سيكمل غداً" mail');
+  for (let i = 0; i < 12; i++) {
+    minutes(env, 52);
+    writeStatus(env, f.id, 'paused', { waiting_for: 'time' });
+    tick(env);
+  }
+  j = jobs(env)[f.id];
+  assert.strictEqual(env.gh.dispatches.length, 13);
+  assert.strictEqual(j.pausedDay, '2026-10-23', 'after MAX_TIME_RUNS the book waits for the next day');
+});
+
+test('live: a pause says which free models ran out and where the pages stand; usage counts each run once', () => {
+  const env = readyEnv({ start: '2026-10-23T07:03:00Z' });   // Riyadh 10:03, just after the quotas renewed
+  const f = addBook(env, 'تراث.pdf');
+  tick(env);
+  minutes(env, 79);
+  const st = writeStatus(env, f.id, 'paused', { quota_day: '2026-10-23', pages_total: 509, pages_done: 54,
+    stages: { done: 38, unsure: 16, read2: 441, unread: 14 },
+    requests: { 'gemini-3.5-flash-lite': 494, 'gemini-3.1-flash-lite': 497, 'gemini-3.8-flash': 20 },
+    models_out: LITES.concat('gemini-3.8-flash') });
+  tick(env);
+  env.ctx.noteUsage_(JSON.parse(JSON.stringify(st)));   // the same run again: not counted twice
+  const s = status(env);
+  assert.strictEqual(s.active.paused, true);
+  assert.strictEqual(s.active.why, 'نفد رصيد Gemini 3.5 Flash-Lite وGemini 3.1 Flash-Lite لهذا اليوم');
+  assert.deepStrictEqual(s.active.stages, { done: 38, unsure: 16, read2: 441, unread: 14 });
+  assert.strictEqual(s.active.canRun, true);
+  assert.deepStrictEqual(s.usage.m['gemini-3.5-flash-lite'], { n: 494, out: true, at: st.updated_at.replace('Z', '.000Z') });
+  assert.strictEqual(s.usage.m['gemini-3.8-flash'].n, 20);
+  assert.strictEqual(s.usage.renew, '2026-10-24T07:00:00.000Z');
+  const last = s.journal[s.journal.length - 1];
+  assert.strictEqual(last.k, 'pause');
+  assert.strictEqual(last.b, 'تراث');
+  assert.ok(/نفد رصيد Gemini 3.5 Flash-Lite/.test(last.x) && /أُنجزت 54 \(منها 16 مشكوك فيها\)/.test(last.x) &&
+    /تنتظر الحسم 441/.test(last.x) && /نحو 10:00 بتوقيتك/.test(last.x), last.x);
+  assert.ok(/متوقف حتى يتجدد رصيد النماذج المجانية نحو 10:00/.test(env.ctx.nowLine_(jobs(env))));
+  // A new Pacific day starts afresh.
+  env.clock = Date.parse('2026-10-24T07:05:00Z');
+  assert.deepStrictEqual(status(env).usage.m, {});
+});
+
+test('run now: a book waiting for its new day runs at once, as no pause or attempt of its own; refused while it runs', () => {
+  const env = readyEnv({ start: '2026-10-23T07:03:00Z' });
+  const f = addBook(env, 'تراث.pdf');
+  tick(env);
+  minutes(env, 79);
+  writeStatus(env, f.id, 'paused', { quota_day: '2026-10-23', models_out: LITES });
+  tick(env);
+  const pauses = jobs(env)[f.id].pauses;
+  assert.strictEqual(pauses, 1);
+  minutes(env, 60);
+  let r = JSON.parse(env.ctx.runNow(f.id));
+  assert.deepStrictEqual(r, { ok: true, started: true, error: '' });
+  assert.strictEqual(env.gh.dispatches.length, 2);
+  assert.ok(lastDispatch(env).body.inputs.live, 'with the live view');
+  let j = jobs(env)[f.id];
+  assert.strictEqual(j.stage, 'running');
+  assert.strictEqual(j.pausedDay, '');
+  assert.strictEqual(j.attempts, 1);
+  assert.ok(/طلبتَ التشغيل الآن/.test(journal(env).pop().x));
+  assert.strictEqual(env.lockHeld, false);
+  r = JSON.parse(env.ctx.runNow(f.id));
+  assert.strictEqual(r.ok, false);
+  assert.ok(/يعمل الآن/.test(r.error), r.error);
+  assert.strictEqual(env.gh.dispatches.length, 2);
+  // The run finds the quota still out: it waits again, and that is no pause of its own.
+  minutes(env, 6);
+  writeStatus(env, f.id, 'paused', { quota_day: '2026-10-23', models_out: LITES });
+  tick(env);
+  j = jobs(env)[f.id];
+  assert.strictEqual(j.pauses, pauses);
+  assert.strictEqual(j.forced, undefined);
+  assert.strictEqual(j.pausedDay, '2026-10-23');
+  assert.strictEqual(env.mails.length, 1, 'one "سيكمل غداً" mail only');
+  assert.strictEqual(JSON.parse(env.ctx.runNow('x')).ok, false);
+  assert.ok(/لم أجد/.test(JSON.parse(env.ctx.runNow('1B99999aBcDeFgHiJkLmNoPqRsTuVwX')).error));
+});
+
+test('run now: a parked book runs when no book holds the slot, and waits while one does', () => {
+  const env = readyEnv({ start: '2026-10-23T09:00:00Z' });
+  const parked = addBook(env, 'مركون.pdf', { folder: 'working' });
+  const holder = addBook(env, 'متوقف.pdf', { folder: 'working' });
+  const base = (f, title) => ({ fileId: f.id, name: title + '.pdf', title, createdAt: iso(env.clock - 7200000),
+    dispatchedAt: iso(env.clock - 3600000), attempts: 1, resultDir: 'drive-' + f.id, lastError: '' });
+  const all = {};
+  all[parked.id] = Object.assign(base(parked, 'مركون'), { stage: 'helper', helperAt: iso(env.clock - 600000), freeDay: '2026-10-23',
+    helperPages: 40 });
+  all[holder.id] = Object.assign(base(holder, 'متوقف'), { stage: 'running', pausedDay: '2026-10-23' });
+  env.props.set('JOBS', JSON.stringify(all));
+  let r = JSON.parse(env.ctx.runNow(parked.id));
+  assert.strictEqual(r.ok, false);
+  assert.ok(/«متوقف» يشغل الدور الآن/.test(r.error), r.error);
+  const s = status(env);
+  assert.strictEqual(s.active.canRun, true);
+  assert.strictEqual(s.working[0].canRun, false);
+  delete all[holder.id];
+  env.props.set('JOBS', JSON.stringify(all));
+  assert.strictEqual(status(env).working[0].canRun, true);
+  r = JSON.parse(env.ctx.runNow(parked.id));
+  assert.strictEqual(r.ok, true);
+  assert.strictEqual(jobs(env)[parked.id].stage, 'running');
+  assert.strictEqual(lastDispatch(env).body.inputs.drive_file_id, parked.id);
+});
+
+test('live: the page reads the live file every few seconds, GitHub\'s steps while it is quiet, and is told when the results are in', () => {
+  const env = readyEnv({ start: '2026-10-23T07:03:00Z' });
+  const f = addBook(env, 'مباشر.pdf');
+  tick(env);
+  const file = env.drive.DriveApp.getFileById(lastDispatch(env).body.inputs.live);
+  let g = JSON.parse(env.ctx.getLive('{}'));
+  assert.strictEqual(g.live.phase, 'queued');
+  assert.strictEqual(g.live.file, f.id);
+  assert.strictEqual(g.job.fileId, f.id);
+  assert.strictEqual(g.due, false);
+  // Before the run writes: its steps on GitHub (asked at most every 20 seconds).
+  env.gh.runs = [{ id: 55, run_number: 43, status: 'in_progress', created_at: ghTime(env.clock + 20000) }];
+  env.gh.jobs['55'] = [{ steps: [
+    { name: 'Set up job', status: 'completed', conclusion: 'success', started_at: ghTime(env.clock + 25000) },
+    { name: 'Install Pandoc and Tesseract', status: 'in_progress', conclusion: null, started_at: ghTime(env.clock + 40000) }] }];
+  minutes(env, 1);
+  g = JSON.parse(env.ctx.getLive('{}'));
+  assert.strictEqual(g.run.id, 55);
+  assert.deepStrictEqual(g.run.steps[1], { n: 'Install Pandoc and Tesseract', s: 'in_progress', c: '', at: ghTime(env.clock - 20000) });
+  const asked = env.requests.length;
+  env.ctx.getLive('{}');
+  assert.strictEqual(env.requests.length, asked, 'GitHub is asked at most every 20 seconds');
+  // The run writes: only the events the page does not have yet come back.
+  const dispatched = JSON.parse(file.content.toString('utf8')).dispatched;
+  file.setContent(JSON.stringify({ v: 1, seq: 5, run: '55', file: f.id, dispatched, phase: 'read', at: iso(env.clock),
+    events: [{ i: 1, r: 'ok' }, { i: 2, r: 'ok' }, { i: 3, r: 'rest' }] }));
+  g = JSON.parse(env.ctx.getLive(JSON.stringify({ run: '55', ev: 2 })));
+  assert.deepStrictEqual(g.live.events.map((e) => e.i), [3]);
+  assert.strictEqual(g.run, undefined, 'the live file speaks for the run');
+  assert.strictEqual(g.due, false);
+  // Quiet for more than 90 seconds (its token, say): GitHub's steps again.
+  minutes(env, 2);
+  assert.strictEqual(JSON.parse(env.ctx.getLive('{}')).run.id, 55);
+  // The results are saved: the page asks for a check, which takes them in at once.
+  file.setContent(JSON.stringify({ v: 1, seq: 9, run: '55', file: f.id, dispatched, phase: 'saved', at: iso(env.clock) }));
+  assert.strictEqual(JSON.parse(env.ctx.getLive('{}')).due, true);
+  writeStatus(env, f.id, 'done', { epub: 'م.epub', requests: { 'gemini-3.5-flash-lite': 12 } });
+  writeEpub(env, f.id, 'م.epub');
+  const c = JSON.parse(env.ctx.checkNow());
+  assert.strictEqual(c.ok, true);
+  assert.ok(c.journal.some((e) => e.k === 'deliver' && /سُلّم إلى «6- مكتمل»/.test(e.x)), JSON.stringify(c.journal));
+  assert.strictEqual(c.line, 'لا شيء يُحوَّل الآن.');
+  g = JSON.parse(env.ctx.getLive(JSON.stringify({ after: c.journal[c.journal.length - 1].i })));
+  assert.strictEqual(g.due, false);
+  assert.deepStrictEqual(g.journal, []);
+  assert.strictEqual(g.usage.m['gemini-3.5-flash-lite'].n, 12);
+});
+
+test('check now: a check that changes nothing says what the books wait for', () => {
+  const env = readyEnv({ start: '2026-10-23T07:03:00Z' });
+  const f = addBook(env, 'تراث.pdf');
+  tick(env);
+  minutes(env, 79);
+  writeStatus(env, f.id, 'paused', { quota_day: '2026-10-23', models_out: LITES });
+  tick(env);
+  minutes(env, 10);
+  const c = JSON.parse(env.ctx.checkNow());
+  assert.deepStrictEqual(c.journal, []);
+  assert.ok(/«تراث» متوقف حتى يتجدد رصيد النماذج المجانية نحو 10:00 بتوقيتك \(نفد رصيد Gemini 3.5 Flash-Lite/.test(c.line), c.line);
+  env.lockBusy = true;
+  assert.strictEqual(JSON.parse(env.ctx.checkNow()).busy, true);
+});
+
+test('a book moved back from مشكلة leaves the problem list at once; its note goes and the journal says so', () => {
+  const env = readyEnv();
+  const f = addBook(env, 'معطوب.pdf', { ageMin: 40 });
+  const other = addBook(env, 'جارٍ.pdf', { ageMin: 30 });
+  tick(env);
+  for (let i = 0; i < 2; i++) { minutes(env, 10); writeStatus(env, f.id, 'failed'); tick(env); }
+  assert.strictEqual(jobs(env)[f.id].stage, 'problem');
+  assert.strictEqual(jobs(env)[other.id].stage, 'running', 'the next book took the slot');
+  assert.ok(names(env, 'problem').indexOf('معطوب - سبب المشكلة.txt') >= 0);
+  assert.ok(status(env).recent.some((j) => j.fileId === f.id && j.stage === 'problem'));
+  assert.ok(journal(env).some((e) => e.k === 'problem' && e.b === 'معطوب' && /5- مشكلة/.test(e.x)));
+  f.moveTo(folder(env, 'inbox'));
+  const s = status(env);
+  assert.ok(!s.recent.some((j) => j.fileId === f.id), 'no problem on the page any more');
+  assert.deepStrictEqual(s.queueNames, ['معطوب']);
+  minutes(env, 10);
+  tick(env);
+  assert.strictEqual(jobs(env)[f.id], undefined);
+  assert.deepStrictEqual(names(env, 'problem'), []);
+  const e = journal(env).find((x) => x.k === 'revive');
+  assert.ok(e && e.b === 'معطوب' && /إلى «1- جديد»/.test(e.x), JSON.stringify(e));
+  // It starts afresh once the slot is free.
+  writeStatus(env, other.id, 'done', { epub: 'ج.epub' });
+  writeEpub(env, other.id, 'ج.epub');
+  minutes(env, 10);
+  tick(env);
+  assert.strictEqual(jobs(env)[f.id].stage, 'running');
+  assert.strictEqual(jobs(env)[f.id].attempts, 1);
+});
+
+test('live: the user\'s models\' own live files are read from the helper folder, by id after the first time', () => {
+  const env = helperEnv();
+  status(env);
+  const dir = helperFolder(env);
+  dir.createFile('live-agy.json', JSON.stringify({ v: 1, tool: 'agy', at: iso(env.clock),
+    chips: { 'agy|gemini-3.8-flash': { state: 'working', page: 12, kind: 'settle' } } }), 'application/json');
+  dir.createFile('live-other.json', '{}', 'application/json');
+  let g = JSON.parse(env.ctx.getLive(JSON.stringify({ helper: true })));
+  assert.deepStrictEqual(Object.keys(g.helper), ['agy']);
+  assert.strictEqual(g.helper.agy.chips['agy|gemini-3.8-flash'].page, 12);
+  const f = liveIn(env, dir).find((x) => x.name === 'live-agy.json');
+  f.setContent(JSON.stringify({ v: 1, tool: 'agy', chips: { 'agy|gemini-3.8-flash': { state: 'idle' } } }));
+  g = JSON.parse(env.ctx.getLive(JSON.stringify({ helper: true })));
+  assert.strictEqual(g.helper.agy.chips['agy|gemini-3.8-flash'].state, 'idle');
+  assert.strictEqual(JSON.parse(env.ctx.getLive('{}')).helper, undefined, 'only when asked');
+});
+
+/** The page's script in a minimal DOM (enough for render() and the live view). */
+function liveSandbox(env) {
+  const byId = {};
+  const node = (tag) => ({
+    tag, kids: [], className: '', style: {}, own: '', disabled: false, dir: '',
+    set textContent(v) { this.own = String(v); this.kids = []; },
+    get textContent() { return [this.own].concat(this.kids.map((k) => k.textContent)).join(' '); },
+    appendChild(c) { this.kids.push(c); return c; },
+    setAttribute() {},
+    addEventListener(type, fn) { (this.on = this.on || {})[type] = fn; },
+    click() { if (this.on && this.on.click) this.on.click.call(this); }
+  });
+  const calls = [];
+  const chain = {};
+  let ok = null;
+  chain.withSuccessHandler = (fn) => { ok = fn; return chain; };
+  chain.withFailureHandler = () => chain;
+  ['getStatus', 'tick', 'getLive', 'checkNow', 'runNow'].forEach((fn) => {
+    chain[fn] = function () { calls.push({ fn, args: Array.from(arguments), ok }); };
+  });
+  const sandbox = {
+    document: {
+      hidden: false,
+      createElement: node,
+      createTextNode: (t) => ({ textContent: String(t) }),
+      getElementById: (id) => byId[id] || (byId[id] = node('div')),
+      documentElement: node('html'),
+      addEventListener() {}
+    },
+    google: { script: { run: chain } },
+    setInterval: () => 0,
+    setTimeout: () => 0,
+    clearTimeout: () => {}
+  };
+  const html = env.ctx.doGet().getContent();
+  vm.createContext(sandbox);
+  vm.runInContext(/<script>([\s\S]*?)<\/script>/.exec(html)[1], sandbox);
+  const find = (n, test) => test(n) ? n : (n.kids || []).reduce((hit, k) => hit || find(k, test), null);
+  return { sandbox, byId, calls, find };
+}
+
+test('the page: the free models one by one, the run\'s events as they come, and «شغّل الآن» for a waiting book', () => {
+  const env = readyEnv({ start: '2026-10-23T07:03:00Z' });
+  const f = addBook(env, 'تراث.pdf');
+  tick(env);
+  minutes(env, 10);
+  const file = env.drive.DriveApp.getFileById(lastDispatch(env).body.inputs.live);
+  const t = Math.floor(env.clock / 1000);
+  const dispatched = JSON.parse(file.content.toString('utf8')).dispatched;
+  file.setContent(JSON.stringify({ v: 1, seq: 12, run: '77', run_n: '43', file: f.id, book: 'تراث', dispatched,
+    at: iso(env.clock - 2000), started: iso(env.clock - 500000), phase: 'read', info: { pages: 300 },
+    stops: { read: iso(env.clock + 1800000), settle: iso(env.clock + 2500000) },
+    pages: { total: 509, done: 40, unsure: 2, read2: 100, read1: 3, unread: 364, failed: 0, helper: 0, now: [233, 234] },
+    models: {
+      'gemini-3.5-flash-lite': { role: 'read1', queued: 2, ok: 120, err: 1, rl: 2, out: false, out_at: '', missing: false, limit: 500, rest: '',
+        busy: [[233, 'a', t - 3]], last: [['ok', 232, 'b', 4.2, t - 6]] },
+      'gemini-3.1-flash-lite': { role: 'read2', queued: 0, ok: 118, err: 0, rl: 0, out: false, out_at: '', missing: false, limit: 500,
+        rest: iso(env.clock + 40000), busy: [], last: [] },
+      'gemini-3.8-flash': { role: 'settle', queued: 0, ok: 20, err: 0, rl: 0, out: true, out_at: iso(env.clock - 60000), missing: false,
+        limit: 20, rest: '', busy: [], last: [['out', 0, 'settle', null, t - 60]] }
+    },
+    events: [
+      { i: 1, t: t - 60, m: 'gemini-3.8-flash', p: 0, k: 'settle', r: 'out', n: 20 },
+      { i: 2, t: t - 30, m: 'gemini-3.1-flash-lite', p: 231, k: 'b', r: 'rest', s: 40 },
+      { i: 3, t: t - 6, m: 'gemini-3.5-flash-lite', p: 232, k: 'b', r: 'ok', s: 4.2, n: 1800 },
+      { i: 4, t: t - 5, m: '', p: 0, k: 'page', r: 'wait', n: 441 }
+    ] }));
+  const pg = liveSandbox(env);
+  pg.sandbox.gotLive(JSON.parse(env.ctx.getLive('{}')));
+  const free = pg.byId.free.textContent;
+  assert.ok(/Gemini 3\.5 Flash-Lite/.test(free) && /القارئ الأول/.test(free) && /يعمل الآن/.test(free), free);
+  assert.ok(/الآن:\s+ص 233 \(القراءة الأولى\)/.test(free), free);
+  assert.ok(/في الانتظار:\s+طلبان/.test(free), free);
+  assert.ok(/اليوم:\s+نحو 120 من 500 طلباً/.test(free), free);
+  assert.ok(/Gemini 3\.1 Flash-Lite[\s\S]*يرتاح 40 ث/.test(free), free);
+  assert.ok(/Gemini 3\.8 Flash[\s\S]*نفد رصيده اليوم/.test(free), free);
+  assert.ok(/قرأ ص 232 \(القراءة الثانية\) في 4\.2 ث/.test(free), free);
+  assert.ok(/طلبت Google التمهّل 40 ث قبل ص 231/.test(free), free);
+  assert.ok(/441 صفحة تنتظر من يحسمها/.test(free), free);
+  const now = pg.byId.now.textContent;
+  assert.ok(/يقرأ الصفحات/.test(now) && /الآن: ص 233، 234/.test(now) && /التشغيل رقم 43/.test(now), now);
+  assert.ok(/42 *من 509 صفحة أُنجزت/.test(now) && /قُرئت قراءتين وتنتظر الحسم *100/.test(now), now);
+  assert.ok(/مباشر/.test(pg.byId['live-badge'].textContent), pg.byId['live-badge'].textContent);
+  // The next poll brings only the new events, which join the feed.
+  const asked = JSON.parse(env.ctx.getLive(JSON.stringify({ run: '77', ev: 4 })));
+  assert.deepStrictEqual(asked.live.events, []);
+  pg.sandbox.gotLive(asked);
+  assert.ok(/441 صفحة تنتظر/.test(pg.byId.free.textContent));
+
+  // The run ends: the quota ran out. The page says why, and offers «شغّل الآن».
+  minutes(env, 60);
+  writeStatus(env, f.id, 'paused', { quota_day: '2026-10-23', stages: { done: 40, unsure: 2, read2: 441, unread: 26 },
+    pages_total: 509, models_out: LITES });
+  tick(env);
+  pg.sandbox.render(JSON.parse(env.ctx.getStatus()));
+  const text = pg.byId.now.textContent;
+  assert.ok(/متوقف: نفد رصيد Gemini 3\.5 Flash-Lite وGemini 3\.1 Flash-Lite لهذا اليوم/.test(text), text);
+  assert.ok(/قُرئت قراءتين وتنتظر الحسم *441/.test(text), text);
+  const run = pg.find(pg.byId.now, (n) => n.tag === 'button' && /شغّل الآن/.test(n.textContent));
+  assert.ok(run, 'a «شغّل الآن» button');
+  run.click();
+  const call = pg.calls.filter((c) => c.fn === 'runNow').pop();
+  assert.deepStrictEqual(call.args, [f.id]);
+  call.ok(env.ctx.runNow(f.id));
+  assert.strictEqual(jobs(env)[f.id].stage, 'running');
+  // The sidebar has «النماذج المجانية» right under «المساعد على جهازك».
+  const nav = pg.byId['side-nav'].kids.map((k) => k.textContent.replace(/\s+/g, ' ').trim());
+  assert.ok(/النماذج المجانية/.test(nav[nav.length - 1]), nav.join(' | '));
+});
+
+test('the page: a waiting book says what the user\'s own settling models could do now', () => {
+  const env = helperEnv();
+  env.clock = Date.parse('2026-10-23T09:00:00Z');
+  status(env);
+  writeHelperStatus(env, { models: [{ id: 'agy|gemini-3.8-flash', label: 'Gemini 3.8 Flash', tool: 'Antigravity' }] });
+  env.ctx.setHelperBoxes(JSON.stringify({ transcribe: [], settle: ['agy|gemini-3.8-flash'], review: [] }));
+  const f = addBook(env, 'تراث.pdf');
+  tick(env);
+  minutes(env, 60);
+  writeStatus(env, f.id, 'paused', { quota_day: '2026-10-23', stages: { done: 54, read2: 441, unread: 14 }, models_out: LITES });
+  tick(env);
+  const pg = liveSandbox(env);
+  const text = pg.byId.now.textContent;
+  assert.ok(/نماذجك في مربع «الحسم» تستطيع حسم 441 صفحة قُرئت قراءتين الآن/.test(text), text);
+  // And the run it starts gives them the pages: the settling box reaches the workflow.
+  assert.strictEqual(JSON.parse(env.ctx.runNow(f.id)).started, true);
+  assert.ok(/:settle$/.test(lastDispatch(env).body.inputs.helper), lastDispatch(env).body.inputs.helper);
 });
 
 test('the fake GitHub saw only known endpoints', () => {

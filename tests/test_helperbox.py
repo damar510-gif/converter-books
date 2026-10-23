@@ -439,3 +439,26 @@ class Fetch(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class WorkflowModes(unittest.TestCase):
+    """The workflow passes the helper folder on for every mode the Drive inbox script sends
+    (2026-10-23: ":settle" and ":read" were dropped, so the models in the settling box never
+    got a page)."""
+
+    def test_every_mode_of_the_script_reaches_the_converter(self):
+        import re
+        with open(os.path.join(ROOT, ".github", "workflows", "convert.yml"), encoding="utf-8") as f:
+            yml = f.read()
+        with open(os.path.join(ROOT, "apps-script", "Code.gs"), encoding="utf-8") as f:
+            gs = f.read()
+        pattern = re.search(r'\[\[ "\$HELPER" =~ (\S+) \]\]', yml).group(1)
+        body = gs[gs.index("function helperInput_("):]
+        body = body[:body.index("\n}\n")]
+        modes = set(re.findall(r"'(:[a-z]+)'", body))
+        self.assertEqual(modes, {":import", ":transcribe", ":read", ":settle"})
+        for mode in modes:
+            self.assertRegex("1AbCdEfGhIjKlMnOp" + mode, pattern)
+            folder, _, m = ("x" + mode).partition(":")
+            self.assertIn(m, ("transcribe", "read", "settle", "import"))
+        self.assertNotRegex("1AbCdEfGhIjKlMnOp:other", pattern)
