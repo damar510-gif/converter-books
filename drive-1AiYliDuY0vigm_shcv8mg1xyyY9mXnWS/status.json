@@ -1,7 +1,7 @@
 {
   "state": "paused",
   "pages_total": 509,
-  "pages_done": 27,
+  "pages_done": 29,
   "pages_helper": [
     1,
     2,
@@ -276,8 +276,6 @@
     487,
     488,
     489,
-    490,
-    491,
     492,
     493,
     494
@@ -285,6 +283,8 @@
   "pages_unsure": [
     8,
     328,
+    490,
+    491,
     495,
     496,
     503,
@@ -501,41 +501,74 @@
   "pages_retry": [],
   "pages_human": [],
   "helper_checked": 0,
-  "review_items": 32,
+  "review_items": 34,
   "review_applied": 0,
   "review_kept": 0,
   "review_conflicts_new": 0,
   "review_seen": "",
   "free_left": true,
-  "free_done": 12,
+  "free_done": 2,
   "stages": {
-    "helper": 278,
+    "helper": 276,
     "done": 21,
-    "unsure": 6,
+    "unsure": 8,
     "unread": 167,
     "read1": 34,
     "failed": 3
   },
   "requests": {
-    "gemini-3.8-flash": 31,
-    "gemini-3.7-flash": 9,
-    "gemini-3.6-flash": 22,
-    "gemini-3.5-flash": 9,
-    "gemini-3.1-pro-preview": 1,
-    "gemini-3-flash-preview": 4,
-    "gemini-3.5-flash-lite": 1
+    "gemini-3.8-flash": 19,
+    "gemini-3.7-flash": 11,
+    "gemini-3.6-flash": 14,
+    "gemini-3.5-flash": 12,
+    "gemini-3.1-pro-preview": 2,
+    "gemini-3-flash-preview": 24
   },
   "models_out": [
+    "gemini-3-flash-preview",
     "gemini-3.5-flash",
     "gemini-3.6-flash",
     "gemini-3.7-flash",
     "gemini-3.8-flash"
   ],
+  "free_models": [
+    "gemini-3.5-flash-lite",
+    "gemini-3.1-flash-lite",
+    "gemini-2.5-flash-lite",
+    "gemini-3.8-flash",
+    "gemini-3.7-flash",
+    "gemini-3.6-flash",
+    "gemini-3.5-flash",
+    "gemini-3-flash-preview",
+    "gemini-2.5-flash",
+    "gemini-3.1-pro-preview",
+    "gemini-2.5-pro",
+    "gemma-4-31b-it",
+    "gemma-4-26b-a4b-it"
+  ],
+  "free_default": {
+    "read1": [
+      "gemini-3.5-flash-lite"
+    ],
+    "read2": [
+      "gemini-3.1-flash-lite"
+    ],
+    "settle": [
+      "gemini-3.8-flash",
+      "gemini-3.7-flash",
+      "gemini-3.6-flash",
+      "gemini-3.5-flash",
+      "gemini-3.1-pro-preview",
+      "gemini-3-flash-preview",
+      "gemini-3.5-flash-lite",
+      "gemini-3.1-flash-lite"
+    ]
+  },
   "book": "تراث الانسانية 2_k2opt",
   "epub": "تراث الانسانية 2_k2opt.epub",
-  "updated_at": "2026-10-23T14:42:01Z",
+  "updated_at": "2026-10-23T16:26:50Z",
   "quota_day": "2026-10-23",
   "waiting_for": "helper",
-  "run_id": 39959481815,
-  "run_number": 51
+  "run_id": 39976439368,
+  "run_number": 54
 }
