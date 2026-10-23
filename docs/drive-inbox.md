@@ -36,6 +36,7 @@ The answers the user gives on the status page (see "Results" below) are kept in
 | `helper` | Optional. The book's folder for the helper on the user's computer (`بيانات المساعد/كتب/<fileId>`), with `:transcribe` (the models in the user's boxes read and settle), `:read` (they only read), `:settle` (they only settle; the free models read every page) or `:import` (their work so far is used, the free model does the rest). See docs/helper-boxes-plan.md. Until 2026-10-23 the workflow dropped `:read` and `:settle`, so the models in the settling box never got a page. |
 | `judge` | Optional. The Drive ID of `بيانات المساعد/أحكام/<fileId>.json`, the helper models' verdicts on the unsure places. The run adds them to `review/judge-answers.json` and applies them like the user's answers (the user's own answer wins). |
 | `live` | Optional. The Drive ID of `تحويل الكتب/بيانات البث/live.json`, the live view's file (see "Live view" below). With it, the run writes what it does there every two seconds or so, and with the free models alone it starts no page work after its Drive token would run out (state `paused` + `waiting_for: "time"`). |
+| `models` | Optional, sent once the user changed the free models' boxes on the status page (Script Property `FREE_BOXES`): `read1=a,b;read2=c;settle=d,e`. Only the models of a box give its work, first to last (the next one when the one before has no quota left): `read1` the first reading, `read2` the second (never the model that gave the page's first), `settle` the settling, where Flash-Lite and Gemma models wait while the helper's models settle. One model may be in several boxes. Without it the converter keeps its own roles (the two Lite readers read, each first in its own reading and the other after it; the Flash models settle, then the Lite readers). The workflow passes it on only when it matches that form (`BOXES_RE`). |
 
 Only one conversion runs at a time. The workflow also declares
 `concurrency: convert`, so a second dispatch waits.
@@ -128,6 +129,11 @@ be settled `read2`, read once `read1`, `unread`, `failed`, or with the user's mo
 `requests` (each free model's answered requests in this run) and `models_out` (the free models
 whose daily quota the run found used up). The script keeps `stages` for the page («الآن»), and
 adds `requests` and `models_out` up per Pacific day (Script Property `USAGE`, each run once).
+A run that could list the account's models writes `free_models` (the free models the page
+offers for its boxes: Flash-Lite, Flash and Pro from 2.5 on, Gemma from 4 on) and `free_default`
+(`{read1, read2, settle}`: the converter's own boxes, shown until the user changes them); the
+script keeps both (Script Property `FREE_MODELS`). A run given `models` writes the boxes it used
+as `boxes`.
 
 `pages_human` lists the pages the user answered about; `review_items` counts the places
 still open, and `review_applied` / `review_kept` the corrections and confirmations this

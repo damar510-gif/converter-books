@@ -298,6 +298,11 @@ class ModelPool:
         # first, before the Lite models (set_extra).
         self.extra = []
         self.rescue = rescue
+        # The status page's boxes for the free models (set_boxes): {"read1": [...], "read2":
+        # [...], "settle": [...]}, each in the user's order. A role without one keeps the above.
+        self.boxes = {}
+        # The free models this account has, for the status page's boxes (free_catalog).
+        self.catalog = []
         self.rpm = rpm
         self.lock = threading.Lock()
         self.limiters = {}
@@ -349,15 +354,38 @@ class ModelPool:
     def set_extra(self, models):
         self.extra = [m for m in dict.fromkeys(models) if m and m not in (self.model, self.second, self.rescue)]
 
+    def set_boxes(self, boxes):
+        """The free models the user put in the status page's boxes: only they give the first
+        reading, only they the second, only they settle, each first to last (the next one
+        when the one before has no quota left). Without a second reading, its box goes."""
+        self.boxes = {k: list(dict.fromkeys(boxes[k])) for k in BOX_KEYS if boxes.get(k)}
+        if not self.second:
+            self.boxes.pop("read2", None)
+
     def readers(self, first=None):
         """The two Lite readers; first: the one to try first."""
         order = [first] if first else []
         return [m for m in dict.fromkeys(order + [self.model, self.second]) if m]
 
+    def reading(self, kind):
+        """Who gives a page's first ("a") or second ("b") reading, first to last: the models in
+        its box on the status page, else both Lite readers, each first in its own reading."""
+        box = self.boxes.get("read1" if kind == "a" else "read2")
+        return list(box) if box else self.readers(self.second if kind == "b" else None)
+
+    def can_read(self, kind, besides=""):
+        """A model with quota left can give this reading; besides: the model that gave the
+        page's other reading (a page's two readings never come from one model)."""
+        return any(self.available(m) for m in self.reading(kind) if m != besides)
+
     def settlers(self, lite=True):
-        """Who settles a page, as good as can be: the Flash models strongest first, then the
-        Lite readers (fewer requests first, to spread their quotas) unless lite is False
-        (the helper's models are on and settle instead)."""
+        """Who settles a page, as good as can be: the models in the settling box on the status
+        page, in the user's order; else the Flash models strongest first, then the Lite readers
+        (fewer requests first, to spread their quotas). lite False: the helper's models are on
+        and settle instead of the Lite readers (and of Gemma, in a box)."""
+        box = self.boxes.get("settle")
+        if box:
+            return [m for m in box if self.available(m) and (lite or model_rank(m) > (0,))]
         out = [m for m in self.extra if self.available(m)]
         if lite:
             out += sorted((m for m in (self.model, self.second) if self.available(m)),
@@ -365,8 +393,9 @@ class ModelPool:
         return out
 
     def free_out(self):
-        """No free reader has quota left today (Gemma only rescues refused pages)."""
-        return not any(self.available(m) for m in self.readers())
+        """No free reader has quota left today (Gemma only rescues refused pages, unless the
+        user put it in a reading box)."""
+        return not any(self.available(m) for m in self.reading("a") + self.reading("b"))
 
     def _limiter(self, model):
         with self.lock:
@@ -536,11 +565,14 @@ def read_with(pool, chain, page, png, pix, prompt, ink, rescue=""):
     error, best = "", None
     quota_skipped = refused = False
     attempted = False
-    for model in chain + ([rescue] if rescue else []):
-        if model == rescue and not refused:
+    # The rescue model in a reading box (the status page) is one of its readers there.
+    extra = [rescue] if rescue and rescue not in chain else []
+    for i, model in enumerate(chain + extra):
+        saving = i >= len(chain)
+        if saving and not refused:
             break
         if not pool.available(model):
-            quota_skipped = quota_skipped or model != rescue
+            quota_skipped = quota_skipped or not saving
             continue
         try:
             text, finish = pool.read(png, prompt, model)
@@ -550,7 +582,7 @@ def read_with(pool, chain, page, png, pix, prompt, ink, rescue=""):
                 via = "halves"
                 text, finish = read_in_halves(pool, page, pix, prompt, model)
         except QuotaExhausted:
-            quota_skipped = quota_skipped or model != rescue
+            quota_skipped = quota_skipped or not saving
             continue
         except Exception as e:
             attempted = True
@@ -560,9 +592,10 @@ def read_with(pool, chain, page, png, pix, prompt, ink, rescue=""):
         status, text = judge_reading(text, finish, ink)
         if is_refusal(finish):
             refused = True
-        reading = {"model": model, "text": text, "finish": finish, "via": via, "status": status}
-        if refused:
-            reading["refused"] = True
+        # Always said, so a reading by the rescue model from a reading box is not taken for a
+        # refused page's (load_record).
+        reading = {"model": model, "text": text, "finish": finish, "via": via, "status": status,
+                   "refused": refused}
         if status in ("ok", "empty"):
             return status, reading, ""
         error = f"{model}: chars={len(text)} finish={finish}"
@@ -694,9 +727,15 @@ def read_page(pool, doc, index, cache_dir, total, dual):
     need_b = dual and (need_a or b is None or b.get("status") in ("failed", "suspicious"))
     if not need_a and not need_b:
         return rec
-    if need_a and (pool.free_out() or pool.past("read")):
+    if need_a and (not pool.can_read("a") or pool.past("read")):
         # Nobody can read it in this run: no image is made for nothing.
         return None
+    if not need_a and (not pool.can_read("b", rec["a"]["model"]) or pool.past("read")):
+        # Nobody can give its second reading in this run: it waits for one (as a reading
+        # waiting for quota does below), and no image is made for nothing.
+        if (rec.pop("b", None), rec.pop("check", None)) != (None, None):
+            save_record(cache_dir, rec)
+        return rec
 
     png, pix = page_image(doc, page)
     ink = ink_ratio(pix)
@@ -704,7 +743,7 @@ def read_page(pool, doc, index, cache_dir, total, dual):
     prompt = OCR_PROMPT.format(spread=SPREAD_HINT if spread else "")
     if need_a:
         with live.doing(page_no, "a"):
-            status, reading, error = read_with(pool, pool.readers(), page, png, pix, prompt, ink, rescue=pool.rescue)
+            status, reading, error = read_with(pool, pool.reading("a"), page, png, pix, prompt, ink, rescue=pool.rescue)
         if status == "pending":
             return None
         note_reading(pool, page_no, "a", status, reading, error)
@@ -715,7 +754,7 @@ def read_page(pool, doc, index, cache_dir, total, dual):
     if dual and rec["status"] == "ok":
         # The second reading comes from a different model, so its mistakes fall elsewhere.
         # Gemma may give it only when Gemini refused this page.
-        others = [m for m in pool.readers(pool.second) if m != rec["a"]["model"]]
+        others = [m for m in pool.reading("b") if m != rec["a"]["model"]]
         rescue = pool.rescue if rec["a"].get("refused") and rec["a"]["model"] != pool.rescue else ""
         with live.doing(page_no, "b"):
             status, reading, error = read_with(pool, others, page, png, pix, prompt, ink, rescue=rescue)
@@ -1019,14 +1058,10 @@ def model_rank(name):
     return (int(major), int(minor or 0), 1 if m.group(2) == "pro" else 0)
 
 
-def resolve_models(pool, names):
-    """Maps each name of the other free models to a model this account has. Google renames
-    models (for example "gemini-3-flash" is served as "gemini-3-flash-preview"); a name not
-    found as is takes the closest "<name>-..." model. Newer Gemini Flash/Pro models the
-    account has are added, each before the first model older than it.
-    Names stay as given if listing fails."""
+def list_models(pool):
+    """{name: True} for the models this account can ask for text; empty when listing fails."""
+    have = {}
     try:
-        have = {}
         for m in pool.client.models.list():
             name = (getattr(m, "name", "") or "").split("/")[-1]
             actions = getattr(m, "supported_actions", None)
@@ -1034,9 +1069,14 @@ def resolve_models(pool, names):
                 have[name] = True
     except Exception as e:
         print(f"Could not list models ({str(e)[:120]}); models used by their given names")
-        return names
-    if not have:
-        return names
+        return {}
+    return have
+
+
+def match_models(have, names):
+    """Each name as a model this account has (have: list_models). Google renames models (for
+    example "gemini-3-flash" is served as "gemini-3-flash-preview"); a name not found as is
+    takes the closest "<name>-..." model, and stays as given when there is none."""
     skip = ("lite", "image", "tts", "audio", "live", "embedding")
     out = []
     for n in names:
@@ -1051,7 +1091,17 @@ def resolve_models(pool, names):
         else:
             print(f"Model {n} is not available to this account")
             out.append(n)
-    out = list(dict.fromkeys(out))
+    return list(dict.fromkeys(out))
+
+
+def resolve_models(pool, names, have=None):
+    """Maps each name of the other free models to a model this account has (match_models).
+    Newer Gemini Flash/Pro models the account has are added, each before the first model older
+    than it. Names stay as given if listing fails. have: list_models(pool), when asked already."""
+    have = list_models(pool) if have is None else have
+    if not have:
+        return names
+    out = match_models(have, names)
     base = lambda a: re.sub(r"-(preview|latest)$", "", a)
     known = {base(a) for a in out}
     added = []
@@ -1070,6 +1120,53 @@ def resolve_models(pool, names):
             pool.added_models = added
         except AttributeError:
             pass
+    return out
+
+
+# The free models the status page offers for its boxes: Gemini Flash-Lite, Flash and Pro from
+# 2.5 on, and Gemma from 4 on.
+CATALOG_MODEL = re.compile(r"^(?:gemini-(\d+(?:\.\d+)?)-(flash-lite|flash|pro)|gemma-(\d+)-[a-z0-9-]+-it)(-preview|-latest)?$")
+
+
+def free_catalog(have):
+    """The free models this account has (have: list_models) for the status page's boxes, in
+    rows: Flash-Lite, Flash, Pro, each newest first, then Gemma. A -preview or -latest alias
+    only stands for a model without its plain name."""
+    best = {}
+    for name in have:
+        m = CATALOG_MODEL.match(name)
+        if not m:
+            continue
+        if m.group(1):
+            version = (tuple(int(x) for x in m.group(1).split(".")) + (0,))[:2]
+            if version < (2, 5):
+                continue
+            row = ("flash-lite", "flash", "pro").index(m.group(2))
+        else:
+            version = (int(m.group(3)),)
+            if version < (4,):
+                continue
+            row = 3
+        base = name[:len(name) - len(m.group(4) or "")]
+        if base not in best or name == base or (best[base][2] != base and name.endswith("-preview")):
+            best[base] = (row, version, name)
+    rows = sorted(best.values(), key=lambda x: (x[0], [-v for v in x[1]], [-ord(c) for c in x[2]]))
+    return [name for _, _, name in rows]
+
+
+# The status page's boxes for the free models: who gives the first reading, who the second,
+# who settles.
+BOX_KEYS = ("read1", "read2", "settle")
+
+
+def parse_boxes(text):
+    """The workflow's "models" input, "read1=a,b;read2=c;settle=d,e" (set from the status
+    page's boxes), as {"read1": ["a", "b"], ...}."""
+    out = {}
+    for part in (text or "").split(";"):
+        key, _, names = part.partition("=")
+        if key.strip() in BOX_KEYS:
+            out[key.strip()] = [n for n in dict.fromkeys(x.strip() for x in names.split(",")) if n]
     return out
 
 
@@ -1382,19 +1479,24 @@ def pacific_day():
 
 
 def waiting_for_reader(pool, records, dual):
-    """When some free readers' daily quota is used up and others still have some: the pages
-    whose only missing piece is a second reading that only readers now out could give (a
-    page's two readings never come from one model). Returns (pages, readers with quota
-    left); no pages when every reader is out, or none is."""
-    readers = [m for m in pool.readers() if m not in pool.missing] if pool and dual else []
+    """When some free readers' daily quota is used up and others still have some, a first
+    reader among them (the next book starts with first readings): the pages whose only missing
+    piece is a second reading that only readers now out could give (a page's two readings
+    never come from one model). Returns (pages, readers with quota left); no pages when every
+    reader is out, or none is, or no first reader is left."""
+    if not pool or not dual:
+        return set(), []
+    first = [m for m in pool.reading("a") if m not in pool.missing]
+    second = [m for m in pool.reading("b") if m not in pool.missing]
+    readers = list(dict.fromkeys(first + second))
     left = [m for m in readers if m not in pool.exhausted]
-    if not left or len(left) == len(readers):
+    if not left or len(left) == len(readers) or not any(m in left for m in first):
         return set(), left
     pages = set()
     for r in records:
         if r.get("status") != "ok" or review.pin_of(r) or (r.get("b") or {}).get("status") == "ok":
             continue
-        owed = [m for m in readers if m != (r.get("a") or {}).get("model")]
+        owed = [m for m in second if m != (r.get("a") or {}).get("model")]
         if owed and all(m in pool.exhausted for m in owed):
             pages.add(r["page"])
     return pages, left
@@ -1470,8 +1572,10 @@ def write_report(path, summary, pool, notes=()):
     lines += [f"- {label}: {counts[key]}" for key, label in names if counts.get(key)]
     if pool:
         lines += [f"- طلبات {model} في هذا التشغيل: {n}" for model, n in pool.requests.items()]
-        if getattr(pool, "added_models", None):
+        if getattr(pool, "added_models", None) and not pool.boxes.get("settle"):
             lines.append(f"- نماذج مجانية جديدة أُضيفت تلقائياً: {'، '.join(pool.added_models)}")
+        titles = {"read1": "القراءة الأولى", "read2": "القراءة الثانية", "settle": "الحسم"}
+        lines += [f"- {titles[k]} (من صفحة الحالة): {'، '.join(v)}" for k, v in pool.boxes.items()]
     if summary.get("review_applied") or summary.get("review_kept"):
         lines.append(f"- طُبّقت من مراجعتك: {summary['review_applied']} تصحيحاً و{summary['review_kept']} تأكيداً")
     if summary.get("review_conflicts_new"):
@@ -1866,10 +1970,19 @@ def generate_epub_from_pdf(filepath, output_path, args):
         pool = ModelPool(args.model, args.second_model if args.dual else "", args.rescue_model, args.rpm)
         pool.live = lv
         if not args.review_only:
-            # Every free model reads and settles: the Flash models once both Lite readers are out.
-            pool.set_extra(resolve_models(pool, [m.strip() for m in args.extra_models.split(",") if m.strip()]))
-            for model, role in [(pool.model, "read1"), (pool.second, "read2")] + \
-                    [(m, "settle") for m in pool.extra] + [(pool.rescue, "rescue")]:
+            # The Flash models settle (strongest first), unless the user's boxes on the status
+            # page say who reads and who settles.
+            have = list_models(pool)
+            pool.set_extra(resolve_models(pool, [m.strip() for m in args.extra_models.split(",") if m.strip()], have))
+            boxes = parse_boxes(args.boxes)
+            if boxes:
+                pool.set_boxes({k: match_models(have, v) if have else v for k, v in boxes.items()})
+                print("Free models' boxes: " + "; ".join(f"{k}={','.join(v)}" for k, v in pool.boxes.items()))
+            pool.catalog = free_catalog(have)
+            roles = [(pool.model, "read1"), (pool.second, "read2")] if not pool.boxes else \
+                [(m, "read1") for m in pool.reading("a")] + ([(m, "read2") for m in pool.reading("b")] if pool.second else [])
+            for model, role in roles + [(m, "settle") for m in (pool.boxes.get("settle") or pool.extra)] + \
+                    [(pool.rescue, "rescue")]:
                 lv.role(model, role)
     dual = bool(pool and args.dual and args.second_model)
 
@@ -2040,6 +2153,14 @@ def generate_epub_from_pdf(filepath, output_path, args):
         # models whose daily quota it found used up.
         summary["requests"] = dict(pool.requests)
         summary["models_out"] = sorted(pool.exhausted - pool.missing)
+        # The free models this account has, for the status page's boxes; what the boxes are
+        # until the user changes them (the readers, then the settlers); and the boxes used.
+        if pool.catalog:
+            summary["free_models"] = pool.catalog
+            summary["free_default"] = {"read1": [pool.model], "read2": [pool.second] if pool.second else [],
+                                       "settle": list(dict.fromkeys(pool.extra + [m for m in (pool.model, pool.second) if m]))}
+        if pool.boxes:
+            summary["boxes"] = pool.boxes
     write_status(args.status, summary, args.title, os.path.basename(output_path), pool.quota_day if pool else "")
     for r in records:
         lv.page(r["page"], "helper" if r["page"] in helper_wait else page_state(r))
@@ -2119,6 +2240,9 @@ def main():
                         or "gemini-3.8-flash,gemini-3.7-flash,gemini-3.6-flash,gemini-3-flash",
                         help="The other free models (small daily quotas): they read and settle pages once "
                              "both Lite readers are out")
+    parser.add_argument("--boxes", default="",
+                        help="The free models in the status page's boxes, as read1=a,b;read2=c;settle=d,e: only "
+                             "they give the first reading, the second, and settle, each first to last")
     parser.add_argument("--single", dest="dual", action="store_false",
                         help="Read each page once (no second reading and no comparison)")
     parser.add_argument("--rpm", type=float, default=10, help="Requests per minute per Gemini model")

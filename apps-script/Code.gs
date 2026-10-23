@@ -110,7 +110,11 @@ var CONFIG = {
   JOURNAL_MAX_BYTES: 8000,
   // Runs stopped for time (their Drive token) in one Pacific day before the book waits
   // for the next day anyway: no endless chain if something goes wrong.
-  MAX_TIME_RUNS: 12
+  MAX_TIME_RUNS: 12,
+  // The free models in the status page's boxes (FREE_BOXES): most in one box, and most
+  // models the page offers (from the runs' status.json, FREE_MODELS).
+  FREE_BOX_MAX: 12,
+  FREE_MAX_MODELS: 40
 };
 
 var SUPPORTED_EXT = { pdf: true, docx: true, txt: true };
@@ -129,6 +133,20 @@ var PLACE_ID_RE = /^p(\d{1,5})-[0-9a-f]{10}$/;
 var REST_ID_RE = /^p(\d{1,5})-rest-[0-9a-z]{1,20}$/;
 // A model on the user's computer: "<tool>|<model>" (helper/helper.ps1, $Tools).
 var CHIP_RE = /^(grok|agy|codex|claude)\|[A-Za-z0-9._-]{1,60}$/;
+// The free models (Gemini and Gemma by the key on GitHub), and their boxes on the status page:
+// who gives the first reading, who the second, who settles, each first to last. The workflow
+// takes them as read1=…;read2=…;settle=… (freeInput_).
+var FREE_MODEL_RE = /^(gemini|gemma)-[a-z0-9.-]{1,60}$/;
+var FREE_KEYS = ['read1', 'read2', 'settle'];
+// The converter's own choice until a run says it (free_default in status.json).
+var FREE_DEFAULT = {
+  read1: ['gemini-3.5-flash-lite'],
+  read2: ['gemini-3.1-flash-lite'],
+  settle: ['gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-3.6-flash', 'gemini-3-flash', 'gemini-3.5-flash-lite',
+    'gemini-3.1-flash-lite']
+};
+var FREE_DEFAULT_MODELS = ['gemini-3.5-flash-lite', 'gemini-3.1-flash-lite', 'gemini-3.8-flash', 'gemini-3.7-flash',
+  'gemini-3.6-flash', 'gemini-3-flash', 'gemma-4-31b-it', 'gemma-4-26b-a4b-it'];
 var INCOMPLETE_SUFFIX = ' (فيه صفحات ناقصة)';
 // The note beside a book in «5- مشكلة».
 var PROBLEM_NOTE = ' - سبب المشكلة.txt';
@@ -315,6 +333,7 @@ function getStatus() {
     }
     out.journal = journalAfter_(0).slice(-20);
     out.usage = usage_();
+    out.free = freeInfo_();
 
     var folders = out.setUp ? existingFolders_() : null;
     if (folders) {
@@ -634,6 +653,37 @@ function setHelperBoxes(json) {
   }
 }
 
+/**
+ * The free models' boxes from the page: {read1: [ids], read2: [ids], settle: [ids]} in the
+ * user's order, every box with one model at least; or {reset: true} for the converter's own
+ * choice. The next run works with them (dispatch_).
+ */
+function setFreeBoxes(json) {
+  try {
+    var r = parseJson_(json);
+    if (!r || typeof r !== 'object' || Array.isArray(r)) return JSON.stringify({ ok: false, error: 'طلب غير مفهوم' });
+    if (r.reset) {
+      props_().deleteProperty('FREE_BOXES');
+      return JSON.stringify({ ok: true, free: freeInfo_() });
+    }
+    var boxes = {};
+    var bad = '';
+    FREE_KEYS.forEach(function (k) {
+      var list = Array.isArray(r[k]) ? r[k].map(String) : [];
+      if (!list.length) bad = 'يبقى في كل مربع نموذج واحد على الأقل.';
+      else if (list.length > CONFIG.FREE_BOX_MAX || list.some(function (id) { return !FREE_MODEL_RE.test(id); })) bad = 'نموذج غير معروف';
+      boxes[k] = list.filter(function (id, i) { return list.indexOf(id) === i; });
+    });
+    if (bad) return JSON.stringify({ ok: false, error: bad });
+    boxes.at = now_().toISOString();
+    props_().setProperty('FREE_BOXES', JSON.stringify(boxes));
+    return JSON.stringify({ ok: true, free: freeInfo_() });
+  } catch (err) {
+    Logger.log('setFreeBoxes failed: ' + (err && err.stack ? err.stack : err));
+    return JSON.stringify({ ok: false, error: String(err && err.message ? err.message : err) });
+  }
+}
+
 // ============================================================================
 // One check
 // ============================================================================
@@ -716,6 +766,7 @@ function handleStatus_(ctx, job, s) {
   // Where each page stands (read twice, settled, with the user's models…), for the page.
   job.stages = cleanStages_(s.stages);
   noteUsage_(s);
+  noteFreeModels_(s);
   var forced = !!job.forced;
   delete job.forced;
 
@@ -1083,6 +1134,9 @@ function dispatch_(ctx, job, countAttempt, why) {
   // The live view: the run writes what it does into this file (live.py).
   var live = resetLive_(job, at.toISOString());
   if (live) body.inputs.live = live;
+  // The free models' boxes, once the user changed them on the page.
+  var models = freeInput_(freeInfo_());
+  if (models) body.inputs.models = models;
   var r = gh_(ctx.cfg, 'post', '/repos/' + ctx.cfg.repo + '/actions/workflows/' + CONFIG.WORKFLOW + '/dispatches', body);
 
   if (r.code === 204 || r.code === 200) {
@@ -2637,6 +2691,59 @@ function usage_() {
   var u = parseJson_(props_().getProperty('USAGE'));
   var m = u && u.day === today && u.m && typeof u.m === 'object' ? u.m : {};
   return { day: today, renew: pacificMidnightAfter_(today).toISOString(), m: m };
+}
+
+/** Up to max free model ids, each once, from a run's status or the page. */
+function freeList_(v, max) {
+  var list = Array.isArray(v) ? v.map(String).filter(function (id) { return FREE_MODEL_RE.test(id); }) : [];
+  return list.filter(function (id, i) { return list.indexOf(id) === i; }).slice(0, max || CONFIG.FREE_BOX_MAX);
+}
+
+/**
+ * FREE_MODELS: the free models the account has, and the converter's own boxes, from the last
+ * run that listed them ({ids, defaults: {read1, read2, settle}, at}).
+ */
+function noteFreeModels_(s) {
+  var ids = freeList_(s && s.free_models, CONFIG.FREE_MAX_MODELS);
+  if (!ids.length) return;
+  var defaults = {};
+  FREE_KEYS.forEach(function (k) { defaults[k] = freeList_(s.free_default && s.free_default[k]); });
+  props_().setProperty('FREE_MODELS', JSON.stringify({ ids: ids, defaults: defaults, at: s.updated_at || '' }));
+}
+
+/** The account's own name for a default name ("gemini-3-flash" is "gemini-3-flash-preview"). */
+function freeName_(id, ids) {
+  if (ids.indexOf(id) >= 0) return id;
+  for (var i = 0; i < ids.length; i++) if (/^-(preview|latest)$/.test(ids[i].slice(id.length)) && ids[i].indexOf(id) === 0) return ids[i];
+  return id;
+}
+
+/**
+ * The free models' boxes for the page: {boxes: {read1, read2, settle}, custom (the user set
+ * them), at, models: what the page offers (the account's, then any other in a box)}.
+ */
+function freeInfo_() {
+  var props = props_();
+  var known = parseJson_(props.getProperty('FREE_MODELS')) || {};
+  var ids = freeList_(known.ids, CONFIG.FREE_MAX_MODELS);
+  var saved = parseJson_(props.getProperty('FREE_BOXES'));
+  var custom = !!saved && FREE_KEYS.every(function (k) { return freeList_(saved[k]).length; });
+  var boxes = {};
+  FREE_KEYS.forEach(function (k) {
+    var d = freeList_(known.defaults && known.defaults[k]);
+    boxes[k] = (custom ? freeList_(saved[k]) : d.length ? d : FREE_DEFAULT[k])
+      .map(function (id) { return freeName_(id, ids); })
+      .filter(function (id, i, all) { return all.indexOf(id) === i; });
+  });
+  var models = (ids.length ? ids : FREE_DEFAULT_MODELS).slice();
+  boxes.read1.concat(boxes.read2, boxes.settle).forEach(function (id) { if (models.indexOf(id) < 0) models.push(id); });
+  return { boxes: boxes, custom: custom, at: custom ? String(saved.at || '') : '', models: models };
+}
+
+/** The workflow's "models" input for the boxes the user set ('' for the converter's own). */
+function freeInput_(info) {
+  if (!info || !info.custom) return '';
+  return FREE_KEYS.map(function (k) { return k + '=' + info.boxes[k].join(','); }).join(';');
 }
 
 /** The live file the runs write ("بيانات البث/live.json"), made on first use when create is true. */

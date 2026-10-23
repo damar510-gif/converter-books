@@ -411,6 +411,11 @@
   .mrow .meter { height: 4px; margin-top: 6px; }
   .mrow-x { list-style: none; margin-top: 6px; font-size: 12.5px; color: var(--mute); }
   .mrow-x li { line-height: 1.7; }
+  .box .mrow + .mrow { margin-top: 8px; }
+  .mrow.is-over { border-color: var(--gold); background: rgba(201,165,92,.12); }
+  .mrow-n { flex: none; min-width: 22px; height: 22px; padding: 0 6px; border-radius: 11px; background: var(--panel);
+    border: 1px solid var(--line-soft); color: var(--gold-light); font-size: 12px; line-height: 20px; text-align: center; }
+  .mrow-a { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
   .steps { list-style: none; margin-top: 8px; display: flex; flex-direction: column; gap: 3px; font-size: 13px; color: var(--dim); }
   .steps li { display: flex; align-items: center; gap: 8px; }
   .steps .dot { width: 7px; height: 7px; }
@@ -665,6 +670,7 @@
     play: '<path d="M6 4l14 8-14 8z"/>',
     stop: '<rect x="6" y="6" width="12" height="12" rx="2"/>',
     plus: '<path d="M12 5v14M5 12h14"/>',
+    up: '<path d="M12 19V5M5 12l7-7 7 7"/>',
     clock: '<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>',
     calendar: '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',
     maximize: '<path d="M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M16 21h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/>',
@@ -1686,7 +1692,11 @@
       });
   }
 
-  function freeRow(r, cur) {
+  // One free model's card: its state now, today's requests, its last events. o.role: the line
+  // saying what it does (a model outside the boxes); o.num: its place in its box; o.acts: the
+  // box's buttons for it.
+  function freeRow(r, cur, o) {
+    o = o || {};
     var m = r.m || {}, u = r.u || {};
     var now = serverNow();
     var rest = Date.parse(m.rest || '');
@@ -1696,10 +1706,11 @@
       : cur ? ['wait', 'لا عمل له الآن'] : ['wait', 'لا يعمل الآن'];
     var d = el('div', 'mrow is-' + state[0]);
     var h = el('div', 'mrow-h');
+    if (o.num) h.appendChild(el('span', 'mrow-n', String(o.num)));
     h.appendChild(el('b', '', modelName(r.id))).dir = 'auto';
     h.appendChild(st(state[0], state[1]));
     d.appendChild(h);
-    if (m.role) d.appendChild(el('div', 'mrow-r', ROLES[m.role] || ''));
+    if (o.role && m.role) d.appendChild(el('div', 'mrow-r', ROLES[m.role] || ''));
     var line = function (label, text) {
       var x = el('div', 'mrow-l');
       x.appendChild(el('span', '', label + ' '));
@@ -1711,7 +1722,7 @@
     });
     if (cur && m.queued) line('في الانتظار:', count(m.queued, 'طلب واحد', 'طلبان', 'طلبات', 'طلباً') + ' (حد الطلبات في الدقيقة)');
     var used = (u.n || 0) + (cur ? (m.ok || 0) : 0);
-    var limit = m.limit || (/flash-lite/.test(r.id) ? 500 : 0);
+    var limit = m.limit || freeLimit(r.id);
     if (used || limit) {
       line('اليوم:', 'نحو ' + used + (limit ? ' من ' + limit : '') + ' طلباً' +
         ((m.out || u.out) && LIVE.usage ? '، يتجدد ' + when(LIVE.usage.renew, true) : ''));
@@ -1730,7 +1741,13 @@
       });
       d.appendChild(x);
     }
+    if (o.acts) d.appendChild(o.acts);
     return d;
+  }
+
+  // The free tier's requests a day (the user's key): Flash-Lite 500, Flash 20, Gemma 14,400.
+  function freeLimit(id) {
+    return /flash-lite/.test(id) ? 500 : /gemma/.test(id) ? 14400 : /flash/.test(id) ? 20 : 0;
   }
 
   // The book a run would start for now («اعمل الآن» on a free model): the one waiting for
@@ -1742,7 +1759,184 @@
     return w ? w.fileId : '';
   }
 
+  // ------------------------------------------------------------------------
+  // The free models' boxes: who gives the first reading, who the second, who settles. A
+  // model goes from a box's «المتاحة» to its «يعمل هنا» with a tap or a drag; the first in a
+  // box works, the next one when it has no quota left. One model may be in several boxes;
+  // every box keeps one at least. The next run works with them (setFreeBoxes).
+  // ------------------------------------------------------------------------
+  var FREE = null;
+  var FREE_SAVING = 0;
+  var FREE_DRAG = false;
+  var FREE_ID = /^(gemini|gemma)-[a-z0-9.-]{1,60}$/;
+  var FREE_SECTIONS = [
+    { key: 'read1', title: 'القراءة الأولى',
+      note: 'تقرأ كل صفحة أول مرة. يعمل الأول، وإذا نفد رصيده عمل الذي بعده.' },
+    { key: 'read2', title: 'القراءة الثانية',
+      note: 'قراءة ثانية مستقلة لكل صفحة. لا يقرأ نموذج واحد الصفحة مرتين: إن كان قرأها أولاً قرأها الذي بعده هنا.' },
+    { key: 'settle', title: 'الحسم',
+      note: 'تحسم الخلاف بين القراءتين على صورة الصفحة، الأول فالأول. إن كانت نماذجك على الجهاز في مربع «الحسم» حسمت هي قبل Flash-Lite وGemma.' }
+  ];
+
+  function copyFree(b) {
+    return { read1: (b.read1 || []).slice(), read2: (b.read2 || []).slice(), settle: (b.settle || []).slice() };
+  }
+
+  // The boxes as shown (a change being saved shows at once), or null from an older script.
+  function freeInfoNow() {
+    var f = LAST && LAST.free;
+    if (!f || !f.boxes) return null;
+    if (!FREE_SAVING || !FREE) FREE = copyFree(f.boxes);
+    return { boxes: FREE, models: f.models || [], custom: !!f.custom };
+  }
+
+  function freeSection(sec, info, rows, cur) {
+    var on = info.boxes[sec.key];
+    var wrap = el('div', 'bx');
+    var head = el('div', 'bx-h');
+    head.appendChild(el('h3', '', sec.title));
+    head.appendChild(st('run', count(on.length, 'نموذج واحد', 'نموذجان', 'نماذج', 'نموذجاً')));
+    wrap.appendChild(head);
+    wrap.appendChild(el('div', 'sub', sec.note));
+    var pair = el('div', 'pair');
+    // Right to left: «المتاحة» is on the right.
+    var offBox = freeBox(sec.key, -1, 'box', 'grid', 'المتاحة', 'المس النموذج أو اسحبه إلى «يعمل هنا»');
+    var onBox = freeBox(sec.key, on.length, 'box is-on', 'play', 'يعمل هنا', 'الأول فالأول');
+    var chips = el('div', 'mchips');
+    var left = info.models.filter(function (id) { return on.indexOf(id) < 0; });
+    left.forEach(function (id) { chips.appendChild(freeChip(sec.key, id)); });
+    offBox.appendChild(left.length ? chips : el('div', 'box-e', 'كل النماذج هنا.'));
+    var byId = {};
+    rows.forEach(function (r) { byId[r.id] = r; });
+    on.forEach(function (id, i) {
+      var r = byId[id] || { id: id, m: null, u: null };
+      onBox.appendChild(freeCard(sec, id, i, on.length, r, cur));
+    });
+    pair.appendChild(offBox);
+    pair.appendChild(onBox);
+    wrap.appendChild(pair);
+    return wrap;
+  }
+
+  // A box of a section: at -1 takes a dropped model out of it, else puts it at that place.
+  function freeBox(key, at, cls, ic, head, hint) {
+    var d = el('div', cls);
+    var hd = el('div', 'box-h');
+    hd.appendChild(icon(ic));
+    hd.appendChild(el('span', '', head));
+    if (hint) hd.appendChild(el('small', '', hint));
+    d.appendChild(hd);
+    freeDropOn(d, key, at, cls);
+    return d;
+  }
+
+  function freeDropOn(d, key, at, cls) {
+    d.addEventListener('dragover', function (e) { e.preventDefault(); d.className = cls + ' is-over'; });
+    d.addEventListener('dragleave', function () { d.className = cls; });
+    d.addEventListener('drop', function (e) {
+      e.preventDefault();
+      if (e.stopPropagation) e.stopPropagation();
+      d.className = cls;
+      FREE_DRAG = false;
+      var x = null;
+      try { x = JSON.parse(e.dataTransfer.getData('text/plain')); } catch (err) { /* not a model */ }
+      if (x && x.id) placeFree(key, String(x.id), at);
+    });
+  }
+
+  function freeDraggable(node, id) {
+    draggable(node, id);
+    // The page is drawn again every few seconds while a run goes: not under a drag.
+    node.addEventListener('dragstart', function () { FREE_DRAG = true; });
+    node.addEventListener('dragend', function () { FREE_DRAG = false; renderFree(); });
+  }
+
+  // A model not in this box: a tap puts it at the end.
+  function freeChip(key, id) {
+    var b = el('button', 'mchip');
+    b.type = 'button';
+    b.title = 'ضعه هنا' + (freeLimit(id) ? ' (' + freeLimit(id) + ' طلب في اليوم)' : '');
+    b.appendChild(icon('plus'));
+    b.appendChild(el('span', '', modelName(id))).dir = 'auto';
+    b.addEventListener('click', function () { placeFree(key, id, FREE[key].length); });
+    freeDraggable(b, id);
+    return b;
+  }
+
+  // A model in a box: its live card, its place, a button to move it up and one to take it out.
+  function freeCard(sec, id, i, n, r, cur) {
+    var acts = null;
+    if (n > 1) {
+      acts = el('div', 'mrow-a');
+      if (i > 0) {
+        var up = button('btn-sm btn-quiet', 'قدّمه', function () { placeFree(sec.key, id, i - 1); }, 'up');
+        up.title = 'يعمل قبل الذي فوقه';
+        acts.appendChild(up);
+      }
+      var out = button('btn-sm btn-quiet', 'أخرجه', function () { placeFree(sec.key, id, -1); }, 'x');
+      out.title = 'لا يعمل في «' + sec.title + '» بعد الآن';
+      acts.appendChild(out);
+    }
+    var d = freeRow(r, cur, { num: n > 1 ? i + 1 : 0, acts: acts });
+    freeDraggable(d, id);
+    // A model dropped on a card goes before it.
+    freeDropOn(d, sec.key, i, d.className);
+    return d;
+  }
+
+  function placeFree(key, id, at) {
+    if (!FREE || !FREE_ID.test(id)) return;
+    var title = FREE_SECTIONS.filter(function (x) { return x.key === key; })[0].title;
+    var next = copyFree(FREE);
+    var list = next[key];
+    var was = list.indexOf(id);
+    if (at < 0) {
+      if (was < 0) return;
+      if (list.length === 1) return setMsg('يبقى في كل مربع نموذج واحد على الأقل.', 'info');
+      list.splice(was, 1);
+    } else {
+      if (was >= 0) {
+        list.splice(was, 1);
+        if (was < at) at--;
+      }
+      list.splice(Math.min(at, list.length), 0, id);
+    }
+    if (JSON.stringify(next) === JSON.stringify(FREE)) return renderFree();
+    saveFree(next, at < 0 ? 'لن يعمل «' + modelName(id) + '» في «' + title + '» من التشغيل القادم.'
+      : was < 0 ? 'يعمل «' + modelName(id) + '» في «' + title + '» من التشغيل القادم.'
+      : 'تغيّر الترتيب في «' + title + '»، ويعمل به التشغيل القادم.');
+  }
+
+  // next: the boxes to save, or null for the converter's own choice.
+  function saveFree(next, done) {
+    var prev = FREE;
+    if (next) FREE = next;
+    FREE_SAVING++;
+    renderFree();
+    setMsg('جارٍ الحفظ…');
+    var undo = function (why) {
+      FREE_SAVING--;
+      FREE = prev;
+      setMsg('تعذّر الحفظ: ' + why);
+      renderFree();
+    };
+    google.script.run
+      .withSuccessHandler(function (text) {
+        var r = parse(text);
+        if (!r.ok) return undo(r.error || '');
+        FREE_SAVING--;
+        // The page's copy of the status follows, so drawing the boxes again keeps the change.
+        if (LAST && r.free) LAST.free = r.free;
+        if (!FREE_SAVING) FREE = null;
+        setMsg(done);
+        renderFree();
+      })
+      .withFailureHandler(function (err) { undo(errText(err)); })
+      .setFreeBoxes(JSON.stringify(next || { reset: true }));
+  }
+
   function renderFree() {
+    if (FREE_DRAG) return;
     var box = document.getElementById('free');
     var keep = box.feedScroll || 0;
     box.textContent = '';
@@ -1751,8 +1945,11 @@
     badge.appendChild(el('span', 'dot'));
     badge.appendChild(el('span', '', cur ? 'مباشر · ' + ago(liveAt(lv)) : liveGoing() ? 'التشغيل يبدأ' : 'لا يعمل الآن'));
     box.appendChild(cardHead('radio', 'النماذج المجانية', badge));
-    box.appendChild(el('div', 'sub', 'نماذج Gemini المجانية بمفتاحك، تعمل على GitHub: القارئان (Flash-Lite) يقرآن كل صفحة مرتين، ' +
-      'ونماذج Flash تحسم الخلاف بينهما، وGemma للصفحات التي يرفضها Gemini.' +
+    var info = freeInfoNow();
+    box.appendChild(el('div', 'sub', (info ? 'نماذج Gemini وGemma المجانية بمفتاحك، تعمل على GitHub. ضع كل نموذج في المربع الذي تريد: ' +
+      'المسه أو اسحبه إلى «يعمل هنا»، ورتّبها بالسهم. يعمل الترتيب الجديد من التشغيل القادم.'
+      : 'نماذج Gemini المجانية بمفتاحك، تعمل على GitHub: القارئان (Flash-Lite) يقرآن كل صفحة مرتين، ' +
+      'ونماذج Flash تحسم الخلاف بينهما، وGemma للصفحات التي يرفضها Gemini.') +
       (LIVE.usage ? ' تتجدد حصصها كل يوم نحو ' + when(LIVE.usage.renew, true) + ' بتوقيتك.' : '')));
     if (cur) {
       var ph = el('div', 'phase');
@@ -1768,9 +1965,32 @@
         (ENDS[lv.end.state === 'paused' && lv.end.waiting_for ? lv.end.waiting_for : lv.end.state] || lv.end.state) + '.'));
     }
     var rows = freeRows();
-    if (rows.length) {
+    if (info) {
+      FREE_SECTIONS.forEach(function (sec) { box.appendChild(freeSection(sec, info, rows, cur)); });
+      // The models that worked today in no box (Gemma for the pages Gemini refuses).
+      var placed = info.boxes.read1.concat(info.boxes.read2, info.boxes.settle);
+      var others = rows.filter(function (r) { return placed.indexOf(r.id) < 0; });
+      if (others.length) {
+        var bx = el('div', 'bx');
+        var bh = el('div', 'bx-h');
+        bh.appendChild(el('h3', '', 'خارج المربعات'));
+        bx.appendChild(bh);
+        bx.appendChild(el('div', 'sub', 'عملت اليوم وليست في أي مربع، مثل Gemma للصفحات التي يرفضها Gemini.'));
+        var og = el('div', 'mrows');
+        others.forEach(function (r) { og.appendChild(freeRow(r, cur, { role: true })); });
+        bx.appendChild(og);
+        box.appendChild(bx);
+      }
+      if (info.custom) {
+        var reset = button('btn-sm btn-quiet', 'ارجع إلى الترتيب الافتراضي', function () {
+          saveFree(null, 'رجعت المربعات إلى الترتيب الافتراضي، ويعمل به التشغيل القادم.');
+        }, 'refresh');
+        reset.title = 'Flash-Lite 3.5 يقرأ أولاً و3.1 ثانياً، وFlash يحسم ثم Flash-Lite.';
+        box.appendChild(el('div', 'hero-acts')).appendChild(reset);
+      }
+    } else if (rows.length) {
       var grid = el('div', 'mrows');
-      rows.forEach(function (r) { grid.appendChild(freeRow(r, cur)); });
+      rows.forEach(function (r) { grid.appendChild(freeRow(r, cur, { role: true })); });
       box.appendChild(grid);
     } else {
       box.appendChild(el('div', 'sub', 'لم يعمل أي نموذج مجاني اليوم بعد.'));
