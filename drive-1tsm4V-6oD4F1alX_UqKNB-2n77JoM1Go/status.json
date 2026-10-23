@@ -1,23 +1,44 @@
 {
   "state": "paused",
   "pages_total": 509,
-  "pages_done": 3,
-  "pages_helper": [],
+  "pages_done": 19,
+  "pages_helper": [
+    476,
+    477,
+    478,
+    479,
+    480,
+    481,
+    483,
+    486,
+    493,
+    496,
+    501,
+    502,
+    503,
+    504,
+    505,
+    506,
+    507,
+    508,
+    509
+  ],
   "pages_unsure": [
-    1
+    1,
+    494,
+    498
   ],
   "pages_missing": [
     3,
     6,
     8,
     9,
-    12
+    12,
+    482,
+    484,
+    485
   ],
   "pages_waiting": [
-    4,
-    7,
-    10,
-    11,
     13,
     14,
     15,
@@ -480,46 +501,12 @@
     472,
     473,
     474,
-    475,
-    476,
-    477,
-    478,
-    479,
-    480,
-    481,
-    482,
-    483,
-    484,
-    485,
-    486,
-    487,
-    488,
-    489,
-    490,
-    491,
-    492,
-    493,
-    494,
-    495,
-    496,
-    497,
-    498,
-    499,
-    500,
-    501,
-    502,
-    503,
-    504,
-    505,
-    506,
-    507,
-    508,
-    509
+    475
   ],
   "pages_retry": [],
   "pages_human": [],
-  "helper_checked": 0,
-  "review_items": 2,
+  "helper_checked": 16,
+  "review_items": 22,
   "review_applied": 0,
   "review_kept": 0,
   "review_conflicts_new": 0,
@@ -527,17 +514,14 @@
   "free_left": true,
   "free_done": 0,
   "stages": {
-    "unsure": 1,
-    "done": 2,
-    "failed": 5,
-    "read1": 24,
-    "unread": 477
+    "unsure": 3,
+    "done": 16,
+    "failed": 8,
+    "unread": 463,
+    "helper": 19
   },
   "requests": {
-    "gemma-4-31b-it": 23,
-    "gemini-2.5-flash": 1,
-    "gemini-3.5-flash-lite": 4,
-    "gemini-3.1-flash-lite": 4
+    "gemma-4-31b-it": 29
   },
   "models_out": [
     "gemini-3-flash-preview",
@@ -585,20 +569,19 @@
   },
   "boxes": {
     "read1": [
-      "gemma-4-31b-it",
-      "gemini-3.5-flash-lite",
-      "gemini-2.5-flash"
+      "gemma-4-31b-it"
     ],
     "read2": [
-      "gemini-3.1-flash-lite"
+      "gemini-3.1-flash-lite",
+      "gemini-3.5-flash-lite"
     ],
     "settle": []
   },
   "book": "تراث الانسانية 4_k2opt",
   "epub": "تراث الانسانية 4_k2opt.epub",
-  "updated_at": "2026-10-23T22:29:45Z",
+  "updated_at": "2026-10-23T23:11:04Z",
   "quota_day": "2026-10-23",
   "waiting_for": "helper",
-  "run_id": 40029992926,
-  "run_number": 67
+  "run_id": 40034395642,
+  "run_number": 68
 }
