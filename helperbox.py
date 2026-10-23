@@ -140,6 +140,8 @@ class HelperBox:
         self.dir = os.path.join(cache_dir, "helper")
         os.makedirs(self.dir, exist_ok=True)
         self.files = {}
+        # The folder could be listed (fetch): what it lacks is known.
+        self.listed = False
         self.lock = threading.Lock()
         self.thread = None
         self.notes = []
@@ -175,6 +177,7 @@ class HelperBox:
         except DriveError as e:
             listed = False
             self.note(f"could not list the helper folder ({e})")
+        self.listed = self.listed or listed
         index_path = os.path.join(self.dir, "index.json")
         index = review.load(index_path) or {}
         todo = [(n, f) for n, f in self.files.items() if FROM_HELPER.match(n) and index.get(n) != f["modifiedTime"]]
@@ -207,6 +210,10 @@ class HelperBox:
             if isinstance(data, dict):
                 out.setdefault(int(m.group(1)), {})[m.group(2)] = data
         return out
+
+    def has(self, name):
+        """The folder has this file, as far as is known (True when it could not be listed)."""
+        return not self.listed or name in self.files
 
     def start_images(self, pages, render):
         """Sends the images of these pages that the folder lacks, in the background, so the

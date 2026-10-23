@@ -36,6 +36,9 @@ LAST = "live-last.json"
 EVENTS = 80
 # What a model's daily quota is when Google has not said yet (the user's free tier).
 LIMITS = (("flash-lite", 500),)
+# How often the run looks at the status page's requests (Live.watch), in seconds.
+CONTROL_EVERY = 10
+MODEL_ID = re.compile(r"^(gemini|gemma)-[a-z0-9.-]{1,60}$")
 
 
 def iso(t=None):
@@ -177,6 +180,12 @@ class Live:
         self.last_write = 0.0
         self.thread = None
         self.stopping = threading.Event()
+        # The status page's requests during the run (watch): a file the Drive inbox script
+        # writes, {"retry": {model: when}}, read every CONTROL_EVERY seconds.
+        self.control = None
+        self.on_retry = None
+        self.retries = {}
+        self.control_at = 0.0
 
     @property
     def on(self):
@@ -275,6 +284,16 @@ class Live:
             self.events.append(ev)
             self.dirty = True
 
+    def revived(self, name):
+        """The user sent this model back to work during the run (the status page)."""
+        with self.lock:
+            m = self._model(name)
+            m["out"] = False
+            m["out_at"] = ""
+            m["rest"] = 0
+            self.dirty = True
+        self.note(name, "back")
+
     # --- pages and the run ---
 
     def page(self, page, state):
@@ -353,6 +372,35 @@ class Live:
                 pass
         return bool(self.sink.write(data))
 
+    def watch(self, on_retry):
+        """on_retry(model) is called for each «أعد المحاولة الآن» pressed on the status page
+        after the run was dispatched (the requests file, when open_live was given one)."""
+        self.on_retry = on_retry
+
+    def check_control(self):
+        """Reads the requests file and acts on what is new. A request made before the run was
+        dispatched is skipped: the run was started knowing it (the script's list of models out
+        of quota today leaves that model out)."""
+        if not self.control or not self.on_retry:
+            return
+        self.control_at = self.clock()
+        data = self.control.read()
+        retry = data.get("retry") if isinstance(data, dict) else None
+        if not isinstance(retry, dict):
+            return
+        since = str(self.base.get("dispatched") or "")
+        for model, at in list(retry.items())[:40]:
+            model, at = str(model), str(at)
+            if not MODEL_ID.match(model) or self.retries.get(model) == at:
+                continue
+            self.retries[model] = at
+            if at <= since:
+                continue
+            try:
+                self.on_retry(model)
+            except Exception as e:  # never stops the conversion
+                print(f"  live view: retry {model}: {str(e)[:120]}")
+
     def start(self):
         """Writes in the background while something changed, at most every `every` seconds."""
         if not self.on or self.thread:
@@ -367,6 +415,11 @@ class Live:
                     try:
                         self.flush()
                     except Exception as e:  # never stops the conversion
+                        print(f"  live view: {str(e)[:120]}")
+                if self.control and self.clock() - self.control_at >= CONTROL_EVERY:
+                    try:
+                        self.check_control()
+                    except Exception as e:
                         print(f"  live view: {str(e)[:120]}")
 
         self.thread = threading.Thread(target=run, daemon=True)
@@ -389,11 +442,15 @@ class Live:
 NULL = Live(None)
 
 
-def open_live(file_id, token):
-    """The run's live view, or a silent one when it has no file or no token."""
+def open_live(file_id, token, control_id=""):
+    """The run's live view, or a silent one when it has no file or no token. control_id: the
+    status page's requests file (Live.watch), when the Drive inbox script sent one."""
     if not file_id or not FILE_ID.match(file_id) or not token:
         return Live(None)
-    return Live(DriveFile(file_id, token), keep=LAST)
+    lv = Live(DriveFile(file_id, token), keep=LAST)
+    if control_id and FILE_ID.match(control_id):
+        lv.control = DriveFile(control_id, token)
+    return lv
 
 
 # ---------------------------------------------------------------- the workflow's marks

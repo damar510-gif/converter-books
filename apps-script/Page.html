@@ -1199,10 +1199,11 @@
       var b = el('div', 'rw-b');
       b.appendChild(el('div', 'rw-t', '«' + p.title + '»'));
       b.appendChild(el('div', 'rw-m', p.stage === 'readerWait' ? 'ينتظر تجدد رصيد القارئ الثاني، ثم يكمل قبل غيره.'
+        : p.stage === 'boxWait' ? 'لا نموذج في المربعات يكمل صفحاته. ضع نموذجاً في «يعمل هنا» (هنا أو في «نماذجك على الجهاز») فيكمل.'
         : 'يُسلَّم في الفحص القادم.'));
       li.appendChild(b);
       var acts = el('div', 'rw-a');
-      acts.appendChild(st('hold', p.stage === 'readerWait' ? 'ينتظر القارئ الثاني' : 'يُسلَّم قريباً'));
+      acts.appendChild(st('hold', p.stage === 'readerWait' ? 'ينتظر القارئ الثاني' : p.stage === 'boxWait' ? 'ينتظر نموذجاً' : 'يُسلَّم قريباً'));
       if (p.canRun) runNowButton(p.fileId, acts);
       li.appendChild(acts);
       list.appendChild(li);
@@ -1463,10 +1464,13 @@
     saved: 'حُفظت النتائج' };
   var ENDS = { done: 'اكتمل الكتاب', paused: 'نفد رصيد النماذج المجانية، ويكمل بعد تجدده',
     time: 'انتهى وقت التشغيل والرصيد باقٍ، فيبدأ تشغيل جديد', helper: 'بقي العمل لنماذجك على جهازك',
-    reader: 'ينتظر تجدد رصيد القارئ الثاني', incomplete: 'بقيت صفحات لم تُقرأ', failed: 'تعثّر التشغيل' };
+    reader: 'ينتظر تجدد رصيد القارئ الثاني', incomplete: 'بقيت صفحات لم تُقرأ', failed: 'تعثّر التشغيل',
+    boxes: 'لا نموذج في المربعات يكمل الصفحات الباقية، فينتظر أن تضع نموذجاً' };
   // The workflow's steps on GitHub, while the run itself has nothing to say yet.
   var STEPS = { 'Set up job': 'تجهيز الجهاز', 'Checkout Repository': 'تنزيل البرنامج', 'Set up Python': 'تجهيز Python',
-    'Tell the status page': 'إبلاغ هذه الصفحة', 'Install Pandoc and Tesseract': 'تثبيت الأدوات',
+    'Tell the status page': 'إبلاغ هذه الصفحة', 'Name the package cache': 'تثبيت الأدوات',
+    'Restore the cached packages': 'تثبيت الأدوات', 'Save the packages for the next runs': 'تثبيت الأدوات',
+    'Install Pandoc and Tesseract': 'تثبيت الأدوات',
     'Install Python Dependencies': 'تثبيت المكتبات', 'Pick the book file': 'تنزيل الكتاب من Drive',
     'Restore review state': 'استعادة المراجعة', 'Restore saved progress': 'استعادة ما أُنجز',
     'Restore permanent progress copy': 'استعادة النسخة الدائمة', 'Run Conversion Script': 'التحويل',
@@ -1534,6 +1538,7 @@
       case 'retry': return ['hold', 'خطأ مؤقت من Google' + (p ? ' في ' + p : '') + '، يعيد بعد ' + secs(e.s) + '.'];
       case 'out': return ['bad', 'نفد رصيده لهذا اليوم' + (e.n ? ' (حده ' + e.n + ' طلباً)' : '') + '.'];
       case 'missing': return ['quiet', 'غير متاح لحسابك، فتُرك.'];
+      case 'back': return ['ok', 'عاد إلى العمل بطلبك.'];
       case 'settled': return ['ok', 'حسم ' + p + took + (e.n ? ' (' + count(e.n, 'موضع خلاف واحد', 'موضعا خلاف', 'مواضع خلاف', 'موضع خلاف') + ')' : '') +
         (e.x === 'helper' ? '، على جهازك' : '') + '.'];
       case 'unsure': return e.k === 'page' ? ['hold', p + ': بقيت مشكوكاً فيها، وتنتظر المراجعة.'] : ['hold', 'حسم ' + p + took + '، وبقي فيها شك.'];
@@ -1693,8 +1698,8 @@
   }
 
   // One free model's card: its state now, today's requests, its last events. o.role: the line
-  // saying what it does (a model outside the boxes); o.num: its place in its box; o.acts: the
-  // box's buttons for it.
+  // saying what it does (an older script, without boxes); o.num: its place in its box; o.acts:
+  // the box's buttons for it; o.inBox: it is in a box (it gets «أعد المحاولة الآن»).
   function freeRow(r, cur, o) {
     o = o || {};
     var m = r.m || {}, u = r.u || {};
@@ -1729,10 +1734,9 @@
       if (limit) d.appendChild(meter(Math.min(used, limit), limit));
     }
     if (cur && (m.err || m.rl)) line('في هذا التشغيل:', (m.err ? m.err + ' تعثّر' : '') + (m.err && m.rl ? '، ' : '') + (m.rl ? m.rl + ' طلب تمهّل من Google' : ''));
-    if (!busy.length && !liveGoing()) {
-      var target = runTarget();
-      if (target) d.appendChild(runNowButton(target, el('div', 'hero-acts'), 'اعمل الآن'));
-    }
+    // «أعد المحاولة الآن»: a model in a box that is not sending now (out of quota, resting,
+    // idle) works again at once: in the run going, or in a run started for the book waiting.
+    if (o.inBox && !busy.length) d.appendChild(freeRetryButton(r.id, (m.out || u.out) && !m.missing));
     if (m.last && m.last.length) {
       var x = el('ul', 'mrow-x');
       m.last.slice(0, 3).forEach(function (l) {
@@ -1745,18 +1749,32 @@
     return d;
   }
 
+  function freeRetryButton(id, out) {
+    var holder = el('div', 'hero-acts');
+    var b = button('btn-sm', out ? 'أعد المحاولة الآن' : 'شغّله الآن', function () {
+      b.disabled = true;
+      setMsg('جارٍ الطلب…');
+      google.script.run
+        .withSuccessHandler(function (text) {
+          var r = parse(text);
+          b.disabled = false;
+          setMsg(r.ok ? r.text : 'تعذّر الطلب: ' + (r.error || ''));
+          if (r.ok) refresh();
+        })
+        .withFailureHandler(function (err) {
+          b.disabled = false;
+          setMsg('تعذّر الطلب: ' + errText(err));
+        })
+        .retryFree(id);
+    }, 'play');
+    b.title = 'يرسل له الطلبات من جديد الآن: في التشغيل الجاري، أو في تشغيل يبدأ للكتاب المنتظر.';
+    holder.appendChild(b);
+    return holder;
+  }
+
   // The free tier's requests a day (the user's key): Flash-Lite 500, Flash 20, Gemma 14,400.
   function freeLimit(id) {
     return /flash-lite/.test(id) ? 500 : /gemma/.test(id) ? 14400 : /flash/.test(id) ? 20 : 0;
-  }
-
-  // The book a run would start for now («اعمل الآن» on a free model): the one waiting for
-  // its quota, else one parked for the user's models or a reader.
-  function runTarget() {
-    var s = LAST || {};
-    if (s.active) return s.active.canRun ? s.active.fileId : '';
-    var w = (s.working || []).filter(function (x) { return x.canRun; })[0] || (s.parked || []).filter(function (x) { return x.canRun; })[0];
-    return w ? w.fileId : '';
   }
 
   // ------------------------------------------------------------------------
@@ -1777,6 +1795,8 @@
     { key: 'settle', title: 'الحسم',
       note: 'تحسم الخلاف بين القراءتين على صورة الصفحة، الأول فالأول. إن كانت نماذجك على الجهاز في مربع «الحسم» حسمت هي قبل Flash-Lite وGemma.' }
   ];
+
+  function freeEmpty(b) { return !b.read1.length && !b.read2.length && !b.settle.length; }
 
   function copyFree(b) {
     return { read1: (b.read1 || []).slice(), read2: (b.read2 || []).slice(), settle: (b.settle || []).slice() };
@@ -1802,6 +1822,7 @@
     // Right to left: «المتاحة» is on the right.
     var offBox = freeBox(sec.key, -1, 'box', 'grid', 'المتاحة', 'المس النموذج أو اسحبه إلى «يعمل هنا»');
     var onBox = freeBox(sec.key, on.length, 'box is-on', 'play', 'يعمل هنا', 'الأول فالأول');
+    if (!on.length) onBox.appendChild(el('div', 'box-e', 'لا نموذج هنا: لا يعمل أحد في «' + sec.title + '».'));
     var chips = el('div', 'mchips');
     var left = info.models.filter(function (id) { return on.indexOf(id) < 0; });
     left.forEach(function (id) { chips.appendChild(freeChip(sec.key, id)); });
@@ -1865,19 +1886,16 @@
 
   // A model in a box: its live card, its place, a button to move it up and one to take it out.
   function freeCard(sec, id, i, n, r, cur) {
-    var acts = null;
-    if (n > 1) {
-      acts = el('div', 'mrow-a');
-      if (i > 0) {
-        var up = button('btn-sm btn-quiet', 'قدّمه', function () { placeFree(sec.key, id, i - 1); }, 'up');
-        up.title = 'يعمل قبل الذي فوقه';
-        acts.appendChild(up);
-      }
-      var out = button('btn-sm btn-quiet', 'أخرجه', function () { placeFree(sec.key, id, -1); }, 'x');
-      out.title = 'لا يعمل في «' + sec.title + '» بعد الآن';
-      acts.appendChild(out);
+    var acts = el('div', 'mrow-a');
+    if (i > 0) {
+      var up = button('btn-sm btn-quiet', 'قدّمه', function () { placeFree(sec.key, id, i - 1); }, 'up');
+      up.title = 'يعمل قبل الذي فوقه';
+      acts.appendChild(up);
     }
-    var d = freeRow(r, cur, { num: n > 1 ? i + 1 : 0, acts: acts });
+    var out = button('btn-sm btn-quiet', 'أخرجه', function () { placeFree(sec.key, id, -1); }, 'x');
+    out.title = 'لا يعمل في «' + sec.title + '» بعد الآن';
+    acts.appendChild(out);
+    var d = freeRow(r, cur, { num: n > 1 ? i + 1 : 0, acts: acts, inBox: true });
     freeDraggable(d, id);
     // A model dropped on a card goes before it.
     freeDropOn(d, sec.key, i, d.className);
@@ -1892,7 +1910,6 @@
     var was = list.indexOf(id);
     if (at < 0) {
       if (was < 0) return;
-      if (list.length === 1) return setMsg('يبقى في كل مربع نموذج واحد على الأقل.', 'info');
       list.splice(was, 1);
     } else {
       if (was >= 0) {
@@ -1902,7 +1919,8 @@
       list.splice(Math.min(at, list.length), 0, id);
     }
     if (JSON.stringify(next) === JSON.stringify(FREE)) return renderFree();
-    saveFree(next, at < 0 ? 'لن يعمل «' + modelName(id) + '» في «' + title + '» من التشغيل القادم.'
+    saveFree(next, at < 0 ? 'لن يعمل «' + modelName(id) + '» في «' + title + '» من التشغيل القادم' +
+        (list.length ? '.' : '، ولا نموذج فيه الآن: لا يعمل أحد في هذه المرحلة.')
       : was < 0 ? 'يعمل «' + modelName(id) + '» في «' + title + '» من التشغيل القادم.'
       : 'تغيّر الترتيب في «' + title + '»، ويعمل به التشغيل القادم.');
   }
@@ -1946,8 +1964,8 @@
     badge.appendChild(el('span', '', cur ? 'مباشر · ' + ago(liveAt(lv)) : liveGoing() ? 'التشغيل يبدأ' : 'لا يعمل الآن'));
     box.appendChild(cardHead('radio', 'النماذج المجانية', badge));
     var info = freeInfoNow();
-    box.appendChild(el('div', 'sub', (info ? 'نماذج Gemini وGemma المجانية بمفتاحك، تعمل على GitHub. ضع كل نموذج في المربع الذي تريد: ' +
-      'المسه أو اسحبه إلى «يعمل هنا»، ورتّبها بالسهم. يعمل الترتيب الجديد من التشغيل القادم.'
+    box.appendChild(el('div', 'sub', (info ? 'نماذج Gemini وGemma المجانية بمفتاحك، تعمل على GitHub. لا يعمل منها إلا ما في «يعمل هنا»: ' +
+      'المس النموذج أو اسحبه إليه، ورتّبها بـ«قدّمه»، وأخرجه بـ«أخرجه». المربع الفارغ: لا يعمل أحد في تلك المرحلة. يعمل الترتيب الجديد من التشغيل القادم.'
       : 'نماذج Gemini المجانية بمفتاحك، تعمل على GitHub: القارئان (Flash-Lite) يقرآن كل صفحة مرتين، ' +
       'ونماذج Flash تحسم الخلاف بينهما، وGemma للصفحات التي يرفضها Gemini.') +
       (LIVE.usage ? ' تتجدد حصصها كل يوم نحو ' + when(LIVE.usage.renew, true) + ' بتوقيتك.' : '')));
@@ -1966,26 +1984,13 @@
     }
     var rows = freeRows();
     if (info) {
+      if (freeEmpty(info.boxes)) box.appendChild(note('hold', 'النماذج المجانية موقوفة: لا نموذج في «يعمل هنا»، فلا يبدأ لها تشغيل.'));
       FREE_SECTIONS.forEach(function (sec) { box.appendChild(freeSection(sec, info, rows, cur)); });
-      // The models that worked today in no box (Gemma for the pages Gemini refuses).
-      var placed = info.boxes.read1.concat(info.boxes.read2, info.boxes.settle);
-      var others = rows.filter(function (r) { return placed.indexOf(r.id) < 0; });
-      if (others.length) {
-        var bx = el('div', 'bx');
-        var bh = el('div', 'bx-h');
-        bh.appendChild(el('h3', '', 'خارج المربعات'));
-        bx.appendChild(bh);
-        bx.appendChild(el('div', 'sub', 'عملت اليوم وليست في أي مربع، مثل Gemma للصفحات التي يرفضها Gemini.'));
-        var og = el('div', 'mrows');
-        others.forEach(function (r) { og.appendChild(freeRow(r, cur, { role: true })); });
-        bx.appendChild(og);
-        box.appendChild(bx);
-      }
       if (info.custom) {
         var reset = button('btn-sm btn-quiet', 'ارجع إلى الترتيب الافتراضي', function () {
           saveFree(null, 'رجعت المربعات إلى الترتيب الافتراضي، ويعمل به التشغيل القادم.');
         }, 'refresh');
-        reset.title = 'Flash-Lite 3.5 يقرأ أولاً و3.1 ثانياً، وFlash يحسم ثم Flash-Lite.';
+        reset.title = 'Flash-Lite 3.5 و3.1 يقرآن (كل واحد يكمل ما لا يقدر عليه الآخر)، وFlash يحسم ثم Flash-Lite.';
         box.appendChild(el('div', 'hero-acts')).appendChild(reset);
       }
     } else if (rows.length) {

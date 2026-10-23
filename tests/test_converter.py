@@ -556,10 +556,89 @@ class FreeBoxes(PipelineBase):
                          ("reconciled", "gemini-3.8-flash"))
         self.assertNotIn("كاقية", md)
 
+    def test_empty_boxes_mean_nobody_works_and_the_book_waits_for_the_user(self):
+        code, st, md, fake = self.run_book({}, extra=("--boxes", "read1=;read2=;settle="))
+        self.assertEqual(code, 8, st)
+        self.assertEqual((st["state"], st["waiting_for"]), ("paused", "boxes"))
+        self.assertEqual(asked_models(fake), set())
+        self.assertEqual(st["boxes"], {"read1": [], "read2": [], "settle": []})
+
+    def test_an_empty_settling_box_settles_nothing_and_says_so(self):
+        code, st, md, fake = self.run_book({
+            "gemini-3.5-flash-lite": lambda p, n: answer(WRONG),
+            "gemini-3.1-flash-lite": lambda p, n: answer(TRUE),
+            "gemini-3.8-flash": lambda p, n: self.fail("not in a box"),
+        }, pages="30", extra=("--boxes", "read1=gemini-3.5-flash-lite;read2=gemini-3.1-flash-lite;settle=",
+                              "--extra-models", "gemini-3.8-flash"))
+        self.assertEqual((st["state"], st["waiting_for"]), ("paused", "boxes"))
+        self.assertNotIn("reconcile", [k for _, k in fake.calls])
+
+    def test_gemma_reads_no_refused_page_unless_it_is_in_a_box(self):
+        refused = lambda p, n: answer("", finish="PROHIBITED_CONTENT")
+        code, st, md, fake = self.run_book({
+            "gemini-3.5-flash-lite": refused,
+            "gemini-3.1-flash-lite": refused,
+            "gemma-4-26b-a4b-it": lambda p, n: self.fail("Gemma is in no box"),
+        }, pages="30", extra=("--boxes", "read1=gemini-3.5-flash-lite;read2=gemini-3.1-flash-lite;settle=gemini-3.1-flash-lite"))
+        self.assertNotIn("gemma-4-26b-a4b-it", asked_models(fake))
+        self.assertNotIn("rescue", json.dumps(st))
+
+    def test_models_found_out_today_are_not_asked_again(self):
+        code, st, md, fake = self.run_book({
+            "gemini-3.5-flash-lite": lambda p, n: answer(WRONG),
+            "gemini-3.1-flash-lite": lambda p, n: answer(TRUE),
+            "gemini-3.8-flash": lambda p, n: self.fail("out today"),
+        }, pages="30", extra=("--boxes", "read1=gemini-3.5-flash-lite;read2=gemini-3.1-flash-lite;"
+                                         "settle=gemini-3.8-flash,gemini-3.1-flash-lite;out=gemini-3.8-flash"))
+        self.assertEqual(code, 0, st)
+        self.assertEqual(self.records()[30]["check"]["model"], "gemini-3.1-flash-lite")
+        self.assertIn("gemini-3.8-flash", st["models_out"])
+
+    def test_one_request_at_a_time_per_model(self):
+        import threading
+        busy, most, lock = {}, {}, threading.Lock()
+
+        def counted(model, text):
+            def reply(p, n):
+                with lock:
+                    busy[model] = busy.get(model, 0) + 1
+                    most[model] = max(most.get(model, 0), busy[model])
+                threading.Event().wait(0.05)
+                with lock:
+                    busy[model] -= 1
+                return answer(text)
+            return reply
+        code, st, md, fake = self.run_book({
+            "gemini-3.5-flash-lite": counted("gemini-3.5-flash-lite", TRUE),
+            "gemini-3.1-flash-lite": counted("gemini-3.1-flash-lite", TRUE),
+        }, pages="28-33")
+        self.assertEqual(code, 0, st)
+        self.assertEqual(most, {"gemini-3.5-flash-lite": 1, "gemini-3.1-flash-lite": 1})
+
+    def test_the_daily_limit_is_believed_on_the_third_429_in_a_row_and_asked_no_more(self):
+        code, st, md, fake = self.run_book({
+            "gemini-3.5-flash-lite": self.gone,
+            "gemini-3.1-flash-lite": lambda p, n: answer(TRUE),
+        }, pages="28-33", extra=("--boxes", "read1=gemini-3.5-flash-lite;read2=gemini-3.1-flash-lite;settle="))
+        self.assertEqual([m for m, _ in fake.calls].count("gemini-3.5-flash-lite"), c.DAY_CHECKS)
+        self.assertEqual(st["models_out"], ["gemini-3.5-flash-lite"])
+
+    def test_a_model_sent_back_to_work_works_again(self):
+        pool = c.ModelPool("gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemma-4-26b-a4b-it", 10)
+        pool.missing.add("gemma-4-26b-a4b-it")
+        pool.set_out(["gemini-3.5-flash-lite", "gemini-3-flash-preview", "gemma-4-26b-a4b-it"])
+        self.assertFalse(pool.available("gemini-3.5-flash-lite"))
+        self.assertTrue(pool.revive("gemini-3.5-flash-lite"))
+        self.assertTrue(pool.revive("gemini-3-flash"))
+        self.assertFalse(pool.revive("gemma-4-26b-a4b-it"), "a model this account lacks stays out")
+        self.assertEqual(pool.exhausted, {"gemma-4-26b-a4b-it"})
+        self.assertEqual(pool.revived, {"gemini-3.5-flash-lite", "gemini-3-flash-preview"})
+
     def test_the_boxes_and_the_catalog(self):
         self.assertEqual(c.parse_boxes("read1=a,b,a;read2=c;settle=;other=x"),
                          {"read1": ["a", "b"], "read2": ["c"], "settle": []})
         self.assertEqual(c.parse_boxes(""), {})
+        self.assertEqual(c.parse_boxes("read1=a;out=b,c", ("out",)), {"out": ["b", "c"]})
         have = dict.fromkeys(["gemini-3.5-flash-lite", "gemini-3.1-flash-lite-preview", "gemini-3.1-flash-lite",
                               "gemini-3.8-flash", "gemini-3-flash-preview", "gemini-3.1-pro-preview", "gemini-2.5-flash",
                               "gemini-2.0-flash", "gemini-3.8-flash-image", "gemini-flash-latest", "gemma-4-26b-a4b-it",
@@ -568,6 +647,10 @@ class FreeBoxes(PipelineBase):
         self.assertEqual(c.free_catalog(have), [
             "gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-3.8-flash", "gemini-3-flash-preview",
             "gemini-2.5-flash", "gemini-3.1-pro-preview", "gemma-4-31b-it", "gemma-4-26b-a4b-it"])
+
+
+def asked_models(fake):
+    return {m for m, k in fake.calls if k != "cover"}
 
 
 class DashLines(unittest.TestCase):
