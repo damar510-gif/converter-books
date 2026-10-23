@@ -1089,7 +1089,13 @@
   // What the user's own models could take on now, when the free models wait for their quota.
   function ownModelsHint(s, stages) {
     var h = s.helper, b = h && h.boxes;
-    if (!stages || !b || !h.seen) return '';
+    if (!b || !h.seen) return '';
+    if (!stages) {
+      // A pause from before the runs said where the pages stand.
+      return (b.settle || []).length || (b.transcribe || []).length
+        ? 'نماذجك على جهازك تستطيع العمل الآن بدل انتظار تجدد الرصيد: اضغط «شغّل الآن» فيعطيها التشغيل ما تستطيع ' +
+          ((b.settle || []).length ? 'حسمه' : 'قراءته') + '.' : '';
+    }
     if (stages.read2 && (b.settle || []).length) {
       return 'نماذجك في مربع «الحسم» تستطيع حسم ' + count(stages.read2, 'صفحة واحدة', 'صفحتين', 'صفحات', 'صفحة') +
         ' قُرئت قراءتين الآن، دون انتظار الغد: اضغط «شغّل الآن» فيرسلها التشغيل إليها.';
