@@ -62,6 +62,11 @@ on:
         description: 'Drive inbox only: the Drive file ID where the run writes what it is doing, every few seconds'
         required: false
         type: string
+      # The free models in the status page's boxes (apps-script/Page.html, docs/drive-inbox.md).
+      models:
+        description: 'Drive inbox only: who reads first, second and settles, as read1=a,b;read2=c;settle=d,e'
+        required: false
+        type: string
 
 permissions:
   contents: write
@@ -308,6 +313,7 @@ jobs:
           BOOK_TITLE: ${{ inputs.title }}
           BOOK_PAGES: ${{ inputs.pages }}
           HELPER: ${{ inputs.helper }}
+          FREE_BOXES: ${{ inputs.models }}
           PYTHONUNBUFFERED: '1'
         run: |
           set +e
@@ -320,6 +326,12 @@ jobs:
           fi
           # The live view: what the run does, written to the user's Drive every few seconds.
           [ -n "$LIVE_FILE" ] && ARGS+=(--live "$LIVE_FILE")
+          # The status page's boxes: which free models read first, read second and settle
+          # (freeInput_ in Code.gs).
+          BOXES_RE='^(read1|read2|settle)=[a-z0-9.,-]*(;(read1|read2|settle)=[a-z0-9.,-]*)*$'
+          if [[ "$FREE_BOXES" =~ $BOXES_RE ]]; then
+            ARGS+=(--boxes "$FREE_BOXES")
+          fi
           if [[ " ${ARGS[*]} " == *" --helper "* || -n "$LIVE_FILE" ]]; then
             # The converter exchanges files with the helper's folder, and writes the live
             # file, with the run's Drive token, read from the event file and masked like the

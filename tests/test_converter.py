@@ -469,6 +469,107 @@ class Pipeline(PipelineBase):
         self.assertEqual({m for m, _ in fake.calls}, {"gemini-3.5-flash-lite"})
 
 
+class FreeBoxes(PipelineBase):
+    """The status page's boxes for the free models (--boxes): who reads first, who reads
+    second and who settles, each in the user's order."""
+
+    GONE = Exception("429 RESOURCE_EXHAUSTED GenerateRequestsPerDayPerProjectPerModel-FreeTier")
+
+    def gone(self, p, n):
+        raise self.GONE
+
+    def test_gemma_reads_first_a_lite_model_second_and_a_flash_model_settles(self):
+        code, st, md, fake = self.run_book({
+            "gemma-4-31b-it": lambda p, n: answer(WRONG),
+            "gemini-3.5-flash-lite": lambda p, n: answer(TRUE),
+            "gemini-3.1-flash-lite": lambda p, n: answer(TRUE),
+            "gemini-3.8-flash": lambda p, n: answer(TRUE),
+        }, pages="30", extra=("--boxes", "read1=gemma-4-31b-it;read2=gemini-3.5-flash-lite;settle=gemini-3.8-flash"))
+        self.assertEqual(code, 0, st)
+        rec = self.records()[30]
+        self.assertEqual((rec["a"]["model"], rec["b"]["model"]), ("gemma-4-31b-it", "gemini-3.5-flash-lite"))
+        self.assertEqual((rec["check"]["state"], rec["check"]["model"]), ("reconciled", "gemini-3.8-flash"))
+        self.assertNotIn("كاقية", md)
+        self.assertEqual({m for m, k in fake.calls if k == "read"}, {"gemma-4-31b-it", "gemini-3.5-flash-lite"})
+        self.assertEqual([m for m, k in fake.calls if k == "reconcile"], ["gemini-3.8-flash"])
+        self.assertEqual(st["boxes"], {"read1": ["gemma-4-31b-it"], "read2": ["gemini-3.5-flash-lite"],
+                                       "settle": ["gemini-3.8-flash"]})
+
+    def test_gemma_settles_when_the_user_puts_it_there(self):
+        code, st, md, fake = self.run_book({
+            "gemini-3.5-flash-lite": lambda p, n: answer(WRONG),
+            "gemini-3.1-flash-lite": lambda p, n: answer(TRUE),
+            "gemma-4-31b-it": lambda p, n: answer(TRUE),
+        }, pages="30", extra=("--boxes", "read1=gemini-3.5-flash-lite;read2=gemini-3.1-flash-lite;settle=gemma-4-31b-it"))
+        self.assertEqual(code, 0, st)
+        self.assertEqual(self.records()[30]["check"]["model"], "gemma-4-31b-it")
+
+    def test_a_box_whose_models_are_out_waits_and_no_other_box_fills_in(self):
+        # Without boxes the second reader would give first readings too (both Lite readers
+        # in both readings); a box is only its own models.
+        code, st, md, fake = self.run_book({
+            "gemini-3.5-flash-lite": self.gone,
+            "gemini-3.1-flash-lite": lambda p, n: answer(TRUE),
+        }, extra=("--boxes", "read1=gemini-3.5-flash-lite;read2=gemini-3.1-flash-lite;settle=gemini-3.1-flash-lite"))
+        self.assertEqual(code, 3, st)
+        self.assertEqual(st["state"], "paused")
+        self.assertNotIn("waiting_for", st, "no first reader is left: the next book could not start either")
+        self.assertNotIn("gemini-3.1-flash-lite", {m for m, k in fake.calls if k == "read"})
+        self.assertEqual(st["pages_waiting"], [30, 31])
+
+    def test_the_second_box_out_parks_the_book_while_the_first_reads_on(self):
+        code, st, md, fake = self.run_book({
+            "gemma-4-31b-it": lambda p, n: answer(TRUE),
+            "gemini-3.1-flash-lite": self.gone,
+        }, extra=("--boxes", "read1=gemma-4-31b-it;read2=gemini-3.1-flash-lite;settle=gemini-3.8-flash"))
+        self.assertEqual((st["state"], st["waiting_for"]), ("paused", "reader"))
+        self.assertEqual(st["readers_left"], ["gemma-4-31b-it"])
+        self.assertEqual({r["a"]["model"] for r in self.records().values()}, {"gemma-4-31b-it"})
+
+    def test_one_model_in_both_reading_boxes_never_reads_a_page_twice(self):
+        code, st, md, fake = self.run_book({
+            "gemini-3.5-flash-lite": lambda p, n: answer(TRUE),
+            "gemini-3.1-flash-lite": lambda p, n: answer(TRUE),
+        }, pages="30", extra=("--boxes", "read1=gemini-3.5-flash-lite;read2=gemini-3.5-flash-lite,gemini-3.1-flash-lite;"
+                                         "settle=gemini-3.8-flash"))
+        self.assertEqual(code, 0, st)
+        rec = self.records()[30]
+        self.assertEqual((rec["a"]["model"], rec["b"]["model"]), ("gemini-3.5-flash-lite", "gemini-3.1-flash-lite"))
+
+    def test_the_rescue_model_in_a_reading_box_reads_like_any_reader(self):
+        # Gemma 4 26B, the model for refused pages, put in the first box: its reading is no
+        # refused page's, so the next run settles the page as usual.
+        boxes = ("--boxes", "read1=gemma-4-26b-a4b-it;read2=gemini-3.5-flash-lite;settle=gemini-3.8-flash")
+        code, st, md, fake = self.run_book({
+            "gemma-4-26b-a4b-it": lambda p, n: answer(WRONG),
+            "gemini-3.5-flash-lite": self.gone,
+        }, pages="30", extra=boxes)
+        self.assertEqual(st["state"], "paused")
+        self.assertEqual(self.records()[30]["a"]["model"], "gemma-4-26b-a4b-it")
+        code, st, md, fake = self.run_book({
+            "gemma-4-26b-a4b-it": lambda p, n: answer(WRONG),
+            "gemini-3.5-flash-lite": lambda p, n: answer(TRUE),
+            "gemini-3.8-flash": lambda p, n: answer(TRUE),
+        }, pages="30", extra=boxes)
+        self.assertEqual(code, 0, st)
+        self.assertEqual((self.records()[30]["check"]["state"], self.records()[30]["check"]["model"]),
+                         ("reconciled", "gemini-3.8-flash"))
+        self.assertNotIn("كاقية", md)
+
+    def test_the_boxes_and_the_catalog(self):
+        self.assertEqual(c.parse_boxes("read1=a,b,a;read2=c;settle=;other=x"),
+                         {"read1": ["a", "b"], "read2": ["c"], "settle": []})
+        self.assertEqual(c.parse_boxes(""), {})
+        have = dict.fromkeys(["gemini-3.5-flash-lite", "gemini-3.1-flash-lite-preview", "gemini-3.1-flash-lite",
+                              "gemini-3.8-flash", "gemini-3-flash-preview", "gemini-3.1-pro-preview", "gemini-2.5-flash",
+                              "gemini-2.0-flash", "gemini-3.8-flash-image", "gemini-flash-latest", "gemma-4-26b-a4b-it",
+                              "gemma-4-31b-it", "gemma-3-27b-it", "gemini-embedding-2", "gemini-robotics-er-2-preview",
+                              "gemini-3.8-flash-preview-11-2026"], True)
+        self.assertEqual(c.free_catalog(have), [
+            "gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-3.8-flash", "gemini-3-flash-preview",
+            "gemini-2.5-flash", "gemini-3.1-pro-preview", "gemma-4-31b-it", "gemma-4-26b-a4b-it"])
+
+
 class DashLines(unittest.TestCase):
     def test_dash_line_never_reaches_pandoc_as_yaml_or_heading(self):
         # Book 2_k2opt (run 38): "---" right before a footnote made pandoc fail.
