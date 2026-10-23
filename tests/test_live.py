@@ -434,3 +434,14 @@ class DailyLimitChecks(unittest.TestCase):
         self.assertIn("gemini-9-flash-lite", pool.exhausted)
         self.assertEqual(len(calls), 3)
         self.assertEqual(len([s for s in self.slept if s >= c.DAY_CHECK_SECONDS]), 2)
+
+    def test_a_429_asking_to_wait_hours_is_checked_like_the_daily_limit(self):
+        # 2026-10-23: a 429 naming the per-minute quota said "retry in" ~19 hours; the run slept on it.
+        long = Exception("429 RESOURCE_EXHAUSTED. {'quotaId': 'GenerateRequestsPerMinutePerProjectPerModel-FreeTier'} "
+                         "{'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '69118s'}")
+        pool, calls = self.pool([long, long, long])
+        with self.assertRaises(c.QuotaExhausted):
+            pool.read(None, "x", "gemini-9-flash-lite")
+        self.assertIn("gemini-9-flash-lite", pool.exhausted)
+        self.assertEqual(len([s for s in self.slept if s >= c.DAY_CHECK_SECONDS]), 2)
+        self.assertLessEqual(max(self.slept), c.DAY_CHECK_SECONDS)
