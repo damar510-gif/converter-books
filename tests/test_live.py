@@ -143,6 +143,28 @@ class LiveState(unittest.TestCase):
         self.assertEqual(lv.sink.last["end"], {"state": "paused", "waiting": 1})
         self.assertEqual(lv.sink.last["phase"], "end")
 
+    def test_the_books_of_a_run_are_shown_apart(self):
+        lv = live.Live(FakeSink(), clock=Clock())
+        lv.set_books([{"file": "first", "book": "الأول"}, {"file": "second", "book": "الثاني"}])
+        lv.page(1, "done")
+        with live.in_book(1):
+            lv.page(1, "read1")
+            lv.page(2, "unread")
+            h = lv.begin("gemma-4-31b-it", 2, "a")
+            lv.sent(h)
+            lv.note("gemma-4-31b-it", "ok", 1, "a", secs=50)
+        snap = lv.snapshot()
+        self.assertEqual((snap["pages"]["total"], snap["pages"]["done"], snap["pages"]["read1"]), (3, 1, 1))
+        first, second = snap["books"]
+        self.assertEqual((first["book"], first["pages"]["total"], first["pages"]["done"]), ("الأول", 1, 1))
+        self.assertEqual((second["file"], second["pages"]["unread"], second["pages"]["now"]), ("second", 1, [2]))
+        self.assertEqual(snap["models"]["gemma-4-31b-it"]["busy"][0][3], 1, "the busy request says its book")
+        self.assertEqual(snap["events"][-1]["b"], 1)
+        # A run of one book is written as before.
+        one = live.Live(FakeSink(), clock=Clock())
+        one.page(1, "done")
+        self.assertNotIn("books", one.snapshot())
+
     def test_writes_in_the_background_keep_what_the_script_wrote(self):
         sink = FakeSink({"file": "book123", "book": "كتاب", "dispatched": "2026-10-23T07:00:00Z", "phase": "queued"})
         lv = live.Live(sink, every=0.05)

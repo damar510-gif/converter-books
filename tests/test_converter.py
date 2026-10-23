@@ -7,6 +7,7 @@ import os
 import shutil
 import sys
 import tempfile
+import threading
 import types as pytypes
 import unittest
 
@@ -764,6 +765,98 @@ class FreeBoxes(PipelineBase):
         self.assertEqual(code, 0, st)
         self.assertEqual(st["models_missing"], ["gemini-2.5-flash"])
         self.assertEqual({r["a"]["model"] for r in self.records().values()}, {"gemma-4-31b-it"})
+
+
+class Queue(PipelineBase):
+    """Several books in one run (--queue, the Drive inbox's oldest unfinished books): each
+    step's models take the oldest page waiting for it, in any book (2026-10-23)."""
+
+    def other_book(self, name="other"):
+        """A second book: pages 30-31 of the test book, saved as a PDF of its own."""
+        import pymupdf
+        src = pymupdf.open(PDF)
+        doc = pymupdf.open()
+        doc.insert_pdf(src, from_page=29, to_page=30)
+        path = os.path.join(self.tmp, name + ".pdf")
+        doc.save(path)
+        out = os.path.join(self.tmp, name + "-out")
+        manifest = os.path.join(self.tmp, name + ".json")
+        with open(manifest, "w", encoding="utf-8") as f:
+            json.dump([{"pdf": path, "out": out, "title": "كتاب آخر", "order": "2026-10-02"}], f)
+        return manifest, out
+
+    def test_the_books_of_a_run_each_get_their_book_and_status(self):
+        manifest, out = self.other_book()
+        seen = []
+
+        def reader(p, n):
+            if p.startswith("أنت تنسخ"):
+                seen.append(live.current_book())
+            return answer(TRUE)
+        code, st, md, fake = self.run_book({
+            "gemma-4-31b-it": reader,
+            "gemini-3.1-flash-lite": lambda p, n: answer(TRUE),
+        }, extra=("--boxes", "read1=gemma-4-31b-it;read2=gemini-3.1-flash-lite;settle=", "--workers", "1",
+                  "--queue", manifest))
+        self.assertEqual(code, 0, st)
+        # One first reader takes the oldest pages first: the first book's, then the other's.
+        self.assertEqual(seen, [0, 0, 1, 1])
+        with open(os.path.join(out, "status.json"), encoding="utf-8") as f:
+            other = json.load(f)
+        self.assertEqual((other["state"], other["pages_done"], other["book"]), ("done", 2, "كتاب آخر"))
+        self.assertTrue(os.path.exists(os.path.join(out, "other.epub")))
+        self.assertTrue(os.path.exists(os.path.join(out, "report.md")))
+        # The run's requests are counted once, with the first book (the other book's table of
+        # contents and cover asked a model too).
+        self.assertEqual(st["requests"]["gemma-4-31b-it"], 4)
+        self.assertGreaterEqual(st["requests"]["gemini-3.1-flash-lite"], 4)
+        self.assertNotIn("requests", other)
+
+    def test_a_page_read_twice_is_settled_while_the_next_pages_are_read(self):
+        settled = threading.Event()
+
+        def first(p, n):
+            if n == 2:
+                # Before: no page was settled until every page was read.
+                self.assertTrue(settled.wait(20), "page 30 was not settled while page 31 was read")
+            return answer(WRONG)
+
+        def settler(p, n):
+            settled.set()
+            return answer(TRUE)
+        code, st, md, fake = self.run_book({
+            "gemma-4-31b-it": first,
+            "gemini-3.1-flash-lite": lambda p, n: answer(TRUE),
+            "gemini-3.5-flash-lite": settler,
+        }, extra=("--boxes", "read1=gemma-4-31b-it;read2=gemini-3.1-flash-lite;settle=gemini-3.5-flash-lite",
+                  "--workers", "1"))
+        self.assertEqual(code, 0, st)
+        self.assertEqual({r["check"]["state"] for r in self.records().values()}, {"reconciled"})
+        self.assertNotIn("كاقية", md)
+
+    def test_the_second_reader_goes_on_with_the_next_book_while_the_first_waits(self):
+        # The first book's pages are read once already and wait only for a second reading,
+        # the other book is new: the second reader works on the first book while the first
+        # reader reads the other one.
+        manifest, out = self.other_book()
+        self.run_book({"gemini-3.5-flash-lite": lambda p, n: answer(TRUE)},
+                      extra=("--boxes", "read1=gemini-3.5-flash-lite;read2=;settle="))
+        books = []
+
+        def reading(step):
+            def f(p, n):
+                if p.startswith("أنت تنسخ"):
+                    books.append((step, live.current_book()))
+                return answer(TRUE)
+            return f
+        code, st, md, fake = self.run_book({
+            "gemini-3.5-flash-lite": reading("a"),
+            "gemini-3.1-flash-lite": reading("b"),
+        }, extra=("--boxes", "read1=gemini-3.5-flash-lite;read2=gemini-3.1-flash-lite;settle=", "--queue", manifest))
+        self.assertEqual(code, 0, st)
+        self.assertEqual(sorted(books), [("a", 1), ("a", 1), ("b", 0), ("b", 0), ("b", 1), ("b", 1)])
+        with open(os.path.join(out, "status.json"), encoding="utf-8") as f:
+            self.assertEqual(json.load(f)["state"], "done")
 
 
 class Requests:
