@@ -21,17 +21,20 @@
 ## هديتي» أو «هدية».
 :::
 
-# السلوك للمقريزي بعلم
-الدكتور محمد عطية زيدان
+# السلوك للمقريزى
+بقلم
+الدكتور محمد مصطفى زيادة
 أستاذ بكلية الآداب بجامعة القاهرة
 
-[]{#pg-2 .pagebreak}للمؤرخ المصرى أحمد المقريزي صدارة واضحة لا ريب فيها بين معاصريه وسابقيه ولاحقيه من المؤرخين في مصر الإسلامية ، وهو صاحب هذا الامتياز النادر المحسود بفضل مؤلفاته التاريخية وغير التاريخية المتنوعة ، وآخرها حسب ترتيبها الزمني في سلك إنتاجه الوفير كتاب السلوك لمعرفة دول الممالك . والترتيب الزمني وحده دون غيره من صفات ومؤهلات يجعل يجعل هذا الكتاب فخر مؤلفات المقريزي ، و من حيث إنه أنه أنه منتهى مهاراته ، وخاتمة خبراته وقمة تجاربه وأوج نضوجة العقلي والعلمي والفني في كتابة التاريخ .
+[]{#pg-2 .pagebreak}للمؤرخ المصرى أحمد المقريزى صدارة واضحة لا ريب فيها بين معاصريه وسابقيه ولاحقيه من المؤرخين فى مصر الإسلامية ، وهو صاحب هذا الامتياز النادر المحسود بفضل مؤلفاته التاريخية وغير التاريخية المتنوعة ، وآخرها بحسب ترتيبها الزمنى فى سلك إنتاجه الوفير كتاب السلوك لمعرفة دول الملوك .
 
-والمقدمة الطبيعية للتعريف الوافي بالتعريف الوافي بهذا الكتاب وأسلوبه ومحتوياته ، هي التعريف بادئ ذي بدء بعصر مؤلفه وتاريخ حياته وعدديد من مؤلفاته السابقة ، لأن لكل من هذه العناصر نصيباً ظاهراً ومستمرأ في بناء ذلك الكتاب الكبير .
+والترتيب الزمنى وحده دون غيره من صفات ومؤهلات يجعل هذا الكتاب فخر مؤلفات المقريزى ، من حيث أنه منتهى مهاراته ، وخاتمة خبراته وقمة تجاربه وأوج نضوجه العقلى والعلمى والفنى فى كتابة التاريخ .
 
-وأحمد بن على المقريزي مولود سنة 1364 ميلادية بحارة برجوان بقسم الجمالية بمحافظة القاهرة الحالية ، في أسرة معروفة أجيالها بالاشتغال بالعلم بدمشق وبعلبك والقاهرة ، أي أنه شهد حوادث عصره من زاوية أبناء الفئة الفكرية من الطبقة الوسطى على قول المصطلح الاجتماعي في العصر الحاضر . أما هذه الحوادث فهي في مجموعها نوبات احتضار وذبول وأقول في دولة مملوكية ذات بطولات شامخة سالفة ، وأمجاد ماضية ملأت عن التاريخ في الشرق والغرب . ولعشرين سنة هي سنوات طفولته ومراهقته وشبابه ، شهد أحمد المقريزي حوادث ذلك العصر الأقل من نافذته الفكرية المصرية البعيدة عن شئون الدولة المملوكية وأمراءها الذين جعلوا من السلاطين الأطفال وأشباه الأطفال وقتذاك ، ستاراً رقيقاً شفافاً ساذجاً يعملون من ورائه لتحقيق مطامع أميرية فردية ضيقة لم تلبث أن أزالت تلك الدولة المملوكية الكبرى من مسارح التاريخ إلى كتبه .
+والمقدمة الطبيعية للتعريف الوافى بهذا الكتاب وأسلوبه ومحتوياته ، هى التعريف بادئ ذى بدء بعصر مؤلفه وتاريخ حياته وعديد مؤلفاته السابقة ، لأن لكل من هذه العناصر نصيباً ظاهراً ومستمراً فى بناء ذلك الكتاب الكبير .
 
-وفي وسط تلك الحوادث الصاخبة المتقلبة عكف الشاب أحمد المقريزي على الدراسة التقليدية لأبناء طبقته ، وهي دراسة علوم الدين وحفظ القرآن ومعرفة النحو ، ودراسة الفقه والتفسير والحديث ، وبعض العلوم الأخرى مثل التاريخ وتقويم البلدان والأدب والحساب . غير أن نظرة عابرة في مؤلفاته المستقبلبلة ، تدل دلالة واضحة على مدى تأثيره بمحيطه من
+وأحمد بن على المقريزى مولود سنة ١٣٦٤ ميلادية بحارة برجوان بقسم الجمالية بمحافظة القاهرة الحالية ، فى أسرة معروفة أجيالها بالاشتغال بالعلم بدمشق وبعلبك والقاهرة ، أى أنه شهد حوادث عصره من زاوية أبناء الفئة الفكرية من الطبقة الوسطى على قول المصطلح الاجتماعى فى العصر الحاضر . أما هذه الحوادث فهى فى مجموعها نوبات احتضار وذبول وأفول فى دولة مملوكية ذات بطولات شامخة سالفة ، وأمجاد ماضية ملأت عين التاريخ فى الشرق والغرب . ولعشرين سنة هى سنوات طفولته ومراهقته وشبابه ، شهد أحمد المقريزى حوادث ذلك العصر القلق من نافذته الفكرية المصرية البعيدة عن شئون الدولة المملوكية وأمرائها الذين جعلوا من السلاطين الأطفال وأشباه الأطفال وقتذاك ، ستاراً رقيقاً شفافاً ساذجاً يعملون من ورائه لتحقيق مطامع أميرية فردية ضيقة لم تلبث أن أزالت تلك الدولة المملوكية الكبرى من مسارح التاريخ إلى كتبه .
+
+وفى وسط تلك الحوادث الصاخبة المتقلبة عكف الشاب أحمد المقريزى على الدراسة التقليدية لأبناء طبقته ، وهى دراسة علوم الدين وحفظ القرآن ومعرفة النحو ، ودراسة الفقه والتفسير والحديث ، وبعض العلوم الأخرى مثل التاريخ وتقويم البلدان والأدب والحساب . غير أن نظرة عابرة فى مؤلفاته المستقبلة ، تدل دلالة واضحة على مدى تأثره بمحيطه من
 
 > **[الصفحة 3 لم تُقرأ]**
 
@@ -41,13 +44,13 @@
 
 ثم انتقل المقريزي من التدريس إلى الحسبة حين عينه السلطان برقوق سنة ١٣٩٨ محتسباً للقاهرة والوجه البحري ، فانتقل بذلك من دائرة المشتغلين بالععلم والتعليم إلى دائرة الإدارة والاختلاط بمختلف طبقات المجتمع ، ولا سيما أرباب الأسواق والمتاجر وأصحاب المهن والصنايع . ذلك أن وظيفة المحتسب التي يقابلها في العصر الحاضر عدة وظائف وزارية شملت وقتذاك النظر في الأسعار الجارية ، وأحوال النقود وضبط الموازين والمكاييل والمقاييس ومراقبة الآداب العامة ، ونظافة الشوارع وتنظيم حركة المرور بها ، مع الإشراف على المدارس والمدرسين والطلاب ، والعناية بالمساجد والحمامات والقياس والوكالات ، فضلا عن مراقبة أصحاب الصناعات العالية من الأطباء والصيادلة والمعلمين أى المهندسين المعماريين . ويضاف إلى هذه الواجبات الكثيرة الداخلة في اختصاص المحتسب أحوال الباعة الجوالة والمتعيشين والشحالتين والمتعطلين الذين كانوا خطراً على الأمن ، ويتضح من ضخامة هذه الوظيفة ومسؤولياتها أن أحمد بن على المقريزي الذي تعين عليها بأمر السلطان برقوق، لا بد أنه اشتهر وقتذاك بالكفاية والدقة في الإدارة والأمانة في تطبيق الأحكام الشرعية ، غير أنه لم يلبث أن تنحى عن هذه الوظيفة مرتين في عامين متتاليين ؛ إذ ضاق بمسؤولياتها التي شغلت وقته ليلا ونهاراً ، وصرفته عن القراءة وتطلبت منه الجلوك في دكة المحتسب للفصل في شكاوى السوق والسوقة ، وتوقيع العقوبات على المخالفين ، وإصدار الأوامر إلى العرفاء والأعوان والقباء ، مع العلم بأن وظيفة محتسب القاهرة شملت الوجه البحري كله . وحوالي ذلك الوقت تزوج المقريزي وأنجب ، إذ .معروف أن بنتاً له ماتت في سن السادسة بالطاعون الذي اجتاح القاهرة وسائر البلاد المصرية سنة ١٤٠٣ . وهذا الطاعون بالذات هو الذي دفع أحمد المقريزي إلى تأليف كتاب إغاثة الأمة بكشف الغمة ، كما دفعه ضيقه بوظيفة الحسبة ومسؤولياتها إلى تأليف كتاب شذور العقود في ذكر النقود ، وكتاب الأكيال والأوزان الشرعية . ويبدو أن هذه الكتب الصغيرة كانت أوائل عهد المقريزي بالتأليف ، كما يبدو من محتوياتمها مدى تأثير عبد الرحمن بن خلدون في التكوين الفكري عند تلميذه الموهوب .
 
-ثم عاد المقريزي إلى دائرة المشتغلين بالتسدريس مرة أخرى ، حين عينه السلطان برقوق سنة ١٤٠٨ مدرساً للحديث بالمدرستين الاقبالية والأشرقية بدمشق ، مع التنظر على أوقاف المارستان ـ أي المستشفى ـ النورى بها . ثم عينه السلطان فرج بن برقوق نائباً للحكم ـ أي قاضياً ـ بدمشق ، استيفاء لشرط الواقف أن يكون المتعينون على الأوقاف الدمشقية قضاة بها . لكن المقريزي أبى قبول هذا الشرف على الرغم من عرض الوظيفة عليه مراراً ، ويظهر أنه سم الخدم الحكومي وضاق بتكاليفها وأعبائها ، وأنه ملك من الموارد المالية []{#pg-5 .pagebreak}التى جاءته من الوقف ، وما ورثه من الأملاك عن جده لأبيه بدمشق نفسها ما أغناه عن تضييع وقته فى كسب العيش عن طريق مجالس الحكم والقضاء .
+ثم عاد المقريزي إلى دائرة المشتغلين بالتسدريس مرة أخرى ، حين عينه السلطان برقوق سنة ١٤٠٨ مدرساً للحديث بالمدرستين الاقبالية والأشرقية بدمشق ، مع التنظر على أوقاف المارستان ـ أي المستشفى ـ النورى بها . ثم عينه السلطان فرج بن برقوق نائباً للحكم ـ أي قاضياً ـ بدمشق ، استيفاء لشرط الواقف أن يكون المتعينون على الأوقاف الدمشقية قضاة بها . لكن المقريزي أبى قبول هذا الشرف على الرغم من عرض الوظيفة عليه مراراً ، ويظهر أنه سم الخدم الحكومي وضاق بتكاليفها وأعبائها ، وأنه ملك من الموارد المالية []{#pg-5 .pagebreak}أقرأ الصفحة المصورة وأقابلها بالنسختين.التي جاءته من الوقف ، وما ورثه من الأملاك عن جده لأبيه بدمشق نفسها ما أغناه عن تضييع وقته في كسب العيش عن طريق مجالس الحكم والقضاء .
 
-ويظهر كذلك أن المقريزى استطاع أن يكتب أول مؤلفاته الطويلة فى هذه السنوات الدمشقية من حياته وهو كتاب السيرة النبوية الذى عنوانه امتاع الأسماع بما للرسول من الأبناء والحفدة والأحوال والأتباع ، وهو كتاب مشحون بصفحات متتالية من مؤلفات السابقين فى تاريخ السيرة . ومما يرجح نسبة هذا الكتاب الضخم إلى تلك السنوات قول المقريزى فى مقدمته « أنه غير جميل بمن تصدى للتدريس والافتاء وجلس للحكم بين الناس وفصل القضاء، أن يجهل من أحوال رسول الله .. وجميل سيرته .. ما لا غنى عن معرفته » . وإلى تلك السنوات الدمشقية من حياة المقريزى يرجع كذلك كتاب النزاع والتخاصم فيما بين بنى أمية وبنى هاشم ، وهو كتاب مستمد من فكرة العصبية القبلية التى بنى عليها عبد الرحمن بن خلدون معظم نظرياته فى فلسفة التاريخ .
+ويظهر كذلك أن المقريزى استطاع أن يكتب أول مؤلفاته الطويلة في هذه السنوات الدمشقية من حياته وهو كتاب السيرة النبوية الذي عنوانه امتاع الأسماع بما للرسول من الأبناء والحفدة والأحوال والأتباع ، وهو كتاب مشحون بصفحات متتالية من مؤلفات السابقين في تاريخ السيرة . ومما يرجح نسبة هذا الكتاب الضخم إلى تلك السنوات قول المقريزى في مقدمته « أنه غير جميل بمن تصدى للتدريس والافتاء وجلس للحكم بين الناس وفصل القضاء، أن يجهل من أحوال رسول الله .. وجميل سيرته .. ما لا غنى عن معرفته » . وإلى تلك السنوات الدمشقية من حياة المقريزى يرجع كذلك كتاب النزاع والتخاصم فيما بين بنى أمية وبنى هاشم ، وهو كتاب مستمد من فكرة العصبية القبلية التي بنى عليها عبد الرحمن بن خلدون معظم نظرياته في فلسفة التاريخ .
 
-ثم رحل أحمد المقريزى عن دمشق بعد إقامته بها نحو عشر سنوات وعاد إلى القاهرة ليتوفر على الدرس والتدريس والتأليف الذى وضحت موهبته فيه مما أخرجه من المؤلفات الصغيرة . غير أنه تراعى له أن يحج أولا ، كأنما أراد أن يفصل بين مرحلتين من حياته ، ومن أجل ذلك رحل المقريزى وأسرته حاجاً إلى مكة التى عرفها هو قبل ذلك وجاور بها مدة قصيرة إبان طلبه العلم . على أنه ظل مقيماً بمكة هذه المرة نحو خمس سنوات واشتغل فى تلك السنوات المكية من حياته بتدريس الحديث ، وربما يرجع تأليف كتابه الذى عنوانه « الكلام ببناء الكعبة بيت الله الحرام » ، وكتاب « ضوء السارى فى معرفة تميم الدارى » وكتاب « التبر المسبوك فى ذكر من حج من الخلفاء والملوك » ، وكتاب « وصف حضرموت العجيبة » إلى هذه المدة المكية من حياة المقريزى ، فانها كلها كتب صغيرة خاصة بمحيط بلاد العرب ، وأخبارها ؛ ومن الراجح أن الكتاب المسمى « الإعلام بمن فى أرض الحبشة من ملوك الإسلام » يرجع كذلك إلى هذه المجموعة المكية .
+ثم رحل أحمد المقريزى عن دمشق بعد إقامته بها نحو عشر سنوات وعاد إلى القاهرة ليتوفر على الدرس والتدريس والتأليف الذي وضحت موهبته فيه مما أخرجه من المؤلفات الصغيرة . غير أنه تراءى له أن يحج أولا ، كأنما أراد أن يفصل بين مرحلتين من حياته ، ومن أجل ذلك رحل المقريزى وأسرته حاجاً إلى مكة التي عرفها هو قبل ذلك وجاور بها مدة قصيرة إبان طلبه العلم . على أنه ظل مقيماً بمكة هذه المرة نحو خمس سنوات واشتغل في تلك السنوات المكية من حياته بتدريس الحديث ، وربما يرجع تأليف كتابه الذي عنوانه « الكلام ببناء الكعبة بيت الله الحرام » ، وكتاب « ضوء الساري في معرفة تميم الدارى » وكتاب « التبر المسبوك في ذكر من حج من الخلفاء والملوك » ، وكتاب « وصف حضرموت العجيبة » إلى هذه المدة المكية من حياة المقريزى ، فانها كلها كتب صغيرة خاصة بمحيط بلاد العرب ، وأخبارها ؛ ومن الراجح أن الكتاب المسمى « الإعلام بمن في أرض الحبشة من ملوك الإسلام » يرجع كذلك إلى هذه المجموعة المكية .
 
-ثم استقر أحمد المقريزى بعدئذ بالقاهرة ، حيث أمضى بقية حياته الطويلة بحارة برجوان ، التى ما برح منذ شبابه يفاخر بها على سائر الحارات القاهرية فى العصور الوسطى . ويظهر أنه جعل من داره بها مكاناً للدراسة تلاميذه وللتأليف الكثير فى مختلف نواحى دراسته . وبدأ المقريزى نشاطه العلمى فى هذه المرحلة من حياته بكتاب تاريخ القاهرة المسمى المواعظ والاعتبار بذكر الخطط والآثار ، وهو الكتاب المشهور باسم الخطط لأنه توفر فيه على دراسة المعالم القاهرية من حارات وشوارع ودروب وقياسر وحجامات ورباع وأسواق ومدارس وخوانق ومستشفيات ، فضلا عن أخبار المدن المصرية الكبرى ، وتراجم رجال الدول ونظم الحكم فى مختلف العصور . وافتتح المقريزى هذا الكتاب الزاخر بعبارة ناطقة بوطنية مصرية دافقة ؛ فقال : « وكانت مصر هي مسقط راسى ، وملعب أترابى ، ومجمع ناسى ومعنى عشيرتى وحاميتى وموطن خاصنى وعامى .. » . غير أنه يبدو من حجم هذا الكتاب أن المقريزى اعتمد فى تأليفه على كتاب صنفه قبله المؤرخ أحمد بن عبد الله الأوحدى ، فنقل من مسوداته بالجملة دون أن يشير إليه بكلمة واحدة . ولذا وصف عبد الرحمن السخاوى لكون المقريزى « ظفر بمسودة الأوحدى فأخذها وزاد عليها زوائد غير طائلة » . وخشى المقريزى مما سوف تجلبه هذه التهمة من إساءة وأذى لسمعته العلمية ، بدليل مبادرته بالتلميح الإنكارى إليها فى مقدمته لهذا الكتاب ، حيث قال « حسب العالم أن يعلم ما قيل ويقف عليه » .
+ثم استقر أحمد المقريزى بعدئذ بالقاهرة ، حيث أمضى بقية حياته الطويلة بحارة برجوان ، التي ما برح منذ شبابه يفاخر بها على سائر الحارات القاهرية في العصور الوسطى . ويظهر أنه جعل من داره بها مكاناً لدراسة تلاميذه وللتأليف الكثير في مختلف نواحي دراسته . وبدأ المقريزى نشاطه العلمي في هذه المرحلة من حياته بكتاب تاريخ القاهرة المسمى المواعظ والاعتبار بذكر الخطط والآثار ، وهو الكتاب المشهور باسم الخطط لأنه توفر فيه على دراسة المعالم القاهرية من حارات وشوارع ودروب وقياسر وحجامات ورباع وأسواق ومدارس وخوانق ومستشفيات ، فضلا عن أخبار المدن المصرية الكبرى ، وتراجم رجال الدول ونظم الحكم في مختلف العصور . وافتتح المقريزى هذا الكتاب الزاخر بعبارة ناطقة بوطنية مصرية دافقة ؛ فقال : « وكانت مصر هي مسقط راسى ، وملعب أترابى ، ومجمع ناسى ومعنى عشيرتى وحامى وموطن خاصتى وعامى .. » . غير أنه يبدو من حجم هذا الكتاب أن المقريزى اعتمد في تأليفه على كتاب صنفه قبله المؤرخ أحمد بن عبدالله الأوحدى ، فنقل من مسوداته بالجملة دون أن يشير إليه بكلمة واحدة . ولذا وصف عبد الرحمن السخاوى هذا الكتاب بقوله ساخراً أنه كتاب مفيد لكون المقريزى « ظفر » بمسودة الأوحدى فأخذها وزاد عليها زوائد غير طائلة . وخشى المقريزى مما سوف تجلبه هذه التهمة من إساءة وأذى لسمعته العلمية ، بدليل مبادرته بالتلميح الإنكارى إليها في مقدمته لهذا الكتاب ، حيث قال « حسب العالم أن يعلم ما قيل ويقف عليه » . غير
 
 > **[الصفحة 6 لم تُقرأ]**
 
@@ -144,4 +147,226 @@
 
 > **[الصفحة 12 لم تُقرأ]**
 
-[]{#pg-12 .pagebreak}[]{#pg-13 .pagebreak}[]{#pg-14 .pagebreak}[]{#pg-15 .pagebreak}[]{#pg-16 .pagebreak}[]{#pg-17 .pagebreak}[]{#pg-18 .pagebreak}[]{#pg-19 .pagebreak}[]{#pg-20 .pagebreak}[]{#pg-21 .pagebreak}[]{#pg-22 .pagebreak}[]{#pg-23 .pagebreak}[]{#pg-24 .pagebreak}[]{#pg-25 .pagebreak}[]{#pg-26 .pagebreak}[]{#pg-27 .pagebreak}[]{#pg-28 .pagebreak}[]{#pg-29 .pagebreak}[]{#pg-30 .pagebreak}[]{#pg-31 .pagebreak}[]{#pg-32 .pagebreak}[]{#pg-33 .pagebreak}[]{#pg-34 .pagebreak}[]{#pg-35 .pagebreak}[]{#pg-36 .pagebreak}[]{#pg-37 .pagebreak}[]{#pg-38 .pagebreak}[]{#pg-39 .pagebreak}[]{#pg-40 .pagebreak}[]{#pg-41 .pagebreak}[]{#pg-42 .pagebreak}[]{#pg-43 .pagebreak}[]{#pg-44 .pagebreak}[]{#pg-45 .pagebreak}[]{#pg-46 .pagebreak}[]{#pg-47 .pagebreak}[]{#pg-48 .pagebreak}[]{#pg-49 .pagebreak}[]{#pg-50 .pagebreak}[]{#pg-51 .pagebreak}[]{#pg-52 .pagebreak}[]{#pg-53 .pagebreak}[]{#pg-54 .pagebreak}[]{#pg-55 .pagebreak}[]{#pg-56 .pagebreak}[]{#pg-57 .pagebreak}[]{#pg-58 .pagebreak}[]{#pg-59 .pagebreak}[]{#pg-60 .pagebreak}[]{#pg-61 .pagebreak}[]{#pg-62 .pagebreak}[]{#pg-63 .pagebreak}[]{#pg-64 .pagebreak}[]{#pg-65 .pagebreak}[]{#pg-66 .pagebreak}[]{#pg-67 .pagebreak}[]{#pg-68 .pagebreak}[]{#pg-69 .pagebreak}[]{#pg-70 .pagebreak}[]{#pg-71 .pagebreak}[]{#pg-72 .pagebreak}[]{#pg-73 .pagebreak}[]{#pg-74 .pagebreak}[]{#pg-75 .pagebreak}[]{#pg-76 .pagebreak}[]{#pg-77 .pagebreak}[]{#pg-78 .pagebreak}[]{#pg-79 .pagebreak}[]{#pg-80 .pagebreak}[]{#pg-81 .pagebreak}[]{#pg-82 .pagebreak}[]{#pg-83 .pagebreak}[]{#pg-84 .pagebreak}[]{#pg-85 .pagebreak}[]{#pg-86 .pagebreak}[]{#pg-87 .pagebreak}[]{#pg-88 .pagebreak}[]{#pg-89 .pagebreak}[]{#pg-90 .pagebreak}[]{#pg-91 .pagebreak}[]{#pg-92 .pagebreak}[]{#pg-93 .pagebreak}[]{#pg-94 .pagebreak}[]{#pg-95 .pagebreak}[]{#pg-96 .pagebreak}[]{#pg-97 .pagebreak}[]{#pg-98 .pagebreak}[]{#pg-99 .pagebreak}[]{#pg-100 .pagebreak}[]{#pg-101 .pagebreak}[]{#pg-102 .pagebreak}[]{#pg-103 .pagebreak}[]{#pg-104 .pagebreak}[]{#pg-105 .pagebreak}[]{#pg-106 .pagebreak}[]{#pg-107 .pagebreak}[]{#pg-108 .pagebreak}[]{#pg-109 .pagebreak}[]{#pg-110 .pagebreak}[]{#pg-111 .pagebreak}[]{#pg-112 .pagebreak}[]{#pg-113 .pagebreak}[]{#pg-114 .pagebreak}[]{#pg-115 .pagebreak}[]{#pg-116 .pagebreak}[]{#pg-117 .pagebreak}[]{#pg-118 .pagebreak}[]{#pg-119 .pagebreak}[]{#pg-120 .pagebreak}[]{#pg-121 .pagebreak}[]{#pg-122 .pagebreak}[]{#pg-123 .pagebreak}[]{#pg-124 .pagebreak}[]{#pg-125 .pagebreak}[]{#pg-126 .pagebreak}[]{#pg-127 .pagebreak}[]{#pg-128 .pagebreak}[]{#pg-129 .pagebreak}[]{#pg-130 .pagebreak}[]{#pg-131 .pagebreak}[]{#pg-132 .pagebreak}[]{#pg-133 .pagebreak}[]{#pg-134 .pagebreak}[]{#pg-135 .pagebreak}[]{#pg-136 .pagebreak}[]{#pg-137 .pagebreak}[]{#pg-138 .pagebreak}[]{#pg-139 .pagebreak}[]{#pg-140 .pagebreak}[]{#pg-141 .pagebreak}[]{#pg-142 .pagebreak}[]{#pg-143 .pagebreak}[]{#pg-144 .pagebreak}[]{#pg-145 .pagebreak}[]{#pg-146 .pagebreak}[]{#pg-147 .pagebreak}[]{#pg-148 .pagebreak}[]{#pg-149 .pagebreak}[]{#pg-150 .pagebreak}[]{#pg-151 .pagebreak}[]{#pg-152 .pagebreak}[]{#pg-153 .pagebreak}[]{#pg-154 .pagebreak}[]{#pg-155 .pagebreak}[]{#pg-156 .pagebreak}[]{#pg-157 .pagebreak}[]{#pg-158 .pagebreak}[]{#pg-159 .pagebreak}[]{#pg-160 .pagebreak}[]{#pg-161 .pagebreak}[]{#pg-162 .pagebreak}[]{#pg-163 .pagebreak}[]{#pg-164 .pagebreak}[]{#pg-165 .pagebreak}[]{#pg-166 .pagebreak}[]{#pg-167 .pagebreak}[]{#pg-168 .pagebreak}[]{#pg-169 .pagebreak}[]{#pg-170 .pagebreak}[]{#pg-171 .pagebreak}[]{#pg-172 .pagebreak}[]{#pg-173 .pagebreak}[]{#pg-174 .pagebreak}[]{#pg-175 .pagebreak}[]{#pg-176 .pagebreak}[]{#pg-177 .pagebreak}[]{#pg-178 .pagebreak}[]{#pg-179 .pagebreak}[]{#pg-180 .pagebreak}[]{#pg-181 .pagebreak}[]{#pg-182 .pagebreak}[]{#pg-183 .pagebreak}[]{#pg-184 .pagebreak}[]{#pg-185 .pagebreak}[]{#pg-186 .pagebreak}[]{#pg-187 .pagebreak}[]{#pg-188 .pagebreak}[]{#pg-189 .pagebreak}[]{#pg-190 .pagebreak}[]{#pg-191 .pagebreak}[]{#pg-192 .pagebreak}[]{#pg-193 .pagebreak}[]{#pg-194 .pagebreak}[]{#pg-195 .pagebreak}[]{#pg-196 .pagebreak}[]{#pg-197 .pagebreak}[]{#pg-198 .pagebreak}[]{#pg-199 .pagebreak}[]{#pg-200 .pagebreak}[]{#pg-201 .pagebreak}[]{#pg-202 .pagebreak}[]{#pg-203 .pagebreak}[]{#pg-204 .pagebreak}[]{#pg-205 .pagebreak}[]{#pg-206 .pagebreak}[]{#pg-207 .pagebreak}[]{#pg-208 .pagebreak}[]{#pg-209 .pagebreak}[]{#pg-210 .pagebreak}[]{#pg-211 .pagebreak}[]{#pg-212 .pagebreak}[]{#pg-213 .pagebreak}[]{#pg-214 .pagebreak}[]{#pg-215 .pagebreak}[]{#pg-216 .pagebreak}[]{#pg-217 .pagebreak}[]{#pg-218 .pagebreak}[]{#pg-219 .pagebreak}[]{#pg-220 .pagebreak}[]{#pg-221 .pagebreak}[]{#pg-222 .pagebreak}[]{#pg-223 .pagebreak}[]{#pg-224 .pagebreak}[]{#pg-225 .pagebreak}[]{#pg-226 .pagebreak}[]{#pg-227 .pagebreak}[]{#pg-228 .pagebreak}[]{#pg-229 .pagebreak}[]{#pg-230 .pagebreak}[]{#pg-231 .pagebreak}[]{#pg-232 .pagebreak}[]{#pg-233 .pagebreak}[]{#pg-234 .pagebreak}[]{#pg-235 .pagebreak}[]{#pg-236 .pagebreak}[]{#pg-237 .pagebreak}[]{#pg-238 .pagebreak}[]{#pg-239 .pagebreak}[]{#pg-240 .pagebreak}[]{#pg-241 .pagebreak}[]{#pg-242 .pagebreak}[]{#pg-243 .pagebreak}[]{#pg-244 .pagebreak}[]{#pg-245 .pagebreak}[]{#pg-246 .pagebreak}[]{#pg-247 .pagebreak}[]{#pg-248 .pagebreak}[]{#pg-249 .pagebreak}[]{#pg-250 .pagebreak}[]{#pg-251 .pagebreak}[]{#pg-252 .pagebreak}[]{#pg-253 .pagebreak}[]{#pg-254 .pagebreak}[]{#pg-255 .pagebreak}[]{#pg-256 .pagebreak}[]{#pg-257 .pagebreak}[]{#pg-258 .pagebreak}[]{#pg-259 .pagebreak}[]{#pg-260 .pagebreak}[]{#pg-261 .pagebreak}[]{#pg-262 .pagebreak}[]{#pg-263 .pagebreak}[]{#pg-264 .pagebreak}[]{#pg-265 .pagebreak}[]{#pg-266 .pagebreak}[]{#pg-267 .pagebreak}[]{#pg-268 .pagebreak}[]{#pg-269 .pagebreak}[]{#pg-270 .pagebreak}[]{#pg-271 .pagebreak}[]{#pg-272 .pagebreak}[]{#pg-273 .pagebreak}[]{#pg-274 .pagebreak}[]{#pg-275 .pagebreak}[]{#pg-276 .pagebreak}[]{#pg-277 .pagebreak}[]{#pg-278 .pagebreak}[]{#pg-279 .pagebreak}[]{#pg-280 .pagebreak}[]{#pg-281 .pagebreak}[]{#pg-282 .pagebreak}[]{#pg-283 .pagebreak}[]{#pg-284 .pagebreak}[]{#pg-285 .pagebreak}[]{#pg-286 .pagebreak}[]{#pg-287 .pagebreak}[]{#pg-288 .pagebreak}[]{#pg-289 .pagebreak}[]{#pg-290 .pagebreak}[]{#pg-291 .pagebreak}[]{#pg-292 .pagebreak}[]{#pg-293 .pagebreak}[]{#pg-294 .pagebreak}[]{#pg-295 .pagebreak}[]{#pg-296 .pagebreak}[]{#pg-297 .pagebreak}[]{#pg-298 .pagebreak}[]{#pg-299 .pagebreak}[]{#pg-300 .pagebreak}[]{#pg-301 .pagebreak}[]{#pg-302 .pagebreak}[]{#pg-303 .pagebreak}[]{#pg-304 .pagebreak}[]{#pg-305 .pagebreak}[]{#pg-306 .pagebreak}[]{#pg-307 .pagebreak}[]{#pg-308 .pagebreak}[]{#pg-309 .pagebreak}[]{#pg-310 .pagebreak}[]{#pg-311 .pagebreak}[]{#pg-312 .pagebreak}[]{#pg-313 .pagebreak}[]{#pg-314 .pagebreak}[]{#pg-315 .pagebreak}[]{#pg-316 .pagebreak}[]{#pg-317 .pagebreak}[]{#pg-318 .pagebreak}[]{#pg-319 .pagebreak}[]{#pg-320 .pagebreak}[]{#pg-321 .pagebreak}[]{#pg-322 .pagebreak}[]{#pg-323 .pagebreak}[]{#pg-324 .pagebreak}[]{#pg-325 .pagebreak}[]{#pg-326 .pagebreak}[]{#pg-327 .pagebreak}[]{#pg-328 .pagebreak}[]{#pg-329 .pagebreak}[]{#pg-330 .pagebreak}[]{#pg-331 .pagebreak}[]{#pg-332 .pagebreak}[]{#pg-333 .pagebreak}[]{#pg-334 .pagebreak}[]{#pg-335 .pagebreak}[]{#pg-336 .pagebreak}[]{#pg-337 .pagebreak}[]{#pg-338 .pagebreak}[]{#pg-339 .pagebreak}[]{#pg-340 .pagebreak}[]{#pg-341 .pagebreak}[]{#pg-342 .pagebreak}[]{#pg-343 .pagebreak}[]{#pg-344 .pagebreak}[]{#pg-345 .pagebreak}[]{#pg-346 .pagebreak}[]{#pg-347 .pagebreak}[]{#pg-348 .pagebreak}[]{#pg-349 .pagebreak}[]{#pg-350 .pagebreak}[]{#pg-351 .pagebreak}[]{#pg-352 .pagebreak}[]{#pg-353 .pagebreak}[]{#pg-354 .pagebreak}[]{#pg-355 .pagebreak}[]{#pg-356 .pagebreak}[]{#pg-357 .pagebreak}[]{#pg-358 .pagebreak}[]{#pg-359 .pagebreak}[]{#pg-360 .pagebreak}[]{#pg-361 .pagebreak}[]{#pg-362 .pagebreak}[]{#pg-363 .pagebreak}[]{#pg-364 .pagebreak}[]{#pg-365 .pagebreak}[]{#pg-366 .pagebreak}[]{#pg-367 .pagebreak}[]{#pg-368 .pagebreak}[]{#pg-369 .pagebreak}[]{#pg-370 .pagebreak}[]{#pg-371 .pagebreak}[]{#pg-372 .pagebreak}[]{#pg-373 .pagebreak}[]{#pg-374 .pagebreak}[]{#pg-375 .pagebreak}[]{#pg-376 .pagebreak}[]{#pg-377 .pagebreak}[]{#pg-378 .pagebreak}[]{#pg-379 .pagebreak}[]{#pg-380 .pagebreak}[]{#pg-381 .pagebreak}[]{#pg-382 .pagebreak}[]{#pg-383 .pagebreak}[]{#pg-384 .pagebreak}[]{#pg-385 .pagebreak}[]{#pg-386 .pagebreak}[]{#pg-387 .pagebreak}[]{#pg-388 .pagebreak}[]{#pg-389 .pagebreak}[]{#pg-390 .pagebreak}[]{#pg-391 .pagebreak}[]{#pg-392 .pagebreak}[]{#pg-393 .pagebreak}[]{#pg-394 .pagebreak}[]{#pg-395 .pagebreak}[]{#pg-396 .pagebreak}[]{#pg-397 .pagebreak}[]{#pg-398 .pagebreak}[]{#pg-399 .pagebreak}[]{#pg-400 .pagebreak}[]{#pg-401 .pagebreak}[]{#pg-402 .pagebreak}[]{#pg-403 .pagebreak}[]{#pg-404 .pagebreak}[]{#pg-405 .pagebreak}[]{#pg-406 .pagebreak}[]{#pg-407 .pagebreak}[]{#pg-408 .pagebreak}[]{#pg-409 .pagebreak}[]{#pg-410 .pagebreak}[]{#pg-411 .pagebreak}[]{#pg-412 .pagebreak}[]{#pg-413 .pagebreak}[]{#pg-414 .pagebreak}[]{#pg-415 .pagebreak}[]{#pg-416 .pagebreak}[]{#pg-417 .pagebreak}[]{#pg-418 .pagebreak}[]{#pg-419 .pagebreak}[]{#pg-420 .pagebreak}[]{#pg-421 .pagebreak}[]{#pg-422 .pagebreak}[]{#pg-423 .pagebreak}[]{#pg-424 .pagebreak}[]{#pg-425 .pagebreak}[]{#pg-426 .pagebreak}[]{#pg-427 .pagebreak}[]{#pg-428 .pagebreak}[]{#pg-429 .pagebreak}[]{#pg-430 .pagebreak}[]{#pg-431 .pagebreak}[]{#pg-432 .pagebreak}[]{#pg-433 .pagebreak}[]{#pg-434 .pagebreak}[]{#pg-435 .pagebreak}[]{#pg-436 .pagebreak}[]{#pg-437 .pagebreak}[]{#pg-438 .pagebreak}[]{#pg-439 .pagebreak}[]{#pg-440 .pagebreak}[]{#pg-441 .pagebreak}[]{#pg-442 .pagebreak}[]{#pg-443 .pagebreak}[]{#pg-444 .pagebreak}[]{#pg-445 .pagebreak}[]{#pg-446 .pagebreak}[]{#pg-447 .pagebreak}[]{#pg-448 .pagebreak}[]{#pg-449 .pagebreak}[]{#pg-450 .pagebreak}[]{#pg-451 .pagebreak}[]{#pg-452 .pagebreak}[]{#pg-453 .pagebreak}[]{#pg-454 .pagebreak}[]{#pg-455 .pagebreak}[]{#pg-456 .pagebreak}[]{#pg-457 .pagebreak}[]{#pg-458 .pagebreak}[]{#pg-459 .pagebreak}[]{#pg-460 .pagebreak}[]{#pg-461 .pagebreak}[]{#pg-462 .pagebreak}[]{#pg-463 .pagebreak}[]{#pg-464 .pagebreak}[]{#pg-465 .pagebreak}[]{#pg-466 .pagebreak}[]{#pg-467 .pagebreak}[]{#pg-468 .pagebreak}[]{#pg-469 .pagebreak}[]{#pg-470 .pagebreak}[]{#pg-471 .pagebreak}[]{#pg-472 .pagebreak}[]{#pg-473 .pagebreak}[]{#pg-474 .pagebreak}[]{#pg-475 .pagebreak}[]{#pg-476 .pagebreak}[]{#pg-477 .pagebreak}[]{#pg-478 .pagebreak}[]{#pg-479 .pagebreak}[]{#pg-480 .pagebreak}[]{#pg-481 .pagebreak}[]{#pg-482 .pagebreak}[]{#pg-483 .pagebreak}[]{#pg-484 .pagebreak}[]{#pg-485 .pagebreak}[]{#pg-486 .pagebreak}[]{#pg-487 .pagebreak}[]{#pg-488 .pagebreak}[]{#pg-489 .pagebreak}[]{#pg-490 .pagebreak}[]{#pg-491 .pagebreak}[]{#pg-492 .pagebreak}[]{#pg-493 .pagebreak}[]{#pg-494 .pagebreak}[]{#pg-495 .pagebreak}[]{#pg-496 .pagebreak}[]{#pg-497 .pagebreak}[]{#pg-498 .pagebreak}[]{#pg-499 .pagebreak}[]{#pg-500 .pagebreak}[]{#pg-501 .pagebreak}[]{#pg-502 .pagebreak}[]{#pg-503 .pagebreak}[]{#pg-504 .pagebreak}[]{#pg-505 .pagebreak}[]{#pg-506 .pagebreak}[]{#pg-507 .pagebreak}[]{#pg-508 .pagebreak}[]{#pg-509 .pagebreak}
+# السلوك
+المقريزي
+
+# شرح منهج البلاغة
+ابن أبي الحديد
+
+# الشعر الشرقي
+عزرا باورفد
+
+# الشفاء
+ابن سينا
+
+# ظاهريات الفكر
+هيجل
+
+# العالم إرادة وتمثلا
+شوبنور
+
+# العقد الفريد
+ابن عبد ربه
+
+# علم الأخلاق
+سينورا
+
+# العلم والدين
+إميل بوترو
+
+# عن طبيعة الأشياء
+لوكريتيوس
+
+# عيون الأخبار
+بن قتيبة
+
+# فاوست
+جوته
+
+# الفرس
+ايسخيلوس
+
+# فن الشعر
+أرسطوطاليس
+
+# فن الشعر
+هوراطيوس
+
+# في التربية الجمالية للإنسان
+فردريش شيلر
+
+# القانون المسعودي
+البيروني
+
+# قصيدة الأعمال والأيام
+هيسودوس
+
+# الكامل في التاريخ
+ابن الأثير
+
+# كتاب الحيوان
+الجاحظ
+
+# كتاب الصناعتين
+أبو هلال العسكرى
+
+# الكتب الخمسة
+كنفشيوس
+
+# الكون
+الكسندر فون هومبولت
+
+# الليالي
+الفريد دي موسيه
+
+# ما بعد الطبيعة
+أرسطوطاليس
+
+# المثل السائر في أدب الكاتب
+ضياء الدين بن الأثير
+
+# محاورات ليو باردى
+ليوباردى
+
+# مذهب الذرات الروحية « المونادولوجيا »
+ليبنش
+
+# مقالات الإسلاميين
+الأشعرى
+
+# لنداءات إلى الأمة الألمانية
+فنتشه
+
+# النساء العالمات
+مولير
+
+# لنشأة الحياة على الأرض
+أوبارين
+
+# النظرية الميكروبية للمرض
+لوى باستير
+
+# يوميات اميل
+هنرى فردر يك اميل
+
+# المؤلفون
+
+[]{#pg-12 .pagebreak}[]{#pg-13 .pagebreak}[]{#pg-14 .pagebreak}[]{#pg-15 .pagebreak}[]{#pg-16 .pagebreak}[]{#pg-17 .pagebreak}[]{#pg-18 .pagebreak}[]{#pg-19 .pagebreak}[]{#pg-20 .pagebreak}[]{#pg-21 .pagebreak}[]{#pg-22 .pagebreak}[]{#pg-23 .pagebreak}[]{#pg-24 .pagebreak}[]{#pg-25 .pagebreak}[]{#pg-26 .pagebreak}[]{#pg-27 .pagebreak}[]{#pg-28 .pagebreak}[]{#pg-29 .pagebreak}[]{#pg-30 .pagebreak}[]{#pg-31 .pagebreak}[]{#pg-32 .pagebreak}[]{#pg-33 .pagebreak}[]{#pg-34 .pagebreak}[]{#pg-35 .pagebreak}[]{#pg-36 .pagebreak}[]{#pg-37 .pagebreak}[]{#pg-38 .pagebreak}[]{#pg-39 .pagebreak}[]{#pg-40 .pagebreak}[]{#pg-41 .pagebreak}[]{#pg-42 .pagebreak}[]{#pg-43 .pagebreak}[]{#pg-44 .pagebreak}[]{#pg-45 .pagebreak}[]{#pg-46 .pagebreak}[]{#pg-47 .pagebreak}[]{#pg-48 .pagebreak}[]{#pg-49 .pagebreak}[]{#pg-50 .pagebreak}[]{#pg-51 .pagebreak}[]{#pg-52 .pagebreak}[]{#pg-53 .pagebreak}[]{#pg-54 .pagebreak}[]{#pg-55 .pagebreak}[]{#pg-56 .pagebreak}[]{#pg-57 .pagebreak}[]{#pg-58 .pagebreak}[]{#pg-59 .pagebreak}[]{#pg-60 .pagebreak}[]{#pg-61 .pagebreak}[]{#pg-62 .pagebreak}[]{#pg-63 .pagebreak}[]{#pg-64 .pagebreak}[]{#pg-65 .pagebreak}[]{#pg-66 .pagebreak}[]{#pg-67 .pagebreak}[]{#pg-68 .pagebreak}[]{#pg-69 .pagebreak}[]{#pg-70 .pagebreak}[]{#pg-71 .pagebreak}[]{#pg-72 .pagebreak}[]{#pg-73 .pagebreak}[]{#pg-74 .pagebreak}[]{#pg-75 .pagebreak}[]{#pg-76 .pagebreak}[]{#pg-77 .pagebreak}[]{#pg-78 .pagebreak}[]{#pg-79 .pagebreak}[]{#pg-80 .pagebreak}[]{#pg-81 .pagebreak}[]{#pg-82 .pagebreak}[]{#pg-83 .pagebreak}[]{#pg-84 .pagebreak}[]{#pg-85 .pagebreak}[]{#pg-86 .pagebreak}[]{#pg-87 .pagebreak}[]{#pg-88 .pagebreak}[]{#pg-89 .pagebreak}[]{#pg-90 .pagebreak}[]{#pg-91 .pagebreak}[]{#pg-92 .pagebreak}[]{#pg-93 .pagebreak}[]{#pg-94 .pagebreak}[]{#pg-95 .pagebreak}[]{#pg-96 .pagebreak}[]{#pg-97 .pagebreak}[]{#pg-98 .pagebreak}[]{#pg-99 .pagebreak}[]{#pg-100 .pagebreak}[]{#pg-101 .pagebreak}[]{#pg-102 .pagebreak}[]{#pg-103 .pagebreak}[]{#pg-104 .pagebreak}[]{#pg-105 .pagebreak}[]{#pg-106 .pagebreak}[]{#pg-107 .pagebreak}[]{#pg-108 .pagebreak}[]{#pg-109 .pagebreak}[]{#pg-110 .pagebreak}[]{#pg-111 .pagebreak}[]{#pg-112 .pagebreak}[]{#pg-113 .pagebreak}[]{#pg-114 .pagebreak}[]{#pg-115 .pagebreak}[]{#pg-116 .pagebreak}[]{#pg-117 .pagebreak}[]{#pg-118 .pagebreak}[]{#pg-119 .pagebreak}[]{#pg-120 .pagebreak}[]{#pg-121 .pagebreak}[]{#pg-122 .pagebreak}[]{#pg-123 .pagebreak}[]{#pg-124 .pagebreak}[]{#pg-125 .pagebreak}[]{#pg-126 .pagebreak}[]{#pg-127 .pagebreak}[]{#pg-128 .pagebreak}[]{#pg-129 .pagebreak}[]{#pg-130 .pagebreak}[]{#pg-131 .pagebreak}[]{#pg-132 .pagebreak}[]{#pg-133 .pagebreak}[]{#pg-134 .pagebreak}[]{#pg-135 .pagebreak}[]{#pg-136 .pagebreak}[]{#pg-137 .pagebreak}[]{#pg-138 .pagebreak}[]{#pg-139 .pagebreak}[]{#pg-140 .pagebreak}[]{#pg-141 .pagebreak}[]{#pg-142 .pagebreak}[]{#pg-143 .pagebreak}[]{#pg-144 .pagebreak}[]{#pg-145 .pagebreak}[]{#pg-146 .pagebreak}[]{#pg-147 .pagebreak}[]{#pg-148 .pagebreak}[]{#pg-149 .pagebreak}[]{#pg-150 .pagebreak}[]{#pg-151 .pagebreak}[]{#pg-152 .pagebreak}[]{#pg-153 .pagebreak}[]{#pg-154 .pagebreak}[]{#pg-155 .pagebreak}[]{#pg-156 .pagebreak}[]{#pg-157 .pagebreak}[]{#pg-158 .pagebreak}[]{#pg-159 .pagebreak}[]{#pg-160 .pagebreak}[]{#pg-161 .pagebreak}[]{#pg-162 .pagebreak}[]{#pg-163 .pagebreak}[]{#pg-164 .pagebreak}[]{#pg-165 .pagebreak}[]{#pg-166 .pagebreak}[]{#pg-167 .pagebreak}[]{#pg-168 .pagebreak}[]{#pg-169 .pagebreak}[]{#pg-170 .pagebreak}[]{#pg-171 .pagebreak}[]{#pg-172 .pagebreak}[]{#pg-173 .pagebreak}[]{#pg-174 .pagebreak}[]{#pg-175 .pagebreak}[]{#pg-176 .pagebreak}[]{#pg-177 .pagebreak}[]{#pg-178 .pagebreak}[]{#pg-179 .pagebreak}[]{#pg-180 .pagebreak}[]{#pg-181 .pagebreak}[]{#pg-182 .pagebreak}[]{#pg-183 .pagebreak}[]{#pg-184 .pagebreak}[]{#pg-185 .pagebreak}[]{#pg-186 .pagebreak}[]{#pg-187 .pagebreak}[]{#pg-188 .pagebreak}[]{#pg-189 .pagebreak}[]{#pg-190 .pagebreak}[]{#pg-191 .pagebreak}[]{#pg-192 .pagebreak}[]{#pg-193 .pagebreak}[]{#pg-194 .pagebreak}[]{#pg-195 .pagebreak}[]{#pg-196 .pagebreak}[]{#pg-197 .pagebreak}[]{#pg-198 .pagebreak}[]{#pg-199 .pagebreak}[]{#pg-200 .pagebreak}[]{#pg-201 .pagebreak}[]{#pg-202 .pagebreak}[]{#pg-203 .pagebreak}[]{#pg-204 .pagebreak}[]{#pg-205 .pagebreak}[]{#pg-206 .pagebreak}[]{#pg-207 .pagebreak}[]{#pg-208 .pagebreak}[]{#pg-209 .pagebreak}[]{#pg-210 .pagebreak}[]{#pg-211 .pagebreak}[]{#pg-212 .pagebreak}[]{#pg-213 .pagebreak}[]{#pg-214 .pagebreak}[]{#pg-215 .pagebreak}[]{#pg-216 .pagebreak}[]{#pg-217 .pagebreak}[]{#pg-218 .pagebreak}[]{#pg-219 .pagebreak}[]{#pg-220 .pagebreak}[]{#pg-221 .pagebreak}[]{#pg-222 .pagebreak}[]{#pg-223 .pagebreak}[]{#pg-224 .pagebreak}[]{#pg-225 .pagebreak}[]{#pg-226 .pagebreak}[]{#pg-227 .pagebreak}[]{#pg-228 .pagebreak}[]{#pg-229 .pagebreak}[]{#pg-230 .pagebreak}[]{#pg-231 .pagebreak}[]{#pg-232 .pagebreak}[]{#pg-233 .pagebreak}[]{#pg-234 .pagebreak}[]{#pg-235 .pagebreak}[]{#pg-236 .pagebreak}[]{#pg-237 .pagebreak}[]{#pg-238 .pagebreak}[]{#pg-239 .pagebreak}[]{#pg-240 .pagebreak}[]{#pg-241 .pagebreak}[]{#pg-242 .pagebreak}[]{#pg-243 .pagebreak}[]{#pg-244 .pagebreak}[]{#pg-245 .pagebreak}[]{#pg-246 .pagebreak}[]{#pg-247 .pagebreak}[]{#pg-248 .pagebreak}[]{#pg-249 .pagebreak}[]{#pg-250 .pagebreak}[]{#pg-251 .pagebreak}[]{#pg-252 .pagebreak}[]{#pg-253 .pagebreak}[]{#pg-254 .pagebreak}[]{#pg-255 .pagebreak}[]{#pg-256 .pagebreak}[]{#pg-257 .pagebreak}[]{#pg-258 .pagebreak}[]{#pg-259 .pagebreak}[]{#pg-260 .pagebreak}[]{#pg-261 .pagebreak}[]{#pg-262 .pagebreak}[]{#pg-263 .pagebreak}[]{#pg-264 .pagebreak}[]{#pg-265 .pagebreak}[]{#pg-266 .pagebreak}[]{#pg-267 .pagebreak}[]{#pg-268 .pagebreak}[]{#pg-269 .pagebreak}[]{#pg-270 .pagebreak}[]{#pg-271 .pagebreak}[]{#pg-272 .pagebreak}[]{#pg-273 .pagebreak}[]{#pg-274 .pagebreak}[]{#pg-275 .pagebreak}[]{#pg-276 .pagebreak}[]{#pg-277 .pagebreak}[]{#pg-278 .pagebreak}[]{#pg-279 .pagebreak}[]{#pg-280 .pagebreak}[]{#pg-281 .pagebreak}[]{#pg-282 .pagebreak}[]{#pg-283 .pagebreak}[]{#pg-284 .pagebreak}[]{#pg-285 .pagebreak}[]{#pg-286 .pagebreak}[]{#pg-287 .pagebreak}[]{#pg-288 .pagebreak}[]{#pg-289 .pagebreak}[]{#pg-290 .pagebreak}[]{#pg-291 .pagebreak}[]{#pg-292 .pagebreak}[]{#pg-293 .pagebreak}[]{#pg-294 .pagebreak}[]{#pg-295 .pagebreak}[]{#pg-296 .pagebreak}[]{#pg-297 .pagebreak}[]{#pg-298 .pagebreak}[]{#pg-299 .pagebreak}[]{#pg-300 .pagebreak}[]{#pg-301 .pagebreak}[]{#pg-302 .pagebreak}[]{#pg-303 .pagebreak}[]{#pg-304 .pagebreak}[]{#pg-305 .pagebreak}[]{#pg-306 .pagebreak}[]{#pg-307 .pagebreak}[]{#pg-308 .pagebreak}[]{#pg-309 .pagebreak}[]{#pg-310 .pagebreak}[]{#pg-311 .pagebreak}[]{#pg-312 .pagebreak}[]{#pg-313 .pagebreak}[]{#pg-314 .pagebreak}[]{#pg-315 .pagebreak}[]{#pg-316 .pagebreak}[]{#pg-317 .pagebreak}[]{#pg-318 .pagebreak}[]{#pg-319 .pagebreak}[]{#pg-320 .pagebreak}[]{#pg-321 .pagebreak}[]{#pg-322 .pagebreak}[]{#pg-323 .pagebreak}[]{#pg-324 .pagebreak}[]{#pg-325 .pagebreak}[]{#pg-326 .pagebreak}[]{#pg-327 .pagebreak}[]{#pg-328 .pagebreak}[]{#pg-329 .pagebreak}[]{#pg-330 .pagebreak}[]{#pg-331 .pagebreak}[]{#pg-332 .pagebreak}[]{#pg-333 .pagebreak}[]{#pg-334 .pagebreak}[]{#pg-335 .pagebreak}[]{#pg-336 .pagebreak}[]{#pg-337 .pagebreak}[]{#pg-338 .pagebreak}[]{#pg-339 .pagebreak}[]{#pg-340 .pagebreak}[]{#pg-341 .pagebreak}[]{#pg-342 .pagebreak}[]{#pg-343 .pagebreak}[]{#pg-344 .pagebreak}[]{#pg-345 .pagebreak}[]{#pg-346 .pagebreak}[]{#pg-347 .pagebreak}[]{#pg-348 .pagebreak}[]{#pg-349 .pagebreak}[]{#pg-350 .pagebreak}[]{#pg-351 .pagebreak}[]{#pg-352 .pagebreak}[]{#pg-353 .pagebreak}[]{#pg-354 .pagebreak}[]{#pg-355 .pagebreak}[]{#pg-356 .pagebreak}[]{#pg-357 .pagebreak}[]{#pg-358 .pagebreak}[]{#pg-359 .pagebreak}[]{#pg-360 .pagebreak}[]{#pg-361 .pagebreak}[]{#pg-362 .pagebreak}[]{#pg-363 .pagebreak}[]{#pg-364 .pagebreak}[]{#pg-365 .pagebreak}[]{#pg-366 .pagebreak}[]{#pg-367 .pagebreak}[]{#pg-368 .pagebreak}[]{#pg-369 .pagebreak}[]{#pg-370 .pagebreak}[]{#pg-371 .pagebreak}[]{#pg-372 .pagebreak}[]{#pg-373 .pagebreak}[]{#pg-374 .pagebreak}[]{#pg-375 .pagebreak}[]{#pg-376 .pagebreak}[]{#pg-377 .pagebreak}[]{#pg-378 .pagebreak}[]{#pg-379 .pagebreak}[]{#pg-380 .pagebreak}[]{#pg-381 .pagebreak}[]{#pg-382 .pagebreak}[]{#pg-383 .pagebreak}[]{#pg-384 .pagebreak}[]{#pg-385 .pagebreak}[]{#pg-386 .pagebreak}[]{#pg-387 .pagebreak}[]{#pg-388 .pagebreak}[]{#pg-389 .pagebreak}[]{#pg-390 .pagebreak}[]{#pg-391 .pagebreak}[]{#pg-392 .pagebreak}[]{#pg-393 .pagebreak}[]{#pg-394 .pagebreak}[]{#pg-395 .pagebreak}[]{#pg-396 .pagebreak}[]{#pg-397 .pagebreak}[]{#pg-398 .pagebreak}[]{#pg-399 .pagebreak}[]{#pg-400 .pagebreak}[]{#pg-401 .pagebreak}[]{#pg-402 .pagebreak}[]{#pg-403 .pagebreak}[]{#pg-404 .pagebreak}[]{#pg-405 .pagebreak}[]{#pg-406 .pagebreak}[]{#pg-407 .pagebreak}[]{#pg-408 .pagebreak}[]{#pg-409 .pagebreak}[]{#pg-410 .pagebreak}[]{#pg-411 .pagebreak}[]{#pg-412 .pagebreak}[]{#pg-413 .pagebreak}[]{#pg-414 .pagebreak}[]{#pg-415 .pagebreak}[]{#pg-416 .pagebreak}[]{#pg-417 .pagebreak}[]{#pg-418 .pagebreak}[]{#pg-419 .pagebreak}[]{#pg-420 .pagebreak}[]{#pg-421 .pagebreak}[]{#pg-422 .pagebreak}[]{#pg-423 .pagebreak}[]{#pg-424 .pagebreak}[]{#pg-425 .pagebreak}[]{#pg-426 .pagebreak}[]{#pg-427 .pagebreak}[]{#pg-428 .pagebreak}[]{#pg-429 .pagebreak}[]{#pg-430 .pagebreak}[]{#pg-431 .pagebreak}[]{#pg-432 .pagebreak}[]{#pg-433 .pagebreak}[]{#pg-434 .pagebreak}[]{#pg-435 .pagebreak}[]{#pg-436 .pagebreak}[]{#pg-437 .pagebreak}[]{#pg-438 .pagebreak}[]{#pg-439 .pagebreak}[]{#pg-440 .pagebreak}[]{#pg-441 .pagebreak}[]{#pg-442 .pagebreak}[]{#pg-443 .pagebreak}[]{#pg-444 .pagebreak}[]{#pg-445 .pagebreak}[]{#pg-446 .pagebreak}[]{#pg-447 .pagebreak}[]{#pg-448 .pagebreak}[]{#pg-449 .pagebreak}[]{#pg-450 .pagebreak}[]{#pg-451 .pagebreak}[]{#pg-452 .pagebreak}[]{#pg-453 .pagebreak}[]{#pg-454 .pagebreak}[]{#pg-455 .pagebreak}[]{#pg-456 .pagebreak}[]{#pg-457 .pagebreak}[]{#pg-458 .pagebreak}[]{#pg-459 .pagebreak}[]{#pg-460 .pagebreak}[]{#pg-461 .pagebreak}[]{#pg-462 .pagebreak}[]{#pg-463 .pagebreak}[]{#pg-464 .pagebreak}[]{#pg-465 .pagebreak}[]{#pg-466 .pagebreak}[]{#pg-467 .pagebreak}[]{#pg-468 .pagebreak}[]{#pg-469 .pagebreak}[]{#pg-470 .pagebreak}[]{#pg-471 .pagebreak}[]{#pg-472 .pagebreak}[]{#pg-473 .pagebreak}[]{#pg-474 .pagebreak}[]{#pg-475 .pagebreak}[]{#pg-476 .pagebreak}[]{#pg-477 .pagebreak}[]{#pg-478 .pagebreak}[]{#pg-479 .pagebreak}[]{#pg-480 .pagebreak}[]{#pg-481 .pagebreak}[]{#pg-482 .pagebreak}[]{#pg-483 .pagebreak}[]{#pg-484 .pagebreak}[]{#pg-485 .pagebreak}[]{#pg-486 .pagebreak}[]{#pg-487 .pagebreak}[]{#pg-488 .pagebreak}[]{#pg-489 .pagebreak}[]{#pg-490 .pagebreak}[]{#pg-491 .pagebreak}[]{#pg-492 .pagebreak}[]{#pg-493 .pagebreak}[]{#pg-494 .pagebreak}[]{#pg-495 .pagebreak}[]{#pg-496 .pagebreak}[]{#pg-497 .pagebreak}[]{#pg-498 .pagebreak}[]{#pg-499 .pagebreak}[]{#pg-500 .pagebreak}[]{#pg-501 .pagebreak}[]{#pg-502 .pagebreak}[]{#pg-503 .pagebreak}[]{#pg-504 .pagebreak}[]{#pg-505 .pagebreak}ابن أبى الحديد عز الدين أبوحامد عبدالحميد بن أبى الحسن شرح نهج البلاغة ( ٥٨٦ - ٦٥٦ هـ ) .... ١٢٠ - ١٣٩
+
+ابن الأثير عز الدين أبو الحسن محمد الشيباني الكامل فى التاريخ ( ٥٠٠ - ٦٣٠ هـ ) .... ٩٠٦ - ٩٢٢
+
+ابن سينا أبو عبدالله الحسين بن عبدالله بن سينا الشفاء ( ٣٧٠ - ٤٢٨ هـ ) .... ٢٥٧ - ٢٦٩
+
+ابن عبدربه
+
+العقد الفريد ( ٢٤٦ - ٣٢٨ هـ ) .... ١٤ - ٣٢
+
+ابن قتيبة أبو محمد عبدالله بن مسلم الدينورى المروزي عيون الأخبار ( ٢١٣ - ٢٧٦ هـ ) .... ٣٣٠ - ٣٤٠
+
+أبو بكر الطرطوشي = الطرطوشي
+
+أبوحامد عبدالحميد بن أبى الحسن عزالدين ابن أبى الحديد
+
+أبو الحسن الأشعرى = الأشعرى
+
+أبو الريحان = البيرونى
+
+أبو عبدالله الحسين بن عبدالله بن سينا = ابن سينا
+
+أبو عثمان بن بحر بن محجوب البصرى = الجاحظ
+
+أبو العلاء أحمد بن عبدالله بن سليمان المعرى التنوخى . سقط الزند ( ٣٦٣ - ٤٤٩ هـ ) .... ٥٧ - ٧٤ رسالة الغفران .... ٤٢١ - ٤٣٥
+
+أبو الفتح بن الأثير = ضياء الدين بن الأثير
+
+أبو الفضل بن مبارك العلاى
+
+أين اكبرى ( ٥٩٥ هـ - ) .... ٤٦٨ - ٤٨٢
+
+أبو محمد عبدالله بن مسلم الدينورى المرزوى = ابن قتيبة
+
+أبو نصر محمد الفارابى = الفارابي
+
+أبو هلال العسكرى الحسن بن عبدالله بن سهل كتاب الصناعين ( ٣١٠ - ٣٩٥ هـ ) .... ٤٩٣ - ٥٠٨
+
+اتبن أميل مارى بوترو = اميل بوترو
+
+أحمد بن عبدالله بن سليمان المعرى التنوخى = أبو العلاء
+
+أحمد بن على المقريزي = المقريزي
+
+الأخوين جريم هما ياكوب وفيلهلم جريم حكايات الأخوين جريم ياكوب ( ١٧٨٥ - ١٨٦٣ م ) ... فيلهلم ( ١٧٨٦ - ١٨٥٩ م ) .... ٦١١ - ٦١٩
+
+أرسطوطاليس فن الشعر ( ٣٨٤ - ٣٢٢ ق م ) .... ٣٠٨ - ٣١٧ ما بعد الطبيعة .... ٥٢٢ - ٥٣٠
+
+الأشعرى أبو الحسن الأشعرى مقالات الإسلاميين ( ٢٦٠ - ٣٢٤ هـ ) .... ٣٥٧ - ٣٧٢
+
+الفريد ذى موسيه الليالى ( ١٨١٠ - ١٨٥٧ م ) .... ٣٣ - ٤٩
+
+القديس أوغسطن اعترافات القديس أوغسطن ( ٣٥٤ - ٤٣٠ م ) .... ٦٥٤ - ٦٦٦
+
+الكسندر ايفانوفقتش = أوبارين
+
+ألكسندر فون هومبولت = فردريد ك هنريش الكون ( ١٧٦٩ - ١٨٥٩ م ) .... ٢٤٦ - ٢٥٦
+
+اميل بوترو العلم والدين ( ١٨٤٥ - ١٩٢١ م ) .... ٦٩٩ - ٧١٤
+
+أوبارين ألكسندر ايفانوفقتش نشأة الحياة على الأرض ( - ) .... ١٧٠ - ١٨٠
+
+أوجست كونت دروس فى الفلسفة الوضعية ( ١٧٩٨ - ١٨٥٧ م ) .... ٣ - ١٣
+
+ايسخيلوس الفرس ( ٥٢٥ - ٥. هـ ) .... ٦٢٠ - ٦٢٩
+
+برجسون التطور الخالق ( ١٨٥٩ - ١٩٤١ م ) .... ٤٣٦ - ٤٥٣
+
+برناردان دى سان بيبر = جاك هنرى بول وفرجينى ( ١٧٣٧ - ١٨١٤ م ) .... ٣٧٣ - ٣٩٠
+
+بسكال الخواطر ( ٦٢٣ - ١٦٦٢ م ) .... ٧٥ - ٨٥ []{#pg-506 .pagebreak}[]{#pg-507 .pagebreak}لوي باستير
+النظرية الميكروبية للمرض (١٨٢٢-١٨٩٥م) ٢٩٧ - ٣٠٧
+
+لويس كارول
+أليس في أرض العجائب (١٨٣٢ - ١٨٩٨م) ٣١٨ - ٣٢٩
+
+ليبنس جوتفريد فهللم
+مذهب الذرات الروحية « المونادولوجيا » (١٦٤٦ - ١٧١٦م) ٥٩٧ - ٦١٠
+
+ليوباردى جياكومو
+محاورات ليوباردى (١٧٩٨-١٨٣٧م) ٣٤١ - ٣٥٧
+
+ماركو بولو
+رحلة ماركو بولو ( - ) ٨٠٤ - ٨١٥
+
+محمد عبده
+رسالة التوحيد (١٨٤٩ - ١٩٠٥م) ٧٦١ - ٧٧٩
+
+مرجريت منتشل جون مارش
+ذهب مع الريح (١٩٠٠ - ١٩٤٩م) ٤٥٤ - ٤٦٧
+
+مشرف بن مصلح = سعدى الشيرازي
+
+المقريزي أحمد بن على
+السلوك (١٣٦٤ - ١٤٤٣م) ٥٠٩ - ٥٢١
+
+مولير
+البخيل (١٦٢٢ - ١٦٧٣م) ٢٢٨ - ٢٤٥
+النساء العالمات ٥٤٩ - ٥٦٨
+
+هيسودوس
+قصيدة الأعمال والأيام ( - ) ٤٨٣ - ٤٩٢
+
+هنرى بيل = ستاندال
+
+هنرى فردریک اميل
+يوميات اميل (١٨٢١ - م) ٣٨١ - ٦٩٨
+
+هوراتيوس
+فن الشعر (٦٥ - ٨ ق.م) ٩٢٣ - ٩٣٢
+
+هيجل جورج وليم فردریک
+ظاهريات الفكر (١٧٧٠ - ١٨٣١م) ٧١٥ - ٧٣١
+
+ياكوب وفيلهلم جريم = الأخوين جريم
+
+يوهان كريستوف فردریک شيلر = فردریک شيلر
+
+[]{#pg-508 .pagebreak}[]{#pg-509 .pagebreak}
