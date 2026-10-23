@@ -39,6 +39,8 @@ LIMITS = (("flash-lite", 500),)
 # How often the run looks at the status page's requests (Live.watch), in seconds.
 CONTROL_EVERY = 10
 MODEL_ID = re.compile(r"^(gemini|gemma)-[a-z0-9.-]{1,60}$")
+# The boxes the page sends to a run going (Live.watch): the steps of a book's pages.
+WORK_BOXES = ("read1", "read2", "settle")
 
 
 def iso(t=None):
@@ -181,10 +183,14 @@ class Live:
         self.thread = None
         self.stopping = threading.Event()
         # The status page's requests during the run (watch): a file the Drive inbox script
-        # writes, {"retry": {model: when}}, read every CONTROL_EVERY seconds.
+        # writes, {"retry": {model: when}, "boxes": {...}, "helper": {...}, "boxes_at": when},
+        # read every CONTROL_EVERY seconds. boxes_at: when the boxes this run took were saved.
         self.control = None
         self.on_retry = None
+        self.on_boxes = None
         self.retries = {}
+        self.boxes_seen = ""
+        self.boxes_at = ""
         self.control_at = 0.0
 
     @property
@@ -372,23 +378,42 @@ class Live:
                 pass
         return bool(self.sink.write(data))
 
-    def watch(self, on_retry):
+    def watch(self, on_retry, on_boxes=None):
         """on_retry(model) is called for each «أعد المحاولة الآن» pressed on the status page
-        after the run was dispatched (the requests file, when open_live was given one)."""
+        after the run was dispatched; on_boxes(free, helper) when the user changed the boxes
+        after it: free = {box: [free models]}, helper = {box: the user's own models work
+        there} (None from a script that does not say). on_boxes returns True when the run
+        took them (boxes_at). Both come from the requests file, when open_live was given one."""
         self.on_retry = on_retry
+        self.on_boxes = on_boxes
 
     def check_control(self):
         """Reads the requests file and acts on what is new. A request made before the run was
         dispatched is skipped: the run was started knowing it (the script's list of models out
-        of quota today leaves that model out)."""
-        if not self.control or not self.on_retry:
+        of quota today leaves that model out, and the boxes it sent are the ones saved)."""
+        if not self.control or not (self.on_retry or self.on_boxes):
             return
         self.control_at = self.clock()
         data = self.control.read()
-        retry = data.get("retry") if isinstance(data, dict) else None
-        if not isinstance(retry, dict):
+        if not isinstance(data, dict):
             return
         since = str(self.base.get("dispatched") or "")
+        boxes, at = data.get("boxes"), str(data.get("boxes_at") or "")
+        if self.on_boxes and isinstance(boxes, dict) and at and at != self.boxes_seen:
+            self.boxes_seen = at
+            if at > since:
+                free = {k: [str(m) for m in boxes[k][:24] if MODEL_ID.match(str(m))]
+                        for k in WORK_BOXES if isinstance(boxes.get(k), list)}
+                helper = data.get("helper")
+                helper = {k: bool(helper.get(k)) for k in WORK_BOXES} if isinstance(helper, dict) else None
+                try:
+                    if self.on_boxes(free, helper):
+                        self.boxes_at = at
+                except Exception as e:  # never stops the conversion
+                    print(f"  live view: boxes: {str(e)[:120]}")
+        retry = data.get("retry")
+        if not self.on_retry or not isinstance(retry, dict):
+            return
         for model, at in list(retry.items())[:40]:
             model, at = str(model), str(at)
             if not MODEL_ID.match(model) or self.retries.get(model) == at:

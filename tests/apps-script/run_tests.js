@@ -3160,6 +3160,11 @@ test('the page: the free models one by one, the run\'s events as they come, and 
   assert.ok(/قرأ ص 232 \(القراءة الثانية\) في 4\.2 ث/.test(free), free);
   assert.ok(/طلبت Google التمهّل 40 ث قبل ص 231/.test(free), free);
   assert.ok(/441 صفحة تنتظر من يحسمها/.test(free), free);
+  // During the run only a model found out of quota has a button: one with no page for it, or
+  // waiting the seconds Google asked for, would gain nothing from it.
+  const buttons = [];
+  pg.find(pg.byId.boxes, (n) => { if (n.tag === 'button' && /المحاولة|شغّله/.test(n.textContent)) buttons.push(n.textContent); return false; });
+  assert.ok(buttons.length > 0 && buttons.every((b) => /أعد المحاولة الآن/.test(b)), buttons.join(' | '));
   const now = pg.byId.now.textContent;
   assert.ok(/يقرأ الصفحات/.test(now) && /الآن: ص 233، 234/.test(now) && /التشغيل رقم 43/.test(now), now);
   assert.ok(/42 *من 509 صفحة أُنجزت/.test(now) && /قُرئت قراءتين وتنتظر الحسم *100/.test(now), now);
@@ -3252,8 +3257,10 @@ test('the board\'s free models: the converter\'s own until the user changes them
     read2: ['gemini-3.5-flash-lite', 'gemini-3.1-flash-lite'], settle: ['gemini-3.8-flash', 'gemini-3.5-flash-lite'], review: ['gemini-3.8-flash'] })));
   assert.strictEqual(r.ok, true);
   assert.deepStrictEqual(r.boxes.read1, ['gemma-4-31b-it']);
-  // The next run takes them, in the form the workflow lets through to the converter.
-  assert.strictEqual(JSON.parse(env.ctx.runNow(f.id)).started, true);
+  // A model came into a box: the book paused for its quota runs with it at once, in the form
+  // the workflow lets through to the converter.
+  assert.ok(/بدأ تشغيل بها الآن/.test(r.text), r.text);
+  assert.strictEqual(jobs(env)[f.id].stage, 'running');
   const input = lastDispatch(env).body.inputs.models;
   assert.strictEqual(input, 'read1=gemma-4-31b-it;read2=gemini-3.5-flash-lite,gemini-3.1-flash-lite;' +
     'settle=gemini-3.8-flash,gemini-3.5-flash-lite;review=gemini-3.8-flash');
@@ -3405,6 +3412,89 @@ test('a paused book does not run on its new day when nobody can work', () => {
   setFreeBoxes(env, JSON.stringify({ read1: ['gemini-3.5-flash-lite'], read2: ['gemini-3.1-flash-lite'], settle: ['gemini-3.8-flash'] }));
   tick(env);
   assert.strictEqual(env.gh.dispatches.length, 2);
+});
+
+test('a model put in a box: the run going takes it within seconds; with none going, the book waiting runs at once', () => {
+  const env = readyEnv({ start: '2026-10-23T07:03:00Z' });
+  const set = (b) => JSON.parse(env.ctx.setBoxes(JSON.stringify(Object.assign({ review: [] }, b))));
+  set({ read1: ['gemini-3.5-flash-lite'], read2: ['gemini-3.1-flash-lite'], settle: ['gemini-3.8-flash'] });
+  const f = addBook(env, 'تراث.pdf');
+  tick(env);
+  assert.strictEqual(env.gh.dispatches.length, 1);
+  // During the run: it is told through the requests file, and nothing else starts.
+  minutes(env, 5);
+  let r = set({ read1: ['gemini-3.5-flash-lite', 'gemma-4-31b-it'], read2: ['gemini-3.1-flash-lite'], settle: ['gemini-3.8-flash'] });
+  assert.ok(/يأخذها التشغيل الجاري خلال ثوانٍ/.test(r.text), r.text);
+  const told = controlOf(env);
+  assert.deepStrictEqual(told.boxes, { read1: ['gemini-3.5-flash-lite', 'gemma-4-31b-it'], read2: ['gemini-3.1-flash-lite'],
+    settle: ['gemini-3.8-flash'] });
+  assert.deepStrictEqual(told.helper, { read1: false, read2: false, settle: false });
+  assert.strictEqual(told.boxes_at, iso(env.clock));
+  assert.strictEqual(env.gh.dispatches.length, 1);
+  // The run took them, then the free quota ran out: the book waits for its new day.
+  minutes(env, 20);
+  writeStatus(env, f.id, 'paused', { quota_day: '2026-10-23', models_out: LITES, boxes_at: told.boxes_at });
+  tick(env);
+  assert.strictEqual(jobs(env)[f.id].pausedDay, '2026-10-23');
+  assert.strictEqual(env.gh.dispatches.length, 1);
+  // A model taken out starts nothing; one put in starts the book at once.
+  r = set({ read1: ['gemini-3.5-flash-lite'], read2: ['gemini-3.1-flash-lite'], settle: ['gemini-3.8-flash'] });
+  assert.strictEqual(r.text, '');
+  assert.strictEqual(env.gh.dispatches.length, 1);
+  r = set({ read1: ['gemini-3.5-flash-lite'], read2: ['gemini-3.1-flash-lite', 'gemma-4-31b-it'], settle: ['gemini-3.8-flash'] });
+  assert.ok(/بدأ تشغيل بها الآن/.test(r.text), r.text);
+  assert.strictEqual(env.gh.dispatches.length, 2);
+  assert.ok(/وضعتَ نموذجاً في المربعات/.test(journal(env).pop().x));
+  // The run had ended when the user put another model in, before the check read its result:
+  // the book goes on at once, not tomorrow.
+  minutes(env, 10);
+  set({ read1: ['gemini-3.5-flash-lite', 'gemma-4-26b-a4b-it'], read2: ['gemini-3.1-flash-lite', 'gemma-4-31b-it'],
+    settle: ['gemini-3.8-flash'] });
+  assert.strictEqual(env.gh.dispatches.length, 2);
+  writeStatus(env, f.id, 'paused', { quota_day: '2026-10-23', models_out: LITES });
+  tick(env);
+  assert.strictEqual(env.gh.dispatches.length, 3);
+  assert.strictEqual(jobs(env)[f.id].stage, 'running');
+  assert.ok(/read1=gemini-3\.5-flash-lite,gemma-4-26b-a4b-it;/.test(lastDispatch(env).body.inputs.models));
+  // A book parked for a reader runs again once a model comes into a box after its last run.
+  minutes(env, 10);
+  writeStatus(env, f.id, 'paused', { waiting_for: 'reader', quota_day: '2026-10-23', pages_waiting: [3, 4] });
+  tick(env);
+  assert.strictEqual(jobs(env)[f.id].stage, 'readerWait');
+  const n = env.gh.dispatches.length;
+  set({ read1: ['gemini-3.5-flash-lite', 'gemma-4-26b-a4b-it'], read2: ['gemini-3.1-flash-lite', 'gemma-4-31b-it'],
+    settle: ['gemini-3.8-flash', 'gemma-4-31b-it'] });
+  assert.strictEqual(env.gh.dispatches.length, n + 1);
+  assert.strictEqual(jobs(env)[f.id].stage, 'running');
+});
+
+test('a free model the key cannot use is offered no more; one in a box stays there until taken out', () => {
+  const env = readyEnv({ start: '2026-10-23T07:03:00Z' });
+  const all = ACCOUNT.concat('gemini-2.5-flash');
+  const f = addBook(env, 'أول.pdf');
+  tick(env);
+  minutes(env, 30);
+  writeStatus(env, f.id, 'paused', { quota_day: '2026-10-23', free_models: all, models_out: LITES });
+  tick(env);
+  assert.ok(status(env).boxes.free.indexOf('gemini-2.5-flash') >= 0);
+  // The user puts it in a box: a run starts with it, and finds Google no longer serves it.
+  env.ctx.setBoxes(JSON.stringify({ read1: ['gemini-2.5-flash', 'gemma-4-31b-it'], read2: [], settle: [], review: [] }));
+  assert.strictEqual(env.gh.dispatches.length, 2);
+  minutes(env, 30);
+  writeStatus(env, f.id, 'paused', { quota_day: '2026-10-23', free_models: ACCOUNT, models_missing: ['gemini-2.5-flash'],
+    models_out: LITES.concat('gemma-4-31b-it') });
+  tick(env);
+  assert.ok(status(env).boxes.read1.indexOf('gemini-2.5-flash') >= 0, 'still in its box, to take out');
+  env.ctx.setBoxes(JSON.stringify({ read1: ['gemma-4-31b-it'], read2: [], settle: [], review: [] }));
+  assert.strictEqual(status(env).boxes.free.indexOf('gemini-2.5-flash'), -1);
+  // A later run listing it again (the account's list still names it) does not bring it back.
+  minutes(env, 60 * 24);
+  tick(env);
+  minutes(env, 30);
+  writeStatus(env, f.id, 'paused', { quota_day: '2026-10-24', free_models: all, models_out: LITES });
+  tick(env);
+  assert.strictEqual(status(env).boxes.free.indexOf('gemini-2.5-flash'), -1);
+  assert.ok(status(env).boxes.free.indexOf('gemma-4-26b-a4b-it') >= 0);
 });
 
 test('the fake GitHub saw only known endpoints', () => {

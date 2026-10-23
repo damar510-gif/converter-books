@@ -191,6 +191,29 @@ class Retries(unittest.TestCase):
         lv.check_control()
         self.assertEqual(back, ["gemini-3.1-flash-lite", "gemini-3.5-flash-lite"])
 
+    def test_boxes_changed_after_the_dispatch_are_taken_once(self):
+        lv = live.Live(FakeSink(), clock=Clock())
+        lv.base = {"dispatched": "2026-10-23T07:00:00.000Z"}
+        got = []
+        lv.watch(None, lambda free, helper: got.append((free, helper)) or True)
+        boxes = {"read1": ["gemma-4-31b-it", "rm -rf /"], "read2": [], "settle": "x", "review": ["gemma-4-31b-it"]}
+        lv.control = FakeSink({"boxes": boxes, "helper": {"read2": 1}, "boxes_at": "2026-10-23T06:59:00.000Z"})
+        lv.check_control()
+        self.assertEqual(got, [], "the run was started with these boxes")
+        lv.control = FakeSink({"boxes": boxes, "helper": {"read2": 1}, "boxes_at": "2026-10-23T07:05:00.000Z"})
+        lv.check_control()
+        lv.check_control()
+        self.assertEqual(got, [({"read1": ["gemma-4-31b-it"], "read2": []},
+                                {"read1": False, "read2": True, "settle": False})])
+        self.assertEqual(lv.boxes_at, "2026-10-23T07:05:00.000Z")
+
+    def test_boxes_the_run_could_not_take_are_not_said_taken(self):
+        lv = live.Live(FakeSink(), clock=Clock())
+        lv.watch(None, lambda free, helper: False)
+        lv.control = FakeSink({"boxes": {"read1": []}, "boxes_at": "2026-10-23T07:05:00.000Z"})
+        lv.check_control()
+        self.assertEqual(lv.boxes_at, "")
+
     def test_a_model_sent_back_is_no_longer_out_on_the_page(self):
         lv = live.Live(FakeSink(), clock=Clock())
         lv.note("gemini-3.5-flash-lite", "out", 30, "a", n=500)

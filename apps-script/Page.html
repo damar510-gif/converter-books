@@ -1545,6 +1545,8 @@
       case 'out': return ['bad', 'نفد رصيده لهذا اليوم' + (e.n ? ' (حده ' + e.n + ' طلباً)' : '') + '.'];
       case 'missing': return ['quiet', 'غير متاح لحسابك، فتُرك.'];
       case 'back': return ['ok', 'عاد إلى العمل بطلبك.'];
+      case 'boxes': return ['ok', 'أخذ التشغيل المربعات الجديدة: تذهب الصفحات إلى من فيها الآن.'];
+      case 'restart': return ['hold', 'تغيّر ما تعمله نماذجك على الجهاز: لا يبدأ هذا التشغيل صفحة جديدة، ويبدأ بعده تشغيل يعطيها صفحاتها.'];
       case 'judged': return ['ok', 'راجع مواضع ' + p + took + (e.n !== undefined ? ' (حكم على ' + e.n + ')' : '') + '.'];
       case 'settled': return ['ok', 'حسم ' + p + took + (e.n ? ' (' + count(e.n, 'موضع خلاف واحد', 'موضعا خلاف', 'مواضع خلاف', 'موضع خلاف') + ')' : '') +
         (e.x === 'helper' ? '، على جهازك' : '') + '.'];
@@ -1732,7 +1734,7 @@
     busy.forEach(function (b) {
       line('الآن:', (b[0] ? 'ص ' + b[0] + ' ' : '') + '(' + (KINDS[b[1]] || 'طلب') + ')' + (b[2] ? '، أُرسل ' + ago(b[2] * 1000) : ''));
     });
-    if (cur && m.queued) line('في الانتظار:', count(m.queued, 'طلب واحد', 'طلبان', 'طلبات', 'طلباً') + ' (حد الطلبات في الدقيقة)');
+    if (cur && m.queued) line('في الانتظار:', count(m.queued, 'طلب واحد', 'طلبان', 'طلبات', 'طلباً') + ' (يُرسل كل طلب بعد جواب الذي قبله)');
     var used = (u.n || 0) + (cur ? (m.ok || 0) : 0);
     var limit = m.limit || freeLimit(r.id);
     if (used || limit) {
@@ -1741,9 +1743,12 @@
       if (limit) d.appendChild(meter(Math.min(used, limit), limit));
     }
     if (cur && (m.err || m.rl)) line('في هذا التشغيل:', (m.err ? m.err + ' تعثّر' : '') + (m.err && m.rl ? '، ' : '') + (m.rl ? m.rl + ' طلب تمهّل من Google' : ''));
-    // «أعد المحاولة الآن»: a model in a box that is not sending now (out of quota, resting,
-    // idle) works again at once: in the run going, or in a run started for the book waiting.
-    if (o.inBox && !busy.length) d.appendChild(freeRetryButton(r.id, (m.out || u.out) && !m.missing));
+    // «أعد المحاولة الآن»: a model in a box found out of quota works again at once, in the run
+    // going; with no run going, the button («شغّله الآن») starts one for the book waiting. A
+    // model the run going has no page for, or that waits the seconds Google asked for, gets
+    // none: the button would do nothing (2026-10-23).
+    var out = m.out || u.out;
+    if (o.inBox && !busy.length && !m.missing && (out || !cur)) d.appendChild(freeRetryButton(r.id, out));
     if (m.last && m.last.length) {
       var x = el('ul', 'mrow-x');
       m.last.slice(0, 3).forEach(function (l) {
@@ -2946,7 +2951,8 @@
         // The page's copy of the status follows, so drawing the boxes again keeps the change.
         if (LAST && r.boxes) LAST.boxes = r.boxes;
         if (!BOXES_SAVING) BOXES = null;
-        setMsg(done);
+        // What the change set going: the run going takes it within seconds, or a run starts.
+        setMsg([done, r.text].filter(Boolean).join(' '));
         renderBoxes(LAST);
       })
       .withFailureHandler(function (err) { undo(errText(err)); })
