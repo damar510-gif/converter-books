@@ -1010,7 +1010,10 @@ function startNext_(ctx) {
   // and the computer off, it waits in «1- جديد» instead of a run that could do nothing.
   var first = candidates[0];
   var ext = SUPPORTED_EXT[extOf_(first.getName())] ? extOf_(first.getName()) : MIME_EXT[first.getMimeType()] || 'pdf';
-  if (ext === 'pdf' && !anyoneWorks_(ctx)) return 'idle (no model can work now)';
+  if (ext === 'pdf' && !anyoneWorks_(ctx)) {
+    Logger.log('a scanned book waits: no model in the boxes can work now');
+    return 'idle';
+  }
 
   for (var i = 0; i < candidates.length && i < 3; i++) {
     var file = candidates[i];
