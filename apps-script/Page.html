@@ -392,6 +392,11 @@
   .feed .is-hold .ev-t { color: var(--gold-light); }
   .feed .is-quiet .ev-t { color: var(--mute); }
   .feed .ev-b { color: var(--gold-light); }
+  /* A phone: the time and the model on one line, what happened under them. */
+  @media (max-width: 640px) {
+    .feed li { flex-wrap: wrap; gap: 0 8px; }
+    .feed .ev-t { flex-basis: 100%; }
+  }
   .mrows { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; margin-top: 12px; }
   .mrow { background: var(--panel-2); border: 1px solid var(--line-faint); border-inline-start: 3px solid var(--mute); border-radius: 4px;
     padding: 10px 12px; min-width: 0; }

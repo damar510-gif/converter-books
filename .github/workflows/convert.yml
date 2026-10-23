@@ -100,8 +100,17 @@ jobs:
             DRIVE_TOKEN="$DRIVE_TOKEN" python live.py mark setup || true
           fi
 
+      # The runner's package lists usually do: "apt-get update" first sometimes hangs ten
+      # minutes on a slow mirror (2026-10-22 and 23) before any page is read. It runs only
+      # when the install fails without it.
       - name: Install Pandoc and Tesseract
-        run: sudo apt-get update && sudo apt-get install -y pandoc tesseract-ocr tesseract-ocr-ara
+        timeout-minutes: 25
+        run: |
+          PKGS="pandoc tesseract-ocr tesseract-ocr-ara"
+          if ! sudo timeout 300 apt-get install -y -q $PKGS; then
+            sudo timeout 600 apt-get update -q -o Acquire::Retries=3 -o Acquire::http::Timeout=30 || true
+            sudo timeout 600 apt-get install -y -q $PKGS
+          fi
 
       - name: Install Python Dependencies
         run: |
