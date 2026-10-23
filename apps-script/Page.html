@@ -1107,8 +1107,9 @@
   }
 
   // "شغّل الآن": a run starts now instead of waiting for the quota's new day (or the next check).
-  function runNowButton(fileId, holder) {
-    var b = button('btn-gold', 'شغّل الآن', function () {
+  function runNowButton(fileId, holder, label) {
+    label = label || 'شغّل الآن';
+    var b = button(label === 'شغّل الآن' ? 'btn-gold' : 'btn-sm', label, function () {
       b.disabled = true;
       setLabel(b, 'جارٍ البدء…');
       setMsg('جارٍ بدء التشغيل…');
@@ -1116,7 +1117,7 @@
         .withSuccessHandler(function (text) {
           var r = parse(text);
           b.disabled = false;
-          setLabel(b, 'شغّل الآن');
+          setLabel(b, label);
           setMsg(r.ok && r.started ? 'بدأ التشغيل على GitHub. تراه هنا خطوة بخطوة خلال دقيقة أو دقيقتين.'
             : 'تعذّر البدء: ' + (r.error || 'خطأ غير معروف'), r.ok && r.started ? 'ok' : r.busy ? 'info' : 'bad');
           refresh();
@@ -1124,7 +1125,7 @@
         })
         .withFailureHandler(function (err) {
           b.disabled = false;
-          setLabel(b, 'شغّل الآن');
+          setLabel(b, label);
           setMsg('تعذّر البدء: ' + errText(err));
         })
         .runNow(fileId);
@@ -1717,6 +1718,10 @@
       if (limit) d.appendChild(meter(Math.min(used, limit), limit));
     }
     if (cur && (m.err || m.rl)) line('في هذا التشغيل:', (m.err ? m.err + ' تعثّر' : '') + (m.err && m.rl ? '، ' : '') + (m.rl ? m.rl + ' طلب تمهّل من Google' : ''));
+    if (!busy.length && !liveGoing()) {
+      var target = runTarget();
+      if (target) d.appendChild(runNowButton(target, el('div', 'hero-acts'), 'اعمل الآن'));
+    }
     if (m.last && m.last.length) {
       var x = el('ul', 'mrow-x');
       m.last.slice(0, 3).forEach(function (l) {
@@ -1726,6 +1731,15 @@
       d.appendChild(x);
     }
     return d;
+  }
+
+  // The book a run would start for now («اعمل الآن» on a free model): the one waiting for
+  // its quota, else one parked for the user's models or a reader.
+  function runTarget() {
+    var s = LAST || {};
+    if (s.active) return s.active.canRun ? s.active.fileId : '';
+    var w = (s.working || []).filter(function (x) { return x.canRun; })[0] || (s.parked || []).filter(function (x) { return x.canRun; })[0];
+    return w ? w.fileId : '';
   }
 
   function renderFree() {
@@ -2700,27 +2714,30 @@
     d.appendChild(line);
     if ((lc || c) && h.connected && !m.gone) chipLive(lc || c, d);
     if (m.warn) d.appendChild(el('div', 'mc-w', '⚠ ' + m.warn));
-    if (c && /^(exhausted|failing)$/.test(c.state) && !m.gone) d.appendChild(retryButton(m));
+    // «اعمل الآن»: a model resting (its limit, a failure) or idle starts again at once (the
+    // user's request, 2026-10-23: no waiting for its rest to end).
+    if (!m.gone && h.connected && !(c && c.state === 'working') && !ended && !later) d.appendChild(retryButton(m));
     if (!m.gone) d.appendChild(schedule(sec, m, t));
     return d;
   }
 
   function retryButton(m) {
-    var b = button('btn-sm', 'أعد المحاولة الآن', function () {
+    var b = button('btn-sm', 'اعمل الآن', function () {
       b.disabled = true;
       setMsg('جارٍ الطلب…');
       google.script.run
         .withSuccessHandler(function (text) {
           var r = parse(text);
-          setMsg(r.ok ? 'يعاود «' + m.label + '» خلال دقيقة أو دقيقتين إن كان جهازك مفتوحاً.' : 'تعذّر الطلب: ' + (r.error || ''));
+          setMsg(r.ok ? 'يعمل «' + m.label + '» خلال دقيقة أو دقيقتين إن كان جهازك مفتوحاً وله عمل.' : 'تعذّر الطلب: ' + (r.error || ''));
           if (!r.ok) b.disabled = false;
         })
         .withFailureHandler(function (err) {
           b.disabled = false;
           setMsg('تعذّر الطلب: ' + errText(err));
         })
-        .helperRequest(JSON.stringify({ action: 'retry', choices: { model: m.id }, label: 'أعد المحاولة: ' + m.label }));
-    }, 'refresh');
+        .helperRequest(JSON.stringify({ action: 'retry', choices: { model: m.id }, label: 'اعمل الآن: ' + m.label }));
+    }, 'play');
+    b.title = 'يلغي راحته وينظر في العمل الآن، دون انتظار.';
     return b;
   }
 

@@ -3065,6 +3065,9 @@ test('the page: the free models one by one, the run\'s events as they come, and 
   const text = pg.byId.now.textContent;
   assert.ok(/متوقف: نفد رصيد Gemini 3\.5 Flash-Lite وGemini 3\.1 Flash-Lite لهذا اليوم/.test(text), text);
   assert.ok(/قُرئت قراءتين وتنتظر الحسم *441/.test(text), text);
+  // Each free model has «اعمل الآن» too, for the same book.
+  pg.sandbox.gotLive(JSON.parse(env.ctx.getLive('{}')));
+  assert.ok(pg.find(pg.byId.free, (n) => n.tag === 'button' && /اعمل الآن/.test(n.textContent)), 'a free model\'s «اعمل الآن»');
   const run = pg.find(pg.byId.now, (n) => n.tag === 'button' && /شغّل الآن/.test(n.textContent));
   assert.ok(run, 'a «شغّل الآن» button');
   run.click();
