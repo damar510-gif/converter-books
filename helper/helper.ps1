@@ -6,7 +6,7 @@
 # places through the folders «كتب», «مراجعة» and «أحكام» (docs/helper-boxes-plan.md).
 # Windows PowerShell 5.1: no ?? or ?: operators.
 
-$HelperVersion = '2026-10-23.2'
+$HelperVersion = '2026-10-23.3'
 $BooksName = 'كتب'
 $ReviewsName = 'مراجعة'
 $VerdictsName = 'أحكام'
@@ -627,9 +627,11 @@ function Get-TranscribeBooks($boxes) {
     $names = @{}
     foreach ($f in @(Get-ChildItem -LiteralPath $d.FullName -File)) { $names[$f.Name] = $true }
     $out += @{ id = $d.Name; dir = $d.FullName; title = [string]$book.title; at = (Iso-Of $book.at); need = $need
-      needA = @(@($book.need_a) | Where-Object { $null -ne $_ } | ForEach-Object { [int]$_ }); names = $names }
+      needA = @(@($book.need_a) | Where-Object { $null -ne $_ } | ForEach-Object { [int]$_ }); names = $names
+      # The queue's order (when the book was put in Drive): the oldest book first.
+      order = $(if ($book.order) { [string]$book.order } else { $d.CreationTimeUtc.ToString('o') }) }
   }
-  return $out
+  return @($out | Sort-Object { $_.order })
 }
 
 # One page's files: a (the free model's reading), ha, hb, final, skip, img; first = the

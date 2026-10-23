@@ -68,6 +68,21 @@ def now_doing():
     return getattr(_CTX, "what", None) or (0, "")
 
 
+@contextlib.contextmanager
+def in_book(index):
+    """The book of the run (its place in it) that the work inside this block is for."""
+    old = getattr(_CTX, "book", 0)
+    _CTX.book = int(index or 0)
+    try:
+        yield
+    finally:
+        _CTX.book = old
+
+
+def current_book():
+    return getattr(_CTX, "book", 0)
+
+
 def took(seconds=None):
     """How long the current thread's last request took (set by the model pool)."""
     if seconds is not None:
@@ -171,7 +186,9 @@ class Live:
         self.events = collections.deque(maxlen=EVENTS)
         self.event_no = 0
         self.seq = 0
+        # Each page's state, by (book, page): a run may work on several books (set_books).
         self.pages = {}
+        self.books = []
         self.inflight = collections.Counter()
         self.phase = "start"
         self.info = {}
@@ -225,7 +242,7 @@ class Live:
             m = self._model(name)
             m["queued"] += 1
             self.dirty = True
-            return [name, int(page or 0), kind, 0.0]
+            return [name, int(page or 0), kind, 0.0, current_book()]
 
     def sent(self, h):
         """The request has left for Google."""
@@ -235,7 +252,7 @@ class Live:
             h[3] = self.clock()
             m["busy"].append(h)
             if h[1]:
-                self.inflight[h[1]] += 1
+                self.inflight[(h[4], h[1])] += 1
             self.dirty = True
 
     def done(self, h, answered):
@@ -245,9 +262,10 @@ class Live:
             if h in m["busy"]:
                 m["busy"].remove(h)
                 if h[1]:
-                    self.inflight[h[1]] -= 1
-                    if self.inflight[h[1]] <= 0:
-                        del self.inflight[h[1]]
+                    key = (h[4], h[1])
+                    self.inflight[key] -= 1
+                    if self.inflight[key] <= 0:
+                        del self.inflight[key]
             elif not h[3]:
                 # Never sent (it failed while waiting for its turn).
                 m["queued"] = max(0, m["queued"] - 1)
@@ -287,6 +305,9 @@ class Live:
                 ev["n"] = int(n)
             if extra:
                 ev["x"] = str(extra)[:120]
+            if len(self.books) > 1:
+                # Which book of the run (set_books) the event is about.
+                ev["b"] = current_book()
             self.events.append(ev)
             self.dirty = True
 
@@ -302,13 +323,21 @@ class Live:
 
     # --- pages and the run ---
 
-    def page(self, page, state):
+    def page(self, page, state, book=None):
         """A page's state now: done, unsure, read2 (both readings, not settled), read1,
-        unread, failed or helper (its next step is with the user's own models)."""
+        unread, failed or helper (its next step is with the user's own models). book: its
+        place in the run (the current thread's book by default, in_book)."""
+        key = (current_book() if book is None else int(book), page)
         with self.lock:
-            if self.pages.get(page) != state:
-                self.pages[page] = state
+            if self.pages.get(key) != state:
+                self.pages[key] = state
                 self.dirty = True
+
+    def set_books(self, books):
+        """The run's books, in its order ([{file, book}]): their pages are shown apart."""
+        with self.lock:
+            self.books = [dict(b) for b in books]
+            self.dirty = True
 
     def set_phase(self, phase, **info):
         with self.lock:
@@ -338,13 +367,14 @@ class Live:
         with self.lock:
             now = self.clock()
             counts = collections.Counter(self.pages.values())
+            multi = len(self.books) > 1
             models = {}
             for name, m in self.models.items():
                 models[name] = {
                     "role": m["role"], "queued": m["queued"], "ok": m["ok"], "err": m["err"], "rl": m["rl"],
                     "out": m["out"], "out_at": m["out_at"], "missing": m["missing"], "limit": m["limit"],
                     "rest": iso(m["rest"]) if m["rest"] > now else "",
-                    "busy": [[h[1], h[2], int(h[3])] for h in m["busy"]][:8],
+                    "busy": [[h[1], h[2], int(h[3])] + ([h[4]] if multi else []) for h in m["busy"]][:8],
                     "last": m["last"]}
             self.seq += 1
             data = dict(self.base)
@@ -353,14 +383,23 @@ class Live:
                 "run": os.environ.get("GITHUB_RUN_ID", ""), "run_n": os.environ.get("GITHUB_RUN_NUMBER", ""),
                 "phase": self.phase, "info": self.info,
                 "stops": {k: iso(v) for k, v in self.stops.items()},
-                "pages": {"total": len(self.pages), **{k: counts.get(k, 0) for k in
-                          ("done", "unsure", "read2", "read1", "unread", "failed", "helper")},
-                          "now": sorted(self.inflight)[:12]},
+                "pages": self._pages(counts, len(self.pages), 0 if multi else None),
                 "models": models, "events": list(self.events)})
+            if multi:
+                data["books"] = []
+                for i, b in enumerate(self.books):
+                    mine = collections.Counter(v for (bk, _), v in self.pages.items() if bk == i)
+                    data["books"].append({**b, "pages": self._pages(mine, sum(mine.values()), i)})
             if self.end:
                 data["end"] = self.end
             self.dirty = False
             return data
+
+    def _pages(self, counts, total, book):
+        """Pages by state, and those being read or settled now (of one book; None: any)."""
+        now = sorted(p for (bk, p) in self.inflight if book is None or bk == book)[:12]
+        return {"total": total, **{k: counts.get(k, 0) for k in
+                ("done", "unsure", "read2", "read1", "unread", "failed", "helper")}, "now": now}
 
     # --- writing ---
 

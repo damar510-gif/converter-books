@@ -113,7 +113,12 @@ var CONFIG = {
   JOURNAL_MAX_BYTES: 8000,
   // Runs stopped for time (their Drive token) in one Pacific day before the book waits
   // for the next day anyway: no endless chain if something goes wrong.
-  MAX_TIME_RUNS: 12,
+  MAX_TIME_RUNS: 30,
+  // The books of one run: the oldest unfinished ones, each step's models taking the oldest
+  // page waiting for it in any of them (2026-10-23: "separate the boxes so nobody waits").
+  QUEUE_BOOKS: 4,
+  // A book with fewer pages than this left to read first: the next book joins the run too.
+  READ_AHEAD: 60,
   // The free models in the status page's boxes (FREE_BOXES): most in one box, and most
   // models the page offers (from the runs' status.json, FREE_MODELS).
   FREE_BOX_MAX: 12,
@@ -339,7 +344,14 @@ function getStatus() {
         why: a.pauseWhy || '',
         // "شغّل الآن": it waits for its quota's new day, and no other run is going.
         canRun: !!a.pausedDay && !going,
-        round: a.humanRound ? (a.judgeRound ? 'judge' : a.prepareRound ? 'prepare' : 'review') : ''
+        round: a.humanRound ? (a.judgeRound ? 'judge' : a.prepareRound ? 'prepare' : 'review') : '',
+        // The other books of its run, oldest first.
+        books: (a.runBooks || []).map(function (id) { return jobs[id]; })
+          .filter(function (j) { return j && j.runLead === a.fileId; })
+          .map(function (j) {
+            return { title: j.title, fileId: j.fileId, stages: j.stages || null, pagesDone: j.pagesDone || 0,
+              pagesTotal: j.pagesTotal || 0 };
+          })
       };
     }
     out.journal = journalAfter_(0).slice(-20);
@@ -700,6 +712,9 @@ function runTick_() {
   var notes = [];
   dropGoneBooks_(ctx);
   reviveProblems_(ctx);
+  // A book of the last run whose file could not be fetched from the results yet.
+  var pending = deliverPending_(ctx);
+  if (pending) notes.push(pending);
 
   // A review round started while another book waits for its quota goes first: it is quick
   // and never pauses.
@@ -723,7 +738,7 @@ function runTick_() {
     // judges (delivered now), then books the helper's models work on (the free models'
     // share, or what the helper's models finished), then new books.
     var applied = applyNext_(ctx) || helperJudgeNext_(ctx) || freeReviewNext_(ctx);
-    var resumed = applied || resumeReaderNext_(ctx) || boxNext_(ctx) || judgeNext_(ctx) || helperNext_(ctx);
+    var resumed = applied || queueNext_(ctx) || resumeReaderNext_(ctx) || boxNext_(ctx) || judgeNext_(ctx) || helperNext_(ctx);
     var started = resumed || startNext_(ctx);
     notes.push(started);
     // Nothing new to convert: prepare the review of a finished book delivered before it existed.
@@ -754,6 +769,7 @@ function advanceJob_(ctx, job) {
 }
 
 function handleStatus_(ctx, job, s) {
+  if (job.runBooks && job.runBooks.length) return handleRun_(ctx, job, s);
   job.lastState = s.state;
   if (s.pages_total) job.pagesTotal = Number(s.pages_total) || 0;
   if (s.pages_done !== undefined) job.pagesDone = Number(s.pages_done) || 0;
@@ -885,6 +901,274 @@ function handleStatus_(ctx, job, s) {
   }
 }
 
+// ============================================================================
+// The queue of books: one run carries the oldest unfinished books (CONFIG.QUEUE_BOOKS), and
+// each step's models take the oldest page waiting for their step in any of them (2026-10-23,
+// the user's design: "separate the boxes so that nobody waits"). The oldest unfinished book
+// holds the turn between runs; the others wait in the queue (stage 'waiting').
+// ============================================================================
+
+/** The book's place in the queue: when it was put in Drive (its job's creation before). */
+function queueKey_(job) {
+  return String(job.fileCreated || job.createdAt || '');
+}
+
+/** Oldest first: put in Drive earlier, then started earlier. */
+function queueCmp_(a, b) {
+  var x = [queueKey_(a), String(a.createdAt || ''), String(a.fileId)];
+  var y = [queueKey_(b), String(b.createdAt || ''), String(b.fileId)];
+  for (var i = 0; i < x.length; i++) {
+    if (x[i] !== y[i]) return x[i] < y[i] ? -1 : 1;
+  }
+  return 0;
+}
+
+/** A scanned book still being converted (not a review round, not delivered or given up). */
+function unfinished_(job) {
+  return !!job && !job.humanRound && !job.refining && extOf_(job.driveName || job.name) === 'pdf' &&
+    /^(queued|running|waiting|helper|readerWait|boxWait)$/.test(String(job.stage || ''));
+}
+
+/** The unfinished books, oldest first. */
+function queueJobs_(ctx) {
+  return Object.keys(ctx.jobs).map(function (id) { return ctx.jobs[id]; })
+    .filter(unfinished_)
+    .sort(queueCmp_);
+}
+
+/** Some model in the first reading's box can work now (free with quota today, or the user's). */
+function read1Free_(ctx) {
+  var out = freeOut_();
+  var w = helperWork_(helperStatusOf_(ctx)) || {};
+  return !!w.read1 || freeInfo_().boxes.read1.some(function (id) { return out.indexOf(id) < 0; });
+}
+
+/** The book has pages with no first reading (or was never run). */
+function hasRead1Work_(job) {
+  var st = job.stages;
+  return !st || (Number(st.unread) || 0) + (Number(st.failed) || 0) > 0;
+}
+
+/**
+ * The books of the run the lead's dispatch starts, oldest first (the first is the run's own):
+ * the oldest unfinished books, up to CONFIG.QUEUE_BOOKS; and, when the first reading's box can
+ * work but those books have no page left to read first (or only a few: READ_AHEAD), the next
+ * book that has, from «1- جديد» if need be (it goes to «2- قيد التحويل» with its own job), so
+ * the first readers never idle while a book waits.
+ */
+function runWindow_(ctx, lead) {
+  if (lead.humanRound || lead.refining || extOf_(lead.driveName || lead.name) !== 'pdf') return [lead];
+  var queue = queueJobs_(ctx).filter(function (j) { return j !== lead && (!j.runLead || j.runLead === lead.fileId); });
+  var books = [lead].concat(queue).sort(queueCmp_);
+  var run = books.slice(0, CONFIG.QUEUE_BOOKS);
+  if (run.indexOf(lead) < 0) run = [lead].concat(run.slice(0, CONFIG.QUEUE_BOOKS - 1));
+  var reads = read1Free_(ctx);
+  // The first readers would run out of pages in this run's books.
+  var ahead = function () {
+    var left = run.filter(hasRead1Work_);
+    var last = left[left.length - 1];
+    return !last || (!!last.stages && (Number(last.stages.unread) || 0) + (Number(last.stages.failed) || 0) < CONFIG.READ_AHEAD);
+  };
+  if (reads && ahead()) {
+    var next = books.filter(function (j) { return run.indexOf(j) < 0 && hasRead1Work_(j); })[0];
+    if (next) run.push(next);
+  }
+  if (reads && ctx.folders && ahead()) {
+    var files = [];
+    try { files = scanInbox_(ctx.folders.inbox).ready; } catch (err) { Logger.log('inbox: ' + err); }
+    for (var i = 0; i < files.length && ahead(); i++) {
+      var f = files[i];
+      var ext = SUPPORTED_EXT[extOf_(f.getName())] ? extOf_(f.getName()) : MIME_EXT[f.getMimeType()] || 'pdf';
+      if (ext !== 'pdf' || ctx.jobs[f.getId()]) continue;
+      try {
+        f.moveTo(ctx.folders.working);
+      } catch (err) {
+        Logger.log('could not move ' + f.getId() + ' to the working folder: ' + err);
+        continue;
+      }
+      var job = newJob_(f);
+      job.stage = 'waiting';
+      ctx.jobs[job.fileId] = job;
+      run.push(job);
+      journal_('queue', 'أُخذ من «' + CONFIG.FOLDERS.inbox + '» ليُقرأ مع الكتب السابقة.', job.title);
+    }
+  }
+  // The oldest book is the run's own (dispatch_ sends it with the others after it).
+  run.sort(queueCmp_);
+  return run;
+}
+
+/** What the converter said about one book of a run: pages, stages, failures in a row. */
+function noteBook_(job, s) {
+  job.lastState = s.state;
+  if (s.pages_total) job.pagesTotal = Number(s.pages_total) || 0;
+  if (s.pages_done !== undefined) job.pagesDone = Number(s.pages_done) || 0;
+  job.stages = cleanStages_(s.stages);
+  if (s.state !== 'failed') job.failStreak = 0;
+  delete job.helperOff;
+}
+
+/** deliver_, and a book whose file could not be fetched yet is tried again at the next check. */
+function deliverOrLater_(ctx, job, s, incomplete) {
+  var r = deliver_(ctx, job, s, incomplete);
+  // (A book whose EPUB is not in the results went back to the queue: failedOrGiveUp_.)
+  if (job.stage === 'running') {
+    job.stage = 'delivering';
+    saveJobs_(ctx.jobs);
+  }
+  return r;
+}
+
+/** The books of a run whose delivery waits for a second try (deliverOrLater_). */
+function deliverPending_(ctx) {
+  var notes = [];
+  Object.keys(ctx.jobs).forEach(function (id) {
+    var j = ctx.jobs[id];
+    if (!j || j.stage !== 'delivering') return;
+    var s = readStatus_(ctx, j);
+    if (!s || s === 'error') return;
+    j.stage = 'running';
+    notes.push(j.fileId + ': ' + deliverOrLater_(ctx, j, s, s.state !== 'done'));
+  });
+  return notes.join('; ');
+}
+
+/**
+ * The end of a run of several books: each book is delivered once done (or once its retries are
+ * spent), and the queue goes on with its oldest unfinished book holding the turn: at once while
+ * the free models still have work, else when their quota renews, when the boxes change, or when
+ * the user's models have done their part (resumeIfNewDay_).
+ */
+function handleRun_(ctx, lead, s) {
+  var books = [{ job: lead, s: s }];
+  (lead.runBooks || []).forEach(function (id) {
+    var j = ctx.jobs[id];
+    if (!j || j.runLead !== lead.fileId) return;
+    var st = readStatus_(ctx, j);
+    books.push({ job: j, s: st && st !== 'error' ? st : null });
+  });
+  delete lead.runBooks;
+  noteUsage_(s);
+  noteFreeModels_(s);
+  // When the boxes this run took during it were saved (live.py): boxesMissed_.
+  lead.boxesSeen = typeof s.boxes_at === 'string' && isFinite(Date.parse(s.boxes_at)) ? s.boxes_at : '';
+  var forced = !!lead.forced;
+  delete lead.forced;
+  // The run itself crashed: the first book counts it, the others just wait.
+  var crashed = s.state === 'failed';
+  var reasons = [];
+  var done = [];
+  // A book that fails here goes back to the queue rather than starting a run of its own.
+  ctx.noDispatch = true;
+  books.forEach(function (b) {
+    var j = b.job;
+    delete j.runLead;
+    j.stage = 'waiting';
+    j.pausedDay = '';
+    delete j.waitFor;
+    if (!b.s) {
+      // Not converted in this run (its file could not be fetched): the next run tries again.
+      reasons.push('time');
+      return;
+    }
+    noteBook_(j, b.s);
+    var w = b.s.state === 'paused' ? String(b.s.waiting_for || '') : '';
+    var st = w === 'judges' ? 'done' : w || b.s.state;
+    if (st === 'done' || (st === 'incomplete' && (j.attempts = (j.attempts || 0) + 1) >= CONFIG.MAX_INCOMPLETE_ATTEMPTS)) {
+      j.convertedAt = now_().toISOString();
+      j.stage = 'running';
+      done.push(j.fileId + ': ' + deliverOrLater_(ctx, j, b.s, st !== 'done'));
+      // Its book was not in the results: converted again with the queue.
+      if (j.stage === 'waiting') reasons.push('time');
+      return;
+    }
+    if (st === 'failed') {
+      if (!crashed || j === lead) j.failStreak = (j.failStreak || 0) + 1;
+      if (j.failStreak >= CONFIG.MAX_FAILED_ATTEMPTS) {
+        done.push(j.fileId + ': ' + giveUp_(ctx, j, String(b.s.reason || '') === 'crash' || crashed
+          ? 'فشل التحويل مرتين متتاليتين.' : 'تعذّر تحويل الكتاب: ' + shorten_(String(b.s.reason || ''), 200)));
+        return;
+      }
+      st = 'time';
+    }
+    if (st === 'incomplete' || (st === 'helper' && b.s.free_left)) st = 'time';
+    reasons.push(st === 'reader' ? 'paused' : st);
+  });
+  ctx.noDispatch = false;
+  saveJobs_(ctx.jobs);
+  var queue = queueJobs_(ctx);
+  if (!queue.length) return 'run over' + (done.length ? ' (' + done.join('; ') + ')' : '');
+  // The oldest unfinished book holds the turn; why the queue waits, if it does. The others
+  // wait in the queue (those an older version parked too).
+  var holder = queue[0];
+  queue.forEach(function (j) {
+    j.stage = 'waiting';
+    j.pausedDay = '';
+    delete j.waitFor;
+  });
+  holder.stage = 'running';
+  var has = function (k) { return reasons.indexOf(k) >= 0; };
+  var why = has('time') || !reasons.length ? 'time' : has('paused') ? 'paused' : has('boxes') ? 'boxes' : 'helper';
+  // A book not in this run (or a new one) has pages to read first, and the first readers can.
+  if (why !== 'time' && read1Free_(ctx) && queue.some(function (j) {
+    return books.every(function (b) { return b.job !== j; }) && hasRead1Work_(j);
+  })) why = 'time';
+  if (why !== 'time' && boxesMissed_(holder) && anyoneWorks_(ctx)) why = 'time';
+  var tag = 'run over' + (done.length ? ' (' + done.join('; ') + ')' : '') + ', ';
+  if (why === 'time') {
+    // At most MAX_TIME_RUNS such runs a Pacific day; then the queue waits for the next day.
+    var today = pacificDay_(now_());
+    if (holder.timeDay !== today) {
+      holder.timeDay = today;
+      holder.timeRuns = 0;
+    }
+    holder.timeRuns = (holder.timeRuns || 0) + 1;
+    if (holder.timeRuns <= CONFIG.MAX_TIME_RUNS) {
+      saveJobs_(ctx.jobs);
+      journal_('end', 'انتهى التشغيل وللنماذج عمل باقٍ: ' + stagesText_(holder.stages) + '.', holder.title);
+      return tag + 'go on: ' + dispatch_(ctx, holder, false, 'يكمل ما بقي');
+    }
+    s.quota_day = today;
+    why = 'paused';
+  }
+  if (why === 'paused') return tag + pause_(ctx, holder, s, forced);
+  holder.pausedDay = pacificDay_(now_());
+  holder.pausedAt = now_().toISOString();
+  holder.waitFor = why;
+  if (why === 'boxes') {
+    holder.boxSig = boxesSig_(ctx);
+    holder.pauseWhy = 'لا نموذج في المربعات يكمل صفحات الكتب';
+    journal_('park', 'لا نموذج في المربعات يكمل صفحات الكتب: ' + stagesText_(holder.stages) +
+      '. تكمل حين تضع نموذجاً في مربع.', holder.title);
+  } else {
+    holder.helperAt = now_().toISOString();
+    holder.pauseWhy = 'الصفحات الباقية مع نماذجك على جهازك';
+    journal_('park', 'الصفحات الباقية مع نماذجك على جهازك: ' + stagesText_(holder.stages) +
+      '. تكمل الكتب حين تنهيها أو يتجدد رصيد النماذج المجانية.', holder.title);
+  }
+  saveJobs_(ctx.jobs);
+  return tag + 'waiting (' + why + ')';
+}
+
+/** The user's models finished the pages of some book of the queue they were given. */
+function queueHelperDone_(ctx) {
+  return queueJobs_(ctx).some(function (j) { return helperDoneFor_(ctx, j); });
+}
+
+/**
+ * Books in the queue and no book holding the turn (an older version parked them, or the
+ * holder was delivered): the oldest runs, with the next ones, once someone can work.
+ */
+function queueNext_(ctx) {
+  var queue = queueJobs_(ctx).filter(function (j) { return j.stage === 'waiting'; });
+  if (!queue.length || !anyoneWorks_(ctx)) return '';
+  var job = queue[0];
+  job.stage = 'queued';
+  job.pendingCount = false;
+  saveJobs_(ctx.jobs);
+  return 'queue ' + job.fileId + ': ' + dispatch_(ctx, job, false, 'الكتب المنتظرة');
+}
+
 /**
  * The free models' daily quota ran out: the book waits for the next Pacific day (or for
  * the helper's models to finish what they were given). forced: a run the user asked for
@@ -920,6 +1204,14 @@ function resumeIfNewDay_(ctx, job) {
   }
   // A model the user put in a box since the run that paused may have quota left today.
   if (boxesMissed_(job) && anyoneWorks_(ctx)) return 'boxes changed, resume: ' + dispatch_(ctx, job, false, 'وضعتَ نموذجاً في المربعات');
+  // The queue waits for a model in the boxes: any change of them.
+  if (job.waitFor === 'boxes' && job.boxSig !== boxesSig_(ctx) && anyoneWorks_(ctx)) {
+    return 'boxes changed, resume: ' + dispatch_(ctx, job, false, 'تغيّرت المربعات');
+  }
+  // The queue waits for the user's models: they finished a book's pages, or they are off now.
+  if (job.waitFor === 'helper' && (queueHelperDone_(ctx) || !helperWork_(helperStatusOf_(ctx)))) {
+    return 'helper finished, resume: ' + dispatch_(ctx, job, false, 'أنهت نماذجك ما أُعطيت');
+  }
   // The helper's models read what the free model could not: no need to wait for tomorrow.
   if (helperDoneFor_(ctx, job)) return 'helper finished, resume: ' + dispatch_(ctx, job, false, 'أنهت نماذجك ما أُعطيت');
   return 'paused until after ' + job.pausedDay + ' (Pacific)';
@@ -991,6 +1283,12 @@ function failedOrGiveUp_(ctx, job, reason) {
   job.failStreak = (job.failStreak || 0) + 1;
   if (job.failStreak < CONFIG.MAX_FAILED_ATTEMPTS) {
     job.lastState = 'failed';
+    if (ctx.noDispatch) {
+      // A book of a run of several (handleRun_): it runs again with the queue.
+      job.stage = 'waiting';
+      saveJobs_(ctx.jobs);
+      return 'failed, again with the queue';
+    }
     saveJobs_(ctx.jobs);
     return 'failed, retry: ' + dispatch_(ctx, job, true, 'تعثّر التشغيل السابق، فيعيده');
   }
@@ -1178,6 +1476,9 @@ function newJob_(file) {
     lastError: '',
     pendingCount: true
   };
+  // The books go in the order they were put in Drive (a book moved back from «5- مشكلة»
+  // keeps its place).
+  try { job.fileCreated = file.getDateCreated().toISOString(); } catch (err) { /* createdAt then */ }
   // The workflow picks the converter from the extension, so a name without one
   // (possible on Drive) gets the extension of its MIME type.
   if (!hasExt) job.driveName = name + '.' + (MIME_EXT[file.getMimeType()] || 'pdf');
@@ -1194,6 +1495,10 @@ function dispatch_(ctx, job, countAttempt, why) {
     return 'deferred';
   }
   ctx.dispatched++;
+  // A conversion run carries the oldest unfinished books (runWindow_): the oldest is its own.
+  var run = job.humanRound || job.freeReviewRound ? [job] : runWindow_(ctx, job);
+  job = run[0];
+  var others = run.slice(1);
   // getOAuthToken() returns this execution's token. It carries the manifest scopes,
   // including drive (DriveApp is also used, so the scope is never dropped). It is valid
   // for about an hour, which is why every restart sends a fresh one.
@@ -1233,11 +1538,39 @@ function dispatch_(ctx, job, countAttempt, why) {
   // The free models' boxes as the page shows them, and those out of quota today.
   var models = freeInput_(freeInfo_());
   if (models) body.inputs.models = models;
+  if (others.length) {
+    // The run's other books, oldest first (queue_prep.py downloads and saves them).
+    body.inputs.queue = JSON.stringify({ order: queueKey_(job), books: others.map(function (b) {
+      var brv = loadRv_(b.fileId);
+      var bv = verdictsFile_(b.fileId);
+      return { id: b.fileId, name: b.driveName || b.name, dir: b.resultDir, title: b.title,
+        review: brv && brv.a ? brv.a : '', helper: helperInput_(ctx, b), judge: bv ? bv.getId() : '', order: queueKey_(b) };
+    }) });
+  }
   var r = gh_(ctx.cfg, 'post', '/repos/' + ctx.cfg.repo + '/actions/workflows/' + CONFIG.WORKFLOW + '/dispatches', body);
 
   if (r.code === 204 || r.code === 200) {
     job.stage = 'running';
     job.dispatchedAt = at.toISOString();
+    delete job.runLead;
+    delete job.waitFor;
+    job.runBooks = others.map(function (b) { return b.fileId; });
+    others.forEach(function (b) {
+      b.stage = 'running';
+      b.runLead = job.fileId;
+      b.dispatchedAt = job.dispatchedAt;
+      b.pausedDay = '';
+      delete b.runBooks;
+      delete b.waitFor;
+      var brv = loadRv_(b.fileId);
+      if (brv && brv.a) {
+        // Its saved answers travel with this run too.
+        if (b.rvDonePrev === undefined) b.rvDonePrev = brv.done || '';
+        brv.done = job.dispatchedAt;
+        brv.n = 0;
+        saveRv_(b.fileId, brv);
+      }
+    });
     if (countAttempt) job.attempts = (job.attempts || 0) + 1;
     job.pausedDay = '';
     job.pauseWhy = '';
@@ -1245,7 +1578,8 @@ function dispatch_(ctx, job, countAttempt, why) {
     delete job.pendingCount;
     delete job.helperDoneSeen;
     journal_('start', startText_(job, helper) + (why ? ' (' + why + ')' : '') +
-      (job.attempts > 1 && countAttempt ? '، المحاولة رقم ' + job.attempts : '') + '.', job.title);
+      (job.attempts > 1 && countAttempt ? '، المحاولة رقم ' + job.attempts : '') +
+      (others.length ? '، ومعه ' + others.map(function (b) { return '«' + b.title + '»'; }).join(' و') : '') + '.', job.title);
     if (rv && rv.a) {
       // Answers saved until now travel with this run; the old mark comes back if a
       // review round fails.
@@ -1259,7 +1593,11 @@ function dispatch_(ctx, job, countAttempt, why) {
     return 'dispatched';
   }
 
-  // Keep the book in "2- قيد التحويل" and try again at the next check.
+  // Keep the book in "2- قيد التحويل" and try again at the next check (the others of the run
+  // wait in the queue).
+  others.forEach(function (b) {
+    if (b.stage === 'queued') b.stage = 'waiting';
+  });
   job.stage = 'queued';
   job.pendingCount = !!countAttempt;
   job.pausedDay = '';
@@ -3626,7 +3964,8 @@ function saveJobs_(jobs) {
 }
 
 function isActive_(job) {
-  return job.stage === 'queued' || job.stage === 'running';
+  // A book carried by another book's run (runLead) does not hold the turn.
+  return (job.stage === 'queued' || job.stage === 'running') && !job.runLead;
 }
 
 /**
@@ -3634,7 +3973,8 @@ function isActive_(job) {
  * model in the boxes, or (older versions) the judges.
  */
 function isParked_(job) {
-  return job.stage === 'judging' || job.stage === 'helper' || job.stage === 'readerWait' || job.stage === 'boxWait';
+  return job.stage === 'judging' || job.stage === 'helper' || job.stage === 'readerWait' || job.stage === 'boxWait' ||
+    job.stage === 'waiting';
 }
 
 /** The review round running, if any (it may run while another book waits for its quota). */
@@ -3661,9 +4001,14 @@ function activeJob_(jobs) {
   return best;
 }
 
+/** Still being converted or delivered: in a run (its own or another book's), waiting, parked. */
+function inProgress_(job) {
+  return isActive_(job) || isParked_(job) || !!job.runLead || job.stage === 'running' || job.stage === 'delivering';
+}
+
 function finishedJobs_(jobs) {
   return Object.keys(jobs).map(function (id) { return jobs[id]; })
-    .filter(function (j) { return j && !isActive_(j); })
+    .filter(function (j) { return j && !inProgress_(j); })
     .sort(function (a, b) {
       var x = String(a.finishedAt || ''), y = String(b.finishedAt || '');
       return x === y ? 0 : (x > y ? -1 : 1);   // newest first
@@ -3672,8 +4017,8 @@ function finishedJobs_(jobs) {
 
 /** Keeps JOBS small: finished jobs are trimmed to what the page needs, oldest dropped. */
 function pruneJobs_(jobs) {
-  // Parked books (judging, helper) still need all their fields and must never be dropped.
-  var finished = finishedJobs_(jobs).filter(function (j) { return !isParked_(j); });
+  // Books still in progress need all their fields and must never be dropped.
+  var finished = finishedJobs_(jobs);
   finished.forEach(function (j) {
     ['name', 'driveName', 'resultDir', 'dispatchedAt', 'createdAt', 'pausedDay', 'pausedAt',
       'pendingCount', 'noteId', 'pauseMailed', 'pagesDone', 'pagesTotal', 'pauses',

@@ -1,6 +1,7 @@
 import argparse
 import collections
 import hashlib
+import heapq
 import json
 import os
 import re
@@ -799,8 +800,9 @@ def note_reading(pool, page_no, kind, status, reading, error):
                    extra="halves" if reading.get("via") == "halves" else "")
 
 
-def read_page(pool, doc, index, cache_dir, total, dual):
-    """First and second reading of one page, saved to cache_dir/NNNN.json.
+def read_page(pool, doc, index, cache_dir, total, dual, step=None):
+    """First and second reading of one page, saved to cache_dir/NNNN.json; step "a" gives
+    only the first, "b" only the second (the run's steps, run_steps).
     Returns the record, or None when the page has to wait for tomorrow's quota."""
     page_no = index + 1
     rec = load_record(cache_dir, page_no, pool.rescue if pool else "")
@@ -816,6 +818,11 @@ def read_page(pool, doc, index, cache_dir, total, dual):
     need_a = rec is None or rec.get("status") != "ok"
     b = (rec or {}).get("b")
     need_b = dual and (need_a or b is None or b.get("status") in ("failed", "suspicious"))
+    if step == "b" and need_a:
+        # The second reading comes after the first.
+        return rec
+    if step:
+        need_a, need_b = need_a and step == "a", need_b and step == "b"
     if not need_a and not need_b:
         return rec
     if need_a and (not pool.can_read("a") or pool.past("read")):
@@ -843,7 +850,7 @@ def read_page(pool, doc, index, cache_dir, total, dual):
                "text": reading["text"] if reading else "", "a": reading, **handed_back}
         if error:
             rec["error"] = error
-    if dual and rec["status"] == "ok":
+    if dual and need_b and rec["status"] == "ok":
         # The second reading comes from a different model, so its mistakes fall elsewhere.
         # Gemma may give it only when Gemini refused this page (and, with the status page's
         # boxes, only from a box).
@@ -1079,12 +1086,13 @@ def book_vocab(records):
     return vocab
 
 
-def check_pages(pool, filepath, records, cache_dir, dual, workers, reads=False, settles=False):
+def check_pages(pool, filepath, records, cache_dir, dual, workers, reads=False, settles=False, done=()):
     """Runs check_page on every read page whose check is missing or out of date.
     Pages the user answered about are theirs and never checked again.
     A page with the helper's second reading is checked with check_helper_page. A page whose
     next step is the helper's (reading it when reads, settling its two readings when settles)
-    waits for them, unless they handed it back. Returns the pages waiting for them."""
+    waits for them, unless they handed it back. A page the run's steps checked (done) is
+    left. Returns the pages waiting for them."""
     for r in records:
         if not review.pin_of(r):
             upgrade_check(r)
@@ -1095,7 +1103,8 @@ def check_pages(pool, filepath, records, cache_dir, dual, workers, reads=False, 
     turn = lambda r: not r.get("hskip") and (settles if (r.get("b") or {}).get("status") == "ok" else reads)
     by_helper = [r for r in due if theirs(r)]
     waiting = {r["page"] for r in due if not theirs(r) and turn(r)}
-    todo = [r for r in due if not theirs(r) and r["page"] not in waiting and (not dual or "b" in r)]
+    todo = [r for r in due if not theirs(r) and r["page"] not in waiting and (not dual or "b" in r)
+            and r["page"] not in done]
     lv = pool.live if pool else live.NULL
     if not todo and not by_helper:
         for p in waiting:
@@ -1965,7 +1974,8 @@ def tell_helper(box, args, total, recs, lite_out, share=()):
     in this run (share) are left out of it while the run works on them. Nothing when the
     helper is off for this run, so it stops working on the book."""
     need = sorted(p for p, r in recs.items() if helper_can(r, box) and p not in share) if box.transcribe else []
-    box.put_json("book.json", {"v": 1, "title": args.title, "total": total, "need": need,
+    box.put_json("book.json", {"v": 1, "title": args.title, "order": getattr(args, "order", "") or "",
+                               "total": total, "need": need,
                                "need_a": [p for p in need if box.reads1 and helperbox.needs_first_reading(recs[p])],
                                "lite_out": bool(lite_out), "at": helperbox.now(),
                                "run": os.environ.get("GITHUB_RUN_ID", "")})
@@ -2066,104 +2076,321 @@ def helper_can(rec, box):
     return box.settles
 
 
-def free_pass(pool, filepath, share, outs, cache_dir, total, workers, deadline, vocab, lite=False, on_back=None):
-    """The free models' pages while the helper's models work on the book (free_share): each
-    read twice by the Lite readers (once, when the helper's models already gave the second
-    reading), then settled by a Flash model; by Lite only when the helper's models do not
-    settle (lite), or for a page they handed back. No page starts after the deadline, or when
-    no model in its box can take its next step (free_can). on_back(page): a page the free
-    models leave (no model with quota left for it), for the helper's models at once. Returns
-    (pages settled, pages the free models moved on: read or settled in this run)."""
-    done, moved = set(), set()
-    lock = threading.Lock()
-    back = on_back or (lambda p: None)
+# The run's steps (the user's design, 2026-10-23: "separate the boxes so that nobody waits"):
+# each step has its own workers, and each takes the page that has waited longest for that step
+# in any book of the run, the oldest book's first. "a": the first reading, "b": the second,
+# "c": the check, and settling when the readings differ.
+STEPS = ("a", "b", "c")
 
-    def one(p):
-        if time.time() > deadline:
-            return
-        rec = load_record(cache_dir, p, pool.rescue)
-        if not free_can(pool, rec, lite):
-            # Nobody here can take its next step now (out of quota): the helper's models.
-            back(p)
-            return
-        local = open_pdf(filepath)
-        try:
-            had = (bool(rec) and rec.get("status") == "ok", bool(rec) and (rec.get("b") or {}).get("status") == "ok")
-            hb = (outs.get(p) or {}).get("hb")
-            given = not (rec and rec.get("status") == "ok") and helperbox.has_text(hb) \
-                and hb["text"].strip() != helperbox.EMPTY
-            rec = read_page(pool, local, p - 1, cache_dir, total, dual=not given)
-            if given and rec and rec.get("status") == "ok":
-                rec, changed = helperbox.merge(rec, outs[p], p, CHECK_VERSION)
+
+class Steps:
+    """The pages waiting for each step of the run, oldest book first, and the work going on.
+    A page goes through a step at most once in a run, once more when the user changed the
+    boxes (rescan). Workers stop when nothing waits and nothing is being worked on."""
+
+    def __init__(self, rescan=None):
+        self.cv = threading.Condition()
+        self.queues = {k: [] for k in STEPS}
+        self.queued = set()
+        self.tried = set()
+        # The pages being worked on now, by step: never queued again meanwhile (rescan).
+        self.working = set()
+        self.busy = 0
+        self.error = None
+        self.rescan = rescan or (lambda steps: False)
+
+    def put(self, step, item):
+        with self.cv:
+            key = (step,) + tuple(item)
+            if key in self.queued or key in self.tried or key in self.working:
+                return False
+            self.queued.add(key)
+            heapq.heappush(self.queues[step], tuple(item))
+            self.cv.notify_all()
+            return True
+
+    def did(self, step, item):
+        """The page already went through this step in this run."""
+        return (step,) + tuple(item) in self.tried
+
+    def take(self, step):
+        """The next page for this step, or None once the run's steps are over."""
+        with self.cv:
+            while True:
+                if self.error:
+                    return None
+                # The user changed the boxes: the pages passed over go to the models now there.
+                self.rescan(self)
+                if self.queues[step]:
+                    item = heapq.heappop(self.queues[step])
+                    self.queued.discard((step,) + item)
+                    self.tried.add((step,) + item)
+                    self.working.add((step,) + item)
+                    self.busy += 1
+                    return item
+                if not self.busy and not any(self.queues.values()):
+                    self.cv.notify_all()
+                    return None
+                self.cv.wait(1)
+
+    def done(self, step, item, error=None):
+        with self.cv:
+            self.working.discard((step,) + tuple(item))
+            self.busy -= 1
+            if error and not self.error:
+                self.error = error
+            self.cv.notify_all()
+
+
+def run_steps(pool, books, workers):
+    """The free models' work on every book of the run: each step's workers take the oldest page
+    waiting for it, and a page goes on to its next step at once (a page read twice is settled
+    while the next pages are read). Raises the first error a worker met."""
+    gen = [pool.box_gen]
+
+    def rescan(steps):
+        if pool.box_gen == gen[0]:
+            return False
+        gen[0] = pool.box_gen
+        steps.tried.clear()
+        for b in books:
+            b.scan(steps, pool)
+        return True
+
+    steps = Steps(rescan)
+    for b in books:
+        b.scan(steps, pool)
+
+    def worker(step):
+        while True:
+            item = steps.take(step)
+            if item is None:
+                return
+            error = None
+            try:
+                b = books[item[0]]
+                with live.in_book(b.index):
+                    nxt = b.do(step, item[1], pool, steps)
+                # Before this one counts as done, so the steps never end in between.
+                if nxt:
+                    steps.put(nxt, item)
+            except Exception as e:
+                error = e
+            steps.done(step, item, error)
+
+    threads = [threading.Thread(target=worker, args=(step,), daemon=True) for step in STEPS for _ in range(workers)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    if steps.error:
+        raise steps.error
+    return steps
+
+
+class Book:
+    """One book of the run. The Drive inbox sends the oldest unfinished books together (the
+    first is the run's own), and the models of each box take the oldest page waiting for
+    their step in any of them (run_steps). index: its place in the run."""
+
+    def __init__(self, index, filepath, output_path, args):
+        self.index = index
+        self.filepath = filepath
+        self.output_path = output_path
+        self.args = args
+        self.doc = pymupdf.open(filepath)
+        self.selected = parse_pages(args.pages, len(self.doc))
+        self.hash = file_sha(filepath)
+        self.cache_dir = os.path.join(args.work_dir, f"{self.hash}-{CACHE_VERSION}")
+        os.makedirs(self.cache_dir, exist_ok=True)
+        print(f"{len(self.doc)} pages, processing {len(self.selected)}; progress saved in {self.cache_dir}")
+        self.pins, self.human, self.notes = load_pins(args.human, self.hash)
+        # The answers of the user's own models (the helper's review box) count like the user's,
+        # but the user's answer to the same place wins.
+        self.answers = {}
+        for path in (args.judge_answers, args.answers):
+            got = (review.load(path) or {}).get("answers") if path else None
+            if isinstance(got, dict):
+                self.answers.update(got)
+        self.needs_ocr = any(len(self.doc[i].get_text().strip()) < MIN_TEXT_LAYER_CHARS for i in self.selected)
+        self.dual = False
+        self.box = None
+        self.transcribe = False
+        self.outs = {}
+        self.share = []
+        self.start = {}
+        self.free_pages = []
+        self.lite = True
+        self.vocab = set()
+        self.applied = {"touched": set(), "results": [], "seen": ""}
+        self.free_done, self.free_moved = set(), set()
+        self.handed, self.hand_lock, self.hand_at = set(), threading.Lock(), [0.0]
+        self.waits = 0
+        self.records_now = []
+        # The pages that went through the run's check step (check_pages leaves them).
+        self.checked = set()
+        self.state, self.summary = "", {}
+
+    def rescue(self, pool):
+        return pool.rescue if pool else self.args.rescue_model
+
+    def records(self, pool):
+        """Every selected page's record as saved ("pending" for one never read)."""
+        out = []
+        for i in self.selected:
+            rec = load_record(self.cache_dir, i + 1, self.rescue(pool))
+            out.append(rec or {"page": i + 1, "status": "pending"})
+        return out
+
+    def take_helper_files(self, recs):
+        """recs: {page: record or None}; the helper's latest files merged in and saved.
+        Returns the files, by page."""
+        outs = self.box.fetch()
+        for p in list(recs):
+            if p in outs:
+                rec, changed = helperbox.merge(recs[p], outs[p], p, CHECK_VERSION)
                 if changed:
-                    save_record(cache_dir, rec)
-            if rec and (rec.get("status") == "ok", (rec.get("b") or {}).get("status") == "ok") != had:
-                with lock:
-                    moved.add(p)
-            if not rec or rec.get("status") != "ok" or ((rec.get("b") or {}).get("status") != "ok"
-                                                        and not rec["a"].get("refused")):
+                    recs[p] = rec
+                    save_record(self.cache_dir, rec)
+        return outs
+
+    def back(self, p, lv):
+        """A page the free models leave during the run (no model of its box has quota left)
+        goes to the helper's models within a minute, with its readings."""
+        if not self.transcribe:
+            return
+        with self.hand_lock:
+            self.handed.add(p)
+            if time.time() - self.hand_at[0] < HAND_BACK_SECONDS:
                 return
-            tess = tesseract_for(filepath, cache_dir, p)
-            if rec.get("hfinal"):
-                result = check_helper_page(rec, tess, vocab, pool.live)
+            self.hand_at[0] = time.time()
+            pages = set(self.handed)
+        rescue = self.args.rescue_model
+        recs = dict(self.start)
+        recs.update({q: load_record(self.cache_dir, q, rescue) for q in pages})
+        send_readings(self.box, self.filepath, [r for r in recs.values() if r], self.cache_dir, lv, pages=pages)
+        tell_helper(self.box, self.args, len(self.doc), recs, False, [q for q in self.share if q not in pages])
+
+    def next_step(self, p, rec, steps):
+        """The step this page waits for, from the free models: None when it waits for nobody in
+        this run (done, pinned, the helper's, or a step it already went through)."""
+        if p in self.pins or (rec and review.pin_of(rec)):
+            return None
+        if rec is not None and rec.get("status") in ("empty", "text-layer"):
+            return None
+        if rec is None or rec.get("status") != "ok":
+            return "a"
+        if (rec.get("check") or {}).get("v") == CHECK_VERSION:
+            return None
+        b = rec.get("b")
+        second = (b or {}).get("status") == "ok"
+        if self.dual and not second and not steps.did("b", (self.index, p)) and \
+                (b is None or b.get("status") in ("failed", "suspicious")):
+            return "b"
+        if self.transcribe:
+            # The free models settle their two readings (or a refused page's one); a page the
+            # helper's models settled is checked without asking a model.
+            return "c" if second or rec["a"].get("refused") or not self.dual else None
+        if from_helper(rec) or rec.get("hfinal") or (self.dual and "b" not in rec):
+            # Their readings are checked after the steps (check_pages); a page with no second
+            # reading waits for one.
+            return None
+        return "c"
+
+    def scan(self, steps, pool):
+        for p in self.free_pages:
+            rec = load_record(self.cache_dir, p, pool.rescue)
+            if rec and not review.pin_of(rec):
+                upgrade_check(rec)
+            nxt = self.next_step(p, rec, steps)
+            if nxt:
+                steps.put(nxt, (self.index, p))
+
+    def do(self, step, p, pool, steps):
+        """One step of one page by the free models. Returns the page's next step."""
+        rec = load_record(self.cache_dir, p, pool.rescue)
+        if step in ("a", "b") and self.transcribe and not free_can(pool, rec, self.lite):
+            # Nobody here can take its next step now (out of quota): the helper's models.
+            self.back(p, pool.live)
+            return None
+        local = open_pdf(self.filepath)
+        try:
+            if step in ("a", "b"):
+                had = (bool(rec) and rec.get("status") == "ok", bool(rec) and (rec.get("b") or {}).get("status") == "ok")
+                hb = (self.outs.get(p) or {}).get("hb")
+                # The helper's models gave the second reading of a page with no first one yet.
+                given = self.transcribe and not had[0] and helperbox.has_text(hb) and hb["text"].strip() != helperbox.EMPTY
+                rec = read_page(pool, local, p - 1, self.cache_dir, len(self.doc), self.dual and not given, step=step)
+                if given and rec and rec.get("status") == "ok":
+                    rec, changed = helperbox.merge(rec, self.outs[p], p, CHECK_VERSION)
+                    if changed:
+                        save_record(self.cache_dir, rec)
+                if rec:
+                    self.vocab.update(norm_words(rec.get("text") or ""))
+                    self.vocab.update(norm_words((rec.get("b") or {}).get("text") or ""))
+                    if (rec.get("status") == "ok", (rec.get("b") or {}).get("status") == "ok") != had:
+                        self.free_moved.add(p)
+                return self.next_step(p, rec, steps) if rec else None
+            tess = tesseract_for(self.filepath, self.cache_dir, p)
+            if self.transcribe and rec.get("hfinal"):
+                result = check_helper_page(rec, tess, self.vocab, pool.live)
             else:
-                result = check_page(pool, local, rec, tess, vocab, lite=lite or bool(rec.get("hskip")))
+                result = check_page(pool, local, rec, tess, self.vocab, lite=self.lite or bool(rec.get("hskip")))
             if result == "wait":
-                # No Flash model left today: the helper's models settle it (send_readings).
-                back(p)
-                return
-            save_record(cache_dir, rec)
+                # No settler left in this run: the helper's models settle it (send_readings).
+                if self.transcribe:
+                    self.back(p, pool.live)
+                else:
+                    with self.hand_lock:
+                        self.waits += 1
+                return None
+            save_record(self.cache_dir, rec)
             pool.live.page(p, page_state(rec))
-            c = rec.get("check") or {}
-            print(f"  free page {p}: {c.get('state')} (diffs {c.get('diffs')})")
-            if result == "done":
-                with lock:
-                    done.add(p)
-                    moved.add(p)
+            c = rec["check"]
+            print(f"  check page {p}: {c['state']} (diffs {c.get('diffs')}, missing {c.get('missing_a')})")
+            if result == "done" and self.transcribe:
+                with self.hand_lock:
+                    self.free_done.add(p)
+                    self.free_moved.add(p)
+            return None
         finally:
             close_pdf(local)
 
-    # No request starts after the deadline, and a model's wait for its quota ends there too:
-    # the Drive token must last for handing the pages left to the helper's models.
-    stops, time_up = dict(pool.stops), pool.time_up
-    pool.stops = {"read": deadline, "settle": deadline}
-    try:
-        with ThreadPoolExecutor(max_workers=workers) as tp:
-            list(tp.map(one, share))
-    finally:
-        pool.stops, pool.time_up = stops, time_up
-    return done, moved
 
-
-def generate_epub_from_pdf(filepath, output_path, args):
-    doc = pymupdf.open(filepath)
-    selected = parse_pages(args.pages, len(doc))
-    book_hash = file_sha(filepath)
-    cache_dir = os.path.join(args.work_dir, f"{book_hash}-{CACHE_VERSION}")
-    os.makedirs(cache_dir, exist_ok=True)
-    print(f"{len(doc)} pages, processing {len(selected)}; progress saved in {cache_dir}")
-    pins, human, notes = load_pins(args.human, book_hash)
-    # The answers of the user's own models (the helper's review box) count like the user's,
-    # but the user's answer to the same place wins.
-    answers = {}
-    for path in (args.judge_answers, args.answers):
-        got = (review.load(path) or {}).get("answers") if path else None
-        if isinstance(got, dict):
-            answers.update(got)
+def generate_epub_from_pdf(filepath, output_path, args, others=()):
+    """One book, with the other books of the run (others: (filepath, output_path, args) each,
+    the Drive inbox's queue after this book): their pages go through the same steps, each
+    step's models taking the oldest page waiting (run_steps). Each book gets its own EPUB,
+    report and status; the run's own facts (requests, models out of quota) go with the first.
+    Returns the first book's exit code, or the first unfinished book's once it is done."""
+    specs = [(filepath, output_path, args)] + list(others)
+    books = []
+    for i, (path, out, bargs) in enumerate(specs):
+        try:
+            books.append(Book(i, path, out, bargs))
+        except Exception as e:
+            if not i:
+                raise
+            print(f"Book {path} left out of this run: {e}")
+            write_status(bargs.status, failed_summary(str(e)), bargs.title, "")
+    lead = books[0]
 
     # The status page's live view (live.py): silent when the run was started without one.
     lv = live.open_live(args.live, os.environ.get("DRIVE_TOKEN", ""), args.control)
-    for i in selected:
-        rec = load_record(cache_dir, i + 1, args.rescue_model)
-        if rec and not review.pin_of(rec) and scrub(rec, drop=not args.review_only):
-            save_record(cache_dir, rec)
-        lv.page(i + 1, "done" if (i + 1) in pins else page_state(rec))
+    if len(books) > 1:
+        lv.set_books([{"file": getattr(b.args, "drive_id", "") or "", "book": b.args.title} for b in books])
+    for b in books:
+        with live.in_book(b.index):
+            for i in b.selected:
+                rec = load_record(b.cache_dir, i + 1, args.rescue_model)
+                if rec and not review.pin_of(rec) and scrub(rec, drop=not args.review_only):
+                    save_record(b.cache_dir, rec)
+                lv.page(i + 1, "done" if (i + 1) in b.pins else page_state(rec))
     lv.set_phase("apply" if args.review_only else "start")
     lv.start()
 
     pool = None
-    needs_ocr = any(len(doc[i].get_text().strip()) < MIN_TEXT_LAYER_CHARS for i in selected)
-    if needs_ocr:
+    if any(b.needs_ocr for b in books):
         pool = ModelPool(args.model, args.second_model if args.dual else "", args.rescue_model, args.rpm)
         pool.live = lv
         if not args.review_only:
@@ -2190,99 +2417,38 @@ def generate_epub_from_pdf(filepath, output_path, args):
                 lv.role(model, role)
     dual = bool(pool and args.dual and args.second_model)
 
+    for b in books:
+        b.dual = dual
+        b.records_now = b.records(pool)
+        # A page the user answered about is theirs: it is never read again, and their answers
+        # go first, before any check.
+        for r in b.records_now:
+            if r["page"] in b.pins:
+                pinned = review.pin_record(r if r.get("status") != "pending" else None, r["page"], b.pins[r["page"]],
+                                           CHECK_VERSION)
+                r.clear()
+                r.update(pinned)
+                save_record(b.cache_dir, r)
+        b.applied = review.overlay(b.records_now, b.answers, CHECK_VERSION, (b.human or {}).get("answers_seen", ""))
+        for r in b.records_now:
+            if r["page"] in b.applied["touched"]:
+                save_record(b.cache_dir, r)
+        if b.applied["results"]:
+            print(f"Answers: {len(b.applied['results'])}, pages pinned: {compress(sorted(b.applied['touched']))}")
+
     # The helper on the user's computer (docs/helper-boxes-plan.md): its files are taken
     # first, so the free models do not read again what its models already read.
-    box = None
-    if pool and dual and args.helper and not args.review_only:
-        box = helperbox.HelperBox.open(args.helper, os.environ.get("DRIVE_TOKEN", ""), cache_dir)
-    transcribe = bool(box and box.transcribe)
+    for b in books:
+        if not (pool and dual and b.args.helper and not args.review_only):
+            continue
+        with live.in_book(b.index):
+            prepare_helper(b, pool, lv)
+    transcribe = any(b.transcribe for b in books)
     if pool and pool.strict and not args.review_only:
         # A model the user puts in a box during the run works there within seconds; one taken
         # out takes no new page (boxes_changed).
-        modes = helper_modes(box)
+        modes = helper_modes(lead.box)
         lv.watch(pool.revive, lambda free, helper: boxes_changed(pool, have, modes, free, helper))
-
-    def take_helper_files(recs):
-        """recs: {page: record or None}; the helper's latest files merged in and saved.
-        Returns the files, by page."""
-        outs = box.fetch()
-        for p in list(recs):
-            if p in outs:
-                rec, changed = helperbox.merge(recs[p], outs[p], p, CHECK_VERSION)
-                if changed:
-                    recs[p] = rec
-                    save_record(cache_dir, rec)
-        return outs
-
-    share, free_done, free_moved = [], set(), set()
-    if box:
-        start = {}
-        for i in selected:
-            rec = load_record(cache_dir, i + 1, args.rescue_model)
-            if (i + 1) in pins or (rec and rec.get("status") in ("text-layer", "empty")):
-                continue
-            with PDF_LOCK:
-                layer = len(doc[i].get_text("text", sort=True).strip())
-            if rec is not None or layer < MIN_TEXT_LAYER_CHARS:
-                start[i + 1] = rec
-        outs = take_helper_files(start)
-        # With the helper's models on, the free models and they share the book: the free
-        # models take its end in this run, and the helper's models do not touch it meanwhile.
-        # Only the pages the free models can move on now (a model in their box with quota):
-        # the others are the helper's models' at once.
-        can = lambda r: free_can(pool, r, not box.settles)
-        dev = lambda r: helper_can(r, box)
-        share = free_share(start, can=can, dev=dev) if transcribe else []
-        need = tell_helper(box, args, len(doc), start, False, share)
-        if transcribe:
-            box.start_images(sorted(set(need) | set(share)), lambda p: page_jpeg(filepath, p))
-            # Their pages' readings go now, not at the end of the run (on 2026-10-23 a run whose
-            # Drive token ran out first sent 494 images and no reading: nothing to settle on).
-            send_readings(box, filepath, [r for r in start.values() if r], cache_dir, lv, pages=set(need))
-            print(f"Free models: {len(share)} pages from the end of the book; the helper's models: {len(need)}")
-            lv.set_phase("free", pages=len(share), helper=len(need), reads=box.reads, settles=box.settles,
-                         reads1=box.reads1, reads2=box.reads2)
-            # A page the free models leave during the pass (a model ran out) goes to the helper's
-            # models within a minute, with its readings, not at the end of the run.
-            handed, hand_lock, hand_at = set(), threading.Lock(), [0.0]
-
-            def hand_back(p):
-                with hand_lock:
-                    handed.add(p)
-                    if time.time() - hand_at[0] < HAND_BACK_SECONDS:
-                        return
-                    hand_at[0] = time.time()
-                    pages = set(handed)
-                recs = dict(start)
-                recs.update({q: load_record(cache_dir, q, args.rescue_model) for q in pages})
-                send_readings(box, filepath, [r for r in recs.values() if r], cache_dir, lv, pages=pages)
-                tell_helper(box, args, len(doc), recs, False, [q for q in share if q not in pages])
-
-            free_done, free_moved = free_pass(pool, filepath, share, outs, cache_dir, len(doc), args.workers,
-                                  box.drive.started + FREE_PASS_SECONDS, book_vocab([r for r in start.values() if r]),
-                                  lite=not box.settles, on_back=hand_back)
-            print(f"Free models settled {len(free_done)} pages")
-
-    def work(i):
-        rec = load_record(cache_dir, i + 1, args.rescue_model)
-        if (i + 1) in pins or (rec and review.pin_of(rec)):
-            # A page the user answered about is theirs: it is never read again.
-            if (i + 1) in pins:
-                rec = review.pin_record(rec, i + 1, pins[i + 1], CHECK_VERSION)
-                save_record(cache_dir, rec)
-            return rec
-        if args.review_only:
-            # Only what is saved: a page never read keeps the book paused.
-            return rec
-        # Each worker opens its own document: PyMuPDF objects are not thread safe.
-        local = open_pdf(filepath)
-        try:
-            if transcribe:
-                # The free models' pages were done above; the rest is the helper's models'.
-                return rec if rec is not None else text_layer_record(local, i, cache_dir)
-            return read_page(pool, local, i, cache_dir, len(doc), dual)
-        finally:
-            close_pdf(local)
 
     if lv.on and pool and not args.review_only and not transcribe:
         # The live view needs the run's Drive token: no page work starts after it would run
@@ -2290,92 +2456,164 @@ def generate_epub_from_pdf(filepath, output_path, args):
         pool.stops = run_stops(os.environ.get("DRIVE_TOKEN", ""))
         lv.set_stops(**pool.stops)
 
-    def read_pass():
-        """Stage 1: two readings of every page (a page read already, or that nobody can read
-        now, is passed over at once)."""
-        if pool and not args.review_only and not transcribe:
-            lv.set_phase("read", pages=sum(1 for i in selected if (i + 1) not in pins
-                                           and page_state(load_record(cache_dir, i + 1, args.rescue_model))
-                                           in ("unread", "read1")))
-        with ThreadPoolExecutor(max_workers=args.workers) as tp:
-            return [rec or {"page": i + 1, "status": "pending"} for i, rec in zip(selected, tp.map(work, selected))]
-
-    def boxes_moved(since, kind):
-        """The user changed the boxes since the pass began (boxes_changed), and this run can
-        still do this kind of page work ("read", "settle"): it goes over the pages again."""
-        return bool(pool) and not args.review_only and not transcribe and pool.box_gen != since \
-            and not pool.past(kind)
-
-    # Stage 1: two readings of every page. Stage 2: compare them and settle differences.
     gen = pool.box_gen if pool else 0
-    records = read_pass()
-    # The boxes changed during the pass: the pages it left go to the models now in them.
-    while boxes_moved(gen, "read"):
-        gen = pool.box_gen
-        records = read_pass()
-    # The user's answers go first: the pages they touch are pinned before any check.
-    applied = review.overlay(records, answers, CHECK_VERSION, (human or {}).get("answers_seen", ""))
-    for r in records:
-        if r["page"] in applied["touched"]:
-            save_record(cache_dir, r)
-    if applied["results"]:
-        print(f"Answers: {len(applied['results'])}, pages pinned: {compress(sorted(applied['touched']))}")
+    if pool and not args.review_only:
+        for b in books:
+            if not b.transcribe:
+                b.free_pages = [i + 1 for i in b.selected]
+            b.vocab = book_vocab([r for r in b.records_now if r])
+        if not transcribe:
+            lv.set_phase("read", pages=sum(1 for b in books for r in b.records_now
+                                           if r["page"] not in b.pins and page_state(r) in ("unread", "read1")))
+        # With the helper's models on, no page starts after the free models' time (the Drive
+        # token must last for handing the pages left to them), and a model's wait for its
+        # quota ends there too.
+        stops, time_up = dict(pool.stops), pool.time_up
+        if transcribe:
+            deadline = min(b.box.drive.started for b in books if b.transcribe) + FREE_PASS_SECONDS
+            pool.stops = {"read": deadline, "settle": deadline}
+        try:
+            steps = run_steps(pool, books, args.workers)
+            for b in books:
+                b.checked = {k[2] for k in steps.tried if k[0] == "c" and k[1] == b.index}
+        finally:
+            if transcribe:
+                pool.stops, pool.time_up = stops, time_up
+        for b in books:
+            if b.waits:
+                with live.in_book(b.index):
+                    # One line for them all: no settler is left in this run (quota, or its time is up).
+                    lv.note("", "wait", kind="page", n=b.waits)
+            if b.transcribe:
+                print(f"Free models settled {len(b.free_done)} pages")
+
+    codes = []
+    for b in books:
+        try:
+            with live.in_book(b.index):
+                codes.append(finish_book(b, pool, lv, args, gen, b is lead))
+        except Exception as e:
+            if b is lead:
+                raise
+            print(f"Book {b.filepath} could not be finished: {e}")
+            write_status(b.args.status, failed_summary(str(e)), b.args.title, "")
+            codes.append(1)
+    lv.finish(lead.state, unsure=len(lead.summary["pages_unsure"]), waiting=len(lead.summary["pages_waiting"]),
+              helper=len(lead.summary["pages_helper"]), missing=len(lead.summary["pages_missing"]),
+              out=lead.summary.get("models_out"))
+    return next((c for c in codes if c), 0)
+
+
+def failed_summary(reason):
+    """status.json of a book of the run that could not be converted at all."""
+    return {"state": "failed", "reason": reason[:300], "pages_total": 0, "pages_done": 0, "pages_unsure": [],
+            "pages_missing": [], "pages_waiting": [], "pages_retry": [], "pages_helper": [], "pages_human": []}
+
+
+def prepare_helper(b, pool, lv):
+    """The book's folder for the helper's models: their files merged in, and, while they
+    transcribe, the pages split between them and the free models (free_share), with the page
+    images and the free models' readings of their pages."""
+    args = b.args
+    b.box = helperbox.HelperBox.open(args.helper, os.environ.get("DRIVE_TOKEN", ""), b.cache_dir)
+    b.transcribe = bool(b.box.transcribe)
+    b.lite = not b.box.settles if b.transcribe else True
+    start = {}
+    for i in b.selected:
+        rec = load_record(b.cache_dir, i + 1, args.rescue_model)
+        if (i + 1) in b.pins or (rec and (rec.get("status") in ("text-layer", "empty") or review.pin_of(rec))):
+            continue
+        with PDF_LOCK:
+            layer = len(b.doc[i].get_text("text", sort=True).strip())
+        if rec is not None or layer < MIN_TEXT_LAYER_CHARS:
+            start[i + 1] = rec
+    b.start = start
+    b.outs = b.take_helper_files(start)
+    # With the helper's models on, the free models and they share the book: the free models
+    # take its end in this run, and the helper's models do not touch it meanwhile. Only the
+    # pages the free models can move on now (a model in their box with quota): the others are
+    # the helper's models' at once.
+    can = lambda r: free_can(pool, r, not b.box.settles)
+    dev = lambda r: helper_can(r, b.box)
+    b.share = free_share(start, can=can, dev=dev) if b.transcribe else []
+    need = tell_helper(b.box, args, len(b.doc), start, False, b.share)
+    if b.transcribe:
+        b.free_pages = sorted(b.share)
+        b.box.start_images(sorted(set(need) | set(b.share)), lambda p: page_jpeg(b.filepath, p))
+        # Their pages' readings go now, not at the end of the run (on 2026-10-23 a run whose
+        # Drive token ran out first sent 494 images and no reading: nothing to settle on).
+        send_readings(b.box, b.filepath, [r for r in start.values() if r], b.cache_dir, lv, pages=set(need))
+        print(f"Free models: {len(b.share)} pages from the end of the book; the helper's models: {len(need)}")
+        lv.set_phase("free", pages=len(b.share), helper=len(need), reads=b.box.reads, settles=b.box.settles,
+                     reads1=b.box.reads1, reads2=b.box.reads2)
+
+
+def finish_book(b, pool, lv, args, gen, lead):
+    """After the run's steps: the helper's files and turn, the last checks, the review places,
+    and the book's EPUB, report and status. Returns its exit code."""
+    bargs = b.args
+    records = []
+    for i in b.selected:
+        rec = load_record(b.cache_dir, i + 1, args.rescue_model)
+        if rec is None and not args.review_only:
+            local = open_pdf(b.filepath)
+            try:
+                rec = text_layer_record(local, i, b.cache_dir)
+            finally:
+                close_pdf(local)
+        records.append(rec or {"page": i + 1, "status": "pending"})
     helper_wait = set()
+    box, transcribe = b.box, b.transcribe
     if box:
         lv.set_phase("helper")
         if transcribe:
-            send_readings(box, filepath, records, cache_dir, lv)
+            send_readings(box, b.filepath, records, b.cache_dir, lv)
         # What the helper did while the free models worked.
         recs = {r["page"]: r for r in records if r.get("status") not in ("text-layer", "empty")}
-        take_helper_files(recs)
+        b.take_helper_files(recs)
         records = [recs.get(r["page"], r) for r in records]
     if pool and not args.review_only:
         lv.set_phase("check", pages=sum(1 for r in records if page_state(r) in ("read2", "read1")))
-        helper_wait = check_pages(pool, filepath, records, cache_dir, dual, args.workers,
-                                  transcribe and box.reads2, transcribe and box.settles)
-        # The boxes changed while the pages were checked: the pages left go through both
-        # stages again with the models now in them.
-        while boxes_moved(gen, "settle"):
-            gen = pool.box_gen
-            if not pool.past("read"):
-                records = read_pass()
-            lv.set_phase("check", pages=sum(1 for r in records if page_state(r) in ("read2", "read1")))
-            helper_wait = check_pages(pool, filepath, records, cache_dir, dual, args.workers)
+        helper_wait = check_pages(pool, b.filepath, records, b.cache_dir, b.dual, args.workers,
+                                  transcribe and box.reads2, transcribe and box.settles, done=b.checked)
     free_left = False
     if transcribe:
         # Every page left goes back to the helper's models; the free models take their share
         # again in the next run.
         left = {r["page"]: r for r in records if r.get("status") not in ("text-layer", "empty")}
         helper_wait |= {p for p, r in left.items() if helper_can(r, box)}
-        tell_helper(box, args, len(doc), left, pool.free_out())
+        tell_helper(box, bargs, len(b.doc), left, pool.free_out())
         # Worth another run right away: the free models finished pages (or the user sent one
         # back to work) and still have something they can do.
-        free_left = (bool(free_moved) or bool(pool.revived)) and \
+        free_left = (bool(b.free_moved) or bool(pool.revived)) and \
             bool(free_share(left, can=lambda r: free_can(pool, r, not box.settles), dev=lambda r: helper_can(r, box)))
+    notes = b.notes
     if box:
         box.wait_images()
         notes = notes + [f"المساعد: {n}" for n in box.notes]
 
     review_pages = images = None
-    if args.review_out:
+    applied = b.applied
+    if bargs.review_out:
         unsure = [r["page"] for r in records if (r.get("check") or {}).get("state") == "unsure" and r.get("text")]
-        data, images = review_pages_data(filepath, cache_dir, unsure)
+        data, images = review_pages_data(b.filepath, b.cache_dir, unsure)
         vocab = set()
         for r in records:
             vocab.update(norm_words(r.get("text") or ""))
             vocab.update(norm_words((r.get("b") or {}).get("text") or ""))
-        review_pages, became_human = review.build(records, data, answers, applied["results"], vocab,
-                                                  page_heads(cache_dir, [r["page"] for r in records]))
+        review_pages, became_human = review.build(records, data, b.answers, applied["results"], vocab,
+                                                  page_heads(b.cache_dir, [r["page"] for r in records]))
         for r in records:
             if r["page"] in became_human:
-                save_record(cache_dir, r)
+                save_record(b.cache_dir, r)
         print(f"Review: {sum(len(p['items']) for p in review_pages)} places on {len(review_pages)} pages")
 
     lv.set_phase("build")
+    dual = b.dual
     reader_wait, readers_left = waiting_for_reader(None if args.review_only else pool, records, dual)
     summary = summarize(records, dual, review_pages, applied, helper_wait, reader_wait, readers_left)
     if transcribe:
-        summary.update(free_left=free_left, free_done=len(free_done))
+        summary.update(free_left=free_left, free_done=len(b.free_done))
         if summary["state"] == "paused" and free_left:
             # Pages not read yet only because the run's time was up: the next run reads them.
             summary["state"] = "helper"
@@ -2389,39 +2627,41 @@ def generate_epub_from_pdf(filepath, output_path, args):
         # No model in any box (free or on the user's computer) can take the waiting pages'
         # next step: the book waits for the user to put one there, not for a new day.
         summary["state"] = "boxes"
-    if lv.boxes_at:
+    if lead and lv.boxes_at:
         # The boxes this run took during it (Live.watch): a change it did not take makes the
         # Drive inbox start the next run at once.
         summary["boxes_at"] = lv.boxes_at
     summary["stages"] = dict(collections.Counter("helper" if r["page"] in helper_wait else page_state(r)
                                                  for r in records))
     md = assemble(records, review_pages)
-    if not args.pages:
-        md = keep_main_headings(md, pool, cache_dir)
-    write_report(args.report, summary, pool, notes)
+    if not bargs.pages:
+        md = keep_main_headings(md, pool, b.cache_dir)
+    write_report(bargs.report, summary, pool, notes)
 
+    output_path = b.output_path
     md_path = output_path + ".md"
     with open(md_path, "w", encoding="utf-8") as f:
         f.write(md)
 
     cover_path = output_path + ".cover.png"
     # A review round asks no model to pick the cover: the one picked before, or the first page.
-    has_cover = extract_cover_from_pdf(doc, cover_path,
-                                       pick_cover_page(doc, None if args.review_only else pool, cache_dir))
+    has_cover = extract_cover_from_pdf(b.doc, cover_path,
+                                       pick_cover_page(b.doc, None if args.review_only else pool, b.cache_dir))
     try:
-        run_pandoc(md_path, output_path, args.title, cover_path if has_cover else None)
+        run_pandoc(md_path, output_path, bargs.title, cover_path if has_cover else None)
         print(f"Page list: {add_page_list(output_path)} pages")
     finally:
         if has_cover and os.path.exists(cover_path):
             os.remove(cover_path)
-        if not args.keep_markdown and os.path.exists(md_path):
+        if not bargs.keep_markdown and os.path.exists(md_path):
             os.remove(md_path)
-    if args.review_out:
-        review.write(args.review_out, review_pages, images, args.title, book_hash, records, applied["seen"],
+    if bargs.review_out:
+        review.write(bargs.review_out, review_pages, images, bargs.title, b.hash, records, applied["seen"],
                      applied["results"])
-    if pool:
-        # Every request of the run (the cover's and the table of contents' too), and the
-        # models whose daily quota it found used up.
+    if pool and lead:
+        # Every request of the run (the cover's and the table of contents' too, every book's),
+        # and the models whose daily quota it found used up: with the first book only, so the
+        # Drive inbox counts them once.
         summary["requests"] = dict(pool.requests)
         summary["models_out"] = sorted(pool.exhausted - pool.missing)
         # The free models this account has, for the status page's boxes; what the boxes are
@@ -2437,12 +2677,10 @@ def generate_epub_from_pdf(filepath, output_path, args):
                                        "settle": list(dict.fromkeys(pool.extra + readers))}
         if pool.boxes:
             summary["boxes"] = pool.boxes
-    write_status(args.status, summary, args.title, os.path.basename(output_path), pool.quota_day if pool else "")
+    write_status(bargs.status, summary, bargs.title, os.path.basename(output_path), pool.quota_day if pool else "")
     for r in records:
         lv.page(r["page"], "helper" if r["page"] in helper_wait else page_state(r))
-    lv.finish(summary["state"], unsure=len(summary["pages_unsure"]), waiting=len(summary["pages_waiting"]),
-              helper=len(summary["pages_helper"]), missing=len(summary["pages_missing"]),
-              out=summary.get("models_out"))
+    b.state, b.summary = summary["state"], summary
     return EXIT_CODES[summary["state"]]
 
 
@@ -2486,10 +2724,43 @@ def plain_summary():
             "pages_waiting": [], "pages_retry": [], "counts": {}, "samples": {}, "reasons": {}}
 
 
+# What the helper's models do in a run (helperInput_ in Code.gs; the workflow checks it too).
+HELPER_SPEC = re.compile(r"^[A-Za-z0-9_-]+:((read1|read2|settle)(\+(read1|read2|settle))*|transcribe|read|import)$")
+
+
+def queue_books(path, args):
+    """The other books of the run (--queue: the Drive inbox's oldest unfinished books after this
+    one, prepared by the workflow) as (filepath, output_path, args) each. A book's outputs go in
+    its own folder: the EPUB (with its .md), report.md, status.json and review-out."""
+    with open(path, encoding="utf-8") as f:
+        entries = json.load(f)
+    out = []
+    for e in entries if isinstance(entries, list) else []:
+        pdf = str(e.get("pdf") or "")
+        if not pdf.lower().endswith(".pdf") or not os.path.isfile(pdf):
+            print(f"Queue: {pdf or '?'} left out (no PDF)")
+            continue
+        folder = str(e.get("out") or "")
+        os.makedirs(folder, exist_ok=True)
+        name = os.path.splitext(os.path.basename(pdf))[0]
+        bargs = argparse.Namespace(**vars(args))
+        helper = str(e.get("helper") or "")
+        given = lambda k: str(e.get(k) or "") if e.get(k) and os.path.isfile(str(e.get(k))) else ""
+        bargs.__dict__.update(
+            title=str(e.get("title") or name), pages="", order=str(e.get("order") or ""),
+            report=os.path.join(folder, "report.md"), status=os.path.join(folder, "status.json"),
+            review_out=os.path.join(folder, "review-out"), keep_markdown=True,
+            answers=given("answers"), judge_answers=given("judge"), human=given("human"),
+            helper=helper if HELPER_SPEC.match(helper) else "")
+        out.append((pdf, os.path.join(folder, name + ".epub"), bargs))
+    return out
+
+
 def process_file(filepath, output_path, args):
     ext = os.path.splitext(filepath)[1].lower()
     if ext == '.pdf':
-        return generate_epub_from_pdf(filepath, output_path, args)
+        others = queue_books(args.queue, args) if args.queue else []
+        return generate_epub_from_pdf(filepath, output_path, args, others)
     if ext == '.docx':
         return generate_epub_from_docx(filepath, output_path, args)
     if ext == '.txt':
@@ -2544,6 +2815,11 @@ def main():
                              "<folder id>:transcribe (its models read and settle), :read (they only read), "
                              ":settle (they only settle; the free models read every page) or "
                              "<folder id>:import (their work so far is used); the Drive token is in DRIVE_TOKEN")
+    parser.add_argument("--queue", default="",
+                        help="A JSON list of the other books of the run, after this one in the Drive inbox's "
+                             "order: [{pdf, out, title, answers, judge, human, helper, order}]. Each box's "
+                             "models take the oldest page waiting for their step in any of them")
+    parser.add_argument("--order", default="", help="The book's place in the Drive inbox's order (book.json)")
     args = parser.parse_args()
 
     input_path = args.input

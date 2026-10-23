@@ -179,6 +179,24 @@ Test 'boxes: each model gives only its box''s step: the first reading, the secon
   Same (Work 'grok') '' 'and does not settle: nobody is in the settling box'
 }
 
+Test 'queue: the oldest book first, in the order the books were put in Drive' {
+  Write-Utf8 (Join-Path $Folder 'requests.json') (@{ v = 1; requests = @(); books = @(@{ id = 'newer'; title = 'b' }, @{ id = 'older'; title = 'a' })
+      boxes = @{ transcribe = @($GEMINI); read1 = @($GEMINI); read2 = @(); settle = @(); review = @() } } | ConvertTo-Json -Depth 5)
+  # The newer book's folder was made first (its first run used the helper before the older one's).
+  $newer = Make-Book 'newer' @(1) @(1) $false @{}
+  $older = Make-Book 'older' @(1) @(1) $false @{}
+  foreach ($b in @(@($newer, '2026-10-05T10:00:00.000Z'), @($older, '2026-10-01T10:00:00.000Z'))) {
+    $j = Read-Json (Join-Path $b[0] 'book.json')
+    $j | Add-Member -NotePropertyName order -NotePropertyValue $b[1] -Force
+    Write-Utf8 (Join-Path $b[0] 'book.json') ($j | ConvertTo-Json)
+  }
+  $script:Answer = { param($tool, $model, $kind, $task) @{ text = $RIGHT } }
+  $w = Work 'agy'
+  Same "$($w.kind)" 'readA' 'a first reading'
+  Same (Read-PageFile $older 1 'ha').model $GEMINI 'of the older book first'
+  Same (Read-PageFile $newer 1 'ha') $null 'the newer one after it'
+}
+
 Test 'boxes: the reading box only reads, the settling box only settles' {
   Set-Boxes @($GROK) @() @($GEMINI)
   $dir = Make-Book 'book1' @(4) @() $false @{ 4 = $WRONG }

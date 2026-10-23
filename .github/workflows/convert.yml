@@ -67,6 +67,10 @@ on:
         description: 'Drive inbox only: who reads first, second and settles, as read1=a,b;read2=c;settle=d,e;out=f (out: found out of quota today)'
         required: false
         type: string
+      queue:
+        description: 'Drive inbox only: the other books of the run (JSON: {order, books: [{id, name, dir, title, review, helper, judge, order}]}), the oldest unfinished after this one; each step''s models take the oldest page waiting in any of them'
+        required: false
+        type: string
 
 permissions:
   contents: write
@@ -319,6 +323,19 @@ jobs:
           fi
           exit 0
 
+      # The other books of the run (the Drive inbox's oldest unfinished books after this one):
+      # downloaded, with their progress and their review state (queue_prep.py).
+      - name: Prepare the run's other books
+        if: inputs.queue != '' && inputs.compare_models == '' && inputs.text_check_models == '' && env.BOOK_HASH != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          DRIVE_TOKEN=$(jq -r '.inputs.drive_token // ""' "$GITHUB_EVENT_PATH")
+          [ -n "$DRIVE_TOKEN" ] && echo "::add-mask::$DRIVE_TOKEN"
+          git fetch -q --depth 1 origin +refs/heads/results:refs/remotes/origin/results 2>/dev/null || true
+          python queue_prep.py prepare || echo "::warning::The run's other books could not be prepared."
+          exit 0
+
       - name: Compare models
         if: inputs.compare_models != ''
         timeout-minutes: 50
@@ -398,7 +415,11 @@ jobs:
           if [[ "$FREE_BOXES" =~ $BOXES_RE ]]; then
             ARGS+=(--boxes "$FREE_BOXES")
           fi
-          if [[ " ${ARGS[*]} " == *" --helper "* || -n "$LIVE_FILE" ]]; then
+          # The run's other books, after this one (queue_prep.py), and this book's place in the
+          # Drive inbox's order (book.json: the helper's models take the oldest book first).
+          [ -f queue/manifest.json ] && ARGS+=(--queue queue/manifest.json)
+          [ -n "$LEAD_ORDER" ] && ARGS+=(--order "$LEAD_ORDER")
+          if [[ " ${ARGS[*]} " == *" --helper "* || -n "$LIVE_FILE" || -f queue/manifest.json ]]; then
             # The converter exchanges files with the helper's folder, and writes the live
             # file, with the run's Drive token, read from the event file and masked like the
             # book's own download.
@@ -417,6 +438,12 @@ jobs:
           echo "code=$CODE" >> "$GITHUB_OUTPUT"
           [ -f report.md ] && cat report.md >> "$GITHUB_STEP_SUMMARY"
           exit 0
+
+      # The other books' progress is kept apart, so this book's cache and permanent copy hold
+      # only its own; theirs go to their own permanent copies.
+      - name: Set the run's other books apart
+        if: always() && hashFiles('queue/books.json') != ''
+        run: python queue_prep.py stash
 
       - name: Save progress
         if: always() && inputs.compare_models == '' && inputs.text_check_models == '' && env.BOOK_HASH != ''
@@ -439,6 +466,7 @@ jobs:
           gh release upload progress "$BOOK_HASH.tgz" --repo "$GITHUB_REPOSITORY" --clobber ||
             echo "::warning::Could not save the permanent progress copy."
           rm -f "$BOOK_HASH.tgz"
+          if [ -f queue/books.json ]; then python queue_prep.py upload; fi
 
       - name: Upload EPUB Artifact
         if: always() && inputs.compare_models == '' && inputs.text_check_models == '' && env.EPUB_OUTPUT != ''
@@ -450,6 +478,7 @@ jobs:
             ${{ env.EPUB_OUTPUT }}.md
             report.md
             status.json
+            queue/out-*/*.epub
           if-no-files-found: warn
 
       # The book, its text, the report and status.json go to the "results" branch:
@@ -507,6 +536,8 @@ jobs:
             # The helper models' verdicts, kept with the saved ones for every later run.
             if [ -n "$JUDGE_SAVE" ] && [ -f review-in/judge.json ]; then cp review-in/judge.json "$DIR/review/judge-answers.json"; fi
           fi
+          # The run's other books, each in its own folder.
+          if [ -f queue/books.json ]; then python queue_prep.py save "$TMP"; fi
           cd "$TMP"
           git add -A
           git commit -q -m "Result: $RESULT_DIR (run ${GITHUB_RUN_NUMBER})" || exit 0
