@@ -247,6 +247,23 @@ class Pipeline(PipelineBase):
         self.assertEqual(self.records()[30]["check"]["state"], "reconciled")
         self.assertNotIn("كاقية", md)
 
+    def test_second_reading_error_is_retried_not_kept_single(self):
+        # Run 61 (2026-10-23): Gemma's 500s left pages with one reading, delivered as done.
+        code, st, md, fake = self.run_book({
+            "gemini-3.5-flash-lite": lambda p, n: answer(TRUE),
+            "gemini-3.1-flash-lite": lambda p, n: (_ for _ in ()).throw(Exception("500 INTERNAL")),
+        }, pages="30")
+        self.assertEqual(code, 2)
+        self.assertEqual(st["pages_retry"], [30])
+        self.assertIn("وجود قوانين", md)
+        code, st, md, fake = self.run_book({
+            "gemini-3.5-flash-lite": lambda p, n: answer(TRUE),
+            "gemini-3.1-flash-lite": lambda p, n: answer(TRUE),
+        }, pages="30")
+        self.assertEqual(code, 0)
+        rec = self.records()[30]
+        self.assertEqual((rec["b"]["model"], rec["check"]["state"]), ("gemini-3.1-flash-lite", "agreed"))
+
     def test_quota_only_for_second_model_does_not_bring_in_gemma(self):
         def gone(p, n):
             raise Exception("429 RESOURCE_EXHAUSTED GenerateRequestsPerDayPerProjectPerModel-FreeTier")

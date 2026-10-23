@@ -883,6 +883,15 @@ def check_page(pool, doc, rec, tess, vocab, lite=True):
     if b:
         info["missing_b"] = len(miss_b)
     page_no = rec["page"]
+    if b_rec.get("status") == "failed" and not b_rec.get("model"):
+        # Every model asked for its second reading hit an API error (Gemma's 500s,
+        # 2026-10-23): the next run asks again rather than keep one reading, up to
+        # MAX_CHECK_ERRORS runs.
+        rec["read_errors"] = rec.get("read_errors", 0) + 1
+        if rec["read_errors"] < MAX_CHECK_ERRORS:
+            rec["text"] = a
+            rec["check"] = {**info, "state": "retry"}
+            return "retry"
     if not miss_a and (not b or not diffs):
         rec["text"] = a
         rec["check"] = {**info, "v": CHECK_VERSION, "state": "agreed" if b else "single"}
@@ -1632,7 +1641,7 @@ def summarize(records, dual, review_pages=None, applied=None, helper_wait=(), re
 
 def write_report(path, summary, pool, notes=()):
     names = [("agreed", "القراءتان متطابقتان"), ("reconciled", "صُححت بمقارنة القراءتين على الصورة"),
-             ("single", "قراءة واحدة فقط"), ("retry", "تعذّر حسمها بسبب خطأ مؤقت (تُعاد في التشغيل القادم)"),
+             ("single", "قراءة واحدة فقط"), ("retry", "تعذّرت قراءتها الثانية أو حسمها بسبب خطأ مؤقت (تُعاد في التشغيل القادم)"),
              ("unsure", "لم تُحسم (مشكوك فيها)"), ("human", "روجعت يدوياً"),
              ("text-layer", "نص جاهز في الملف"), ("empty", "فارغة/صور"),
              ("ok", "قُرئت ولم تُراجع بعد"), ("suspicious", "قراءة ناقصة"), ("failed", "فشلت"),
