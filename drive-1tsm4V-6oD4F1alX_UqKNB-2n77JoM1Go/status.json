@@ -6,19 +6,20 @@
   "pages_unsure": [
     1
   ],
-  "pages_missing": [],
-  "pages_waiting": [
-    2,
+  "pages_missing": [
     3,
-    4,
-    5,
     6,
-    7,
     8,
     9,
+    12
+  ],
+  "pages_waiting": [
+    2,
+    4,
+    5,
+    7,
     10,
     11,
-    12,
     13,
     14,
     15,
@@ -527,19 +528,24 @@
   "review_seen": "",
   "stages": {
     "unsure": 1,
-    "unread": 507,
-    "read1": 1
+    "read2": 2,
+    "failed": 5,
+    "read1": 4,
+    "unread": 497
   },
   "requests": {
-    "gemini-3.5-flash-lite": 5,
-    "gemini-3.1-flash-lite": 5,
-    "gemini-3.7-flash": 4,
-    "gemini-3.6-flash": 1
+    "gemma-4-31b-it": 22,
+    "gemini-3.5-flash-lite": 4,
+    "gemini-3.1-flash-lite": 5
   },
   "models_out": [
+    "gemini-3-flash-preview",
     "gemini-3.1-flash-lite",
+    "gemini-3.5-flash",
     "gemini-3.5-flash-lite",
-    "gemini-3.7-flash"
+    "gemini-3.6-flash",
+    "gemini-3.7-flash",
+    "gemini-3.8-flash"
   ],
   "free_models": [
     "gemini-3.5-flash-lite",
@@ -578,23 +584,19 @@
   },
   "boxes": {
     "read1": [
-      "gemini-3.5-flash-lite"
+      "gemma-4-31b-it"
     ],
     "read2": [
-      "gemini-3.1-flash-lite"
-    ],
-    "settle": [
-      "gemini-3.7-flash",
-      "gemini-3.6-flash",
-      "gemini-3-flash-preview",
       "gemini-3.5-flash-lite",
       "gemini-3.1-flash-lite"
-    ]
+    ],
+    "settle": []
   },
   "book": "تراث الانسانية 4_k2opt",
   "epub": "تراث الانسانية 4_k2opt.epub",
-  "updated_at": "2026-10-23T19:10:54Z",
+  "updated_at": "2026-10-23T20:26:32Z",
   "quota_day": "2026-10-23",
-  "run_id": 40008375924,
-  "run_number": 62
+  "waiting_for": "time",
+  "run_id": 40013923215,
+  "run_number": 63
 }
