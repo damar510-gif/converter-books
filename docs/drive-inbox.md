@@ -33,8 +33,9 @@ The answers the user gives on the status page (see "Results" below) are kept in
 | `result_dir` | `drive-<fileId>`. |
 | `title` | Book title (the file name without its extension). |
 | `review` | Optional. The Drive ID of the book's answers file, so the run applies the user's answers; with `:only` appended (or `:only` alone) the run only applies the answers and rebuilds the book from saved pages, with no reading or settling request. |
-| `helper` | Optional. The book's folder for the helper on the user's computer (`بيانات المساعد/كتب/<fileId>`), with `:transcribe` (the models in the user's box give the second reading and settle; the free model reads each page once) or `:import` (their work so far is used, the free model does the rest). See docs/helper-boxes-plan.md. |
+| `helper` | Optional. The book's folder for the helper on the user's computer (`بيانات المساعد/كتب/<fileId>`), with `:transcribe` (the models in the user's boxes read and settle), `:read` (they only read), `:settle` (they only settle; the free models read every page) or `:import` (their work so far is used, the free model does the rest). See docs/helper-boxes-plan.md. Until 2026-10-23 the workflow dropped `:read` and `:settle`, so the models in the settling box never got a page. |
 | `judge` | Optional. The Drive ID of `بيانات المساعد/أحكام/<fileId>.json`, the helper models' verdicts on the unsure places. The run adds them to `review/judge-answers.json` and applies them like the user's answers (the user's own answer wins). |
+| `live` | Optional. The Drive ID of `تحويل الكتب/بيانات البث/live.json`, the live view's file (see "Live view" below). With it, the run writes what it does there every two seconds or so, and with the free models alone it starts no page work after its Drive token would run out (state `paused` + `waiting_for: "time"`). |
 
 Only one conversion runs at a time. The workflow also declares
 `concurrency: convert`, so a second dispatch waits.
@@ -110,6 +111,7 @@ Read the files with `GET /repos/{repo}/contents/<path>?ref=results` and the head
 | `paused` | The day's reading quota ran out (`pages_waiting`). Progress is saved. Start the same book again after midnight Pacific time; `quota_day` is the Pacific date the quota ran out. |
 | `paused` + `"waiting_for": "judges"` | Older versions only (no free model judges any more): the script delivers the book; a book an older script parked for the judges runs once more and is delivered. |
 | `paused` + `"waiting_for": "reader"` | Some free readers' daily quota is used up and others (`readers_left`) still have some; the pages in `pages_waiting` only need a second reading that only the readers now out could give (a page's two readings never come from one model). The script parks the book (`stage: 'readerWait'`), starts the next book with the readers left, and runs the parked books first, oldest first, after midnight Pacific time (`quota_day`). With every reader out the state is plain `paused` and the book keeps its turn. |
+| `paused` + `"waiting_for": "time"` | Only for a run that got a `live` file, with the free models alone: it stopped starting page work before its Drive token ran out (the live view needs it), and the free readers still have quota (`free_out` false). The script starts the next run at once (at most `MAX_TIME_RUNS` a Pacific day; after that the book waits for the next day like plain `paused`). |
 | `paused` + `"waiting_for": "helper"` | The pages in `pages_helper` are with the helper's models (they go from the start of the book; the free models took their share, `free_done` pages, from its end). The script parks the book (`stage: 'helper'`, shown under «الآن») and runs it again: at once when `free_left` (the free models stopped for time with quota left), on a later Pacific day than `quota_day` (their quota renewed), when the helper reports its pages finished, or with `:import` when the user empties the box, the computer is away for an hour, or the helper has not moved for six hours. |
 | `incomplete` | Some pages could not be read (`pages_missing`), or their check hit temporary API errors (`pages_retry`). The EPUB exists. Starting the same book again retries only those pages. |
 | `failed` | The run crashed; the EPUB may be missing. |
@@ -121,7 +123,81 @@ attempt and must be ignored.
 models. A run whose verdicts file came with `judge` writes the merged
 `review/judge-answers.json`.
 
+Every run also writes `stages` (how many pages are `done`, `unsure`, read twice and waiting to
+be settled `read2`, read once `read1`, `unread`, `failed`, or with the user's models `helper`),
+`requests` (each free model's answered requests in this run) and `models_out` (the free models
+whose daily quota the run found used up). The script keeps `stages` for the page («الآن»), and
+adds `requests` and `models_out` up per Pacific day (Script Property `USAGE`, each run once).
+
 `pages_human` lists the pages the user answered about; `review_items` counts the places
 still open, and `review_applied` / `review_kept` the corrections and confirmations this
 run applied. `review_conflicts_new` counts answers saved after the previous run that
 could not be applied because their page changed; their places come back as new ones.
+
+## Live view
+
+What a run does, second by second, for the status page (`live.py`, `Page.html`):
+
+1. **The file.** `تحويل الكتب/بيانات البث/live.json`, made on first use (Script Property
+   `LIVE_FILE_ID`). Before each dispatch the script writes `{v, seq: 0, phase: "queued", file,
+   book, dispatched, round}`, and sends the file's ID as the `live` input.
+2. **The run writes it** with its own Drive token (`PATCH …/upload/drive/v3/files/<id>?uploadType=media`):
+   - the workflow's first step after Python marks `phase: "setup"` (`python live.py mark setup`);
+   - the converter keeps the script's `file`, `book`, `dispatched` and `round`, and writes
+     `{v, seq, at, started, run, run_n, phase, info, stops, pages, models, events, end}` every two
+     seconds or so while something changed;
+   - once the results are pushed, the workflow marks `phase: "saved"` with the book's state from
+     status.json (`python live.py mark saved --status status.json`).
+   A refused token (401) stops the writes; a passing error only skips one.
+3. **The page reads it** with `getLive(json)` every 2.5 seconds while a run is going (every 12
+   otherwise; never while hidden or during a review). `json` is `{after, run, ev, helper}`: the
+   journal lines and the run's events the page already has are left out, and `helper` asks for
+   the helper's live files too. `due` is true once the run marked `saved` and no check took its
+   results in yet: the page then calls `checkNow()`, so the next book (or the next run) starts
+   in seconds instead of up to ten minutes. While the live file is quiet (the run setting up,
+   saving, or one started without a live file) `getLive` adds the GitHub run's steps (`run:
+   {id, n, status, steps: [{n, s, c, at}]}`, asked at most every 20 seconds).
+
+`phase`: `queued`, `setup`, `start`, `apply` (a review round), `free` (the free models' share
+while the user's models work on the book), `read`, `helper` (files exchanged with the user's
+models), `check` (comparing and settling), `build`, `end`, `saved`.
+
+`pages`: `{total, done, unsure, read2, read1, unread, failed, helper, now: [pages in flight]}`.
+
+`models`: for each free model `{role (read1, read2, settle, rescue), queued (requests waiting for
+their turn under the per-minute pace), busy: [[page, kind, sent at]], ok, err, rl (slow-downs
+asked by Google), out, out_at, missing, limit (daily, when known), rest (until when it waits),
+last: [[result, page, kind, seconds, at]]}`.
+
+`events` (the latest 80): `{i, t, m (model, or "<tool>|<model>" for the user's), p (page), k
+(a, b, settle, page, helper, run), r (result), s (seconds), n (number), x (extra)}`. Results:
+`ok`, `empty`, `short`, `refused`, `error`, `rest`, `retry`, `out`, `missing` (a request);
+`settled`, `unsure`, `drops`, `lines`, `noanswer` (a settling); `agreed`, `single`, `unsure`,
+`wait` (a page, `n` pages waiting for a settler); `sent` (`n` pages given to the user's models);
+`phase` and `end` (`x` names them).
+
+`stops`: `{read, settle}`, when the run starts no more reading, and no more settling: with the
+free models alone and a live file, eight minutes before the token runs out (asked of Google's
+tokeninfo; 55 minutes guessed otherwise), the last twelve minutes of it for settling only.
+
+## Journal
+
+What the script did, in the user's words (Script Properties `JOURNAL`, the last 40, and
+`JOURNAL_N`): `{i, t, k, x, b}` = number, time, kind (`start`, `end`, `pause`, `park`,
+`deliver`, `problem`, `revive`, `gone`, `error`), text, book. `getStatus` gives the last 20 and
+`getLive` the new ones; «الآن» shows them under «آخر ما حدث». `checkNow()` («افحص الآن») is one
+check that returns the lines it added, or `line`: what the books wait for when nothing changed.
+
+## Run now
+
+`runNow(fileId)` («شغّل الآن»): the book waiting for its quota's new day, or parked (for the
+helper's models or a reader) while no book holds the slot, starts a run at once. It is refused
+while another run is going, or while another book holds the slot. The run's pause, if the quota
+is still out, is no pause of the book's own (`MAX_PAUSES`). The run hands the user's models what
+they can do (with `:settle`, the pages read twice and not settled).
+
+## A book back from «5- مشكلة»
+
+A book the user moves out of «5- مشكلة» (back to «1- جديد» to try again, or anywhere else) is no
+problem any more: the page stops listing it among the finished books at once, and the next check
+drops its job and its note («… - سبب المشكلة.txt»). In «1- جديد» it starts afresh in its turn.

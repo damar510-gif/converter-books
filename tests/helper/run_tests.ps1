@@ -474,6 +474,62 @@ Test 'times set on the page: a model waits for its start, and stops after its st
   Same (Work 'agy').kind 'readB' 'works between the two'
 }
 
+Test 'live view: each tool''s live file says which page each model is on, and what it did last' {
+  Set-Boxes @($GEMINI) @() @($GEMINI)
+  $dir = Make-Book 'book1' @(1, 2) @() $false @{ 1 = $WRONG; 2 = $RIGHT }
+  $script:During = $null
+  $script:Answer = { param($tool, $model, $kind, $task)
+    # While the tool works, the live file shows the model on its page.
+    $script:During = Read-Json (Join-Path $Folder 'live-agy.json')
+    @{ text = $RIGHT } }
+  $job = Work 'agy'
+  Same $job.kind 'readB' 'a second reading first'
+  $c = $script:During.chips.$GEMINI
+  Same $c.state 'working' 'at work while the tool runs'
+  Same $c.page 1 'on page 1'
+  Same $c.kind 'readB' 'reading'
+  Same $c.book 'كتاب الاختبار' 'of the book'
+  Check ([bool]$c.since) 'since when'
+  $live = Read-Json (Join-Path $Folder 'live-agy.json')
+  $c = $live.chips.$GEMINI
+  Same $live.tool 'agy' 'the tool'
+  Same $c.page 0 'no page once done'
+  Same $c.done 1 'one page done'
+  Same "$($c.last[0].kind) $($c.last[0].page) $($c.last[0].result)" 'readB 1 ok' 'what it did last'
+  Work 'agy' | Out-Null
+  Work 'agy' | Out-Null
+  Work 'agy' | Out-Null
+  $c = (Read-Json (Join-Path $Folder 'live-agy.json')).chips.$GEMINI
+  Same "$($c.last[0].kind) $($c.last[0].page) $($c.last[0].result)" 'settle 2 same' 'agreeing readings, no request'
+  Same $c.done 4 'four jobs done'
+  Same @($c.last).Count 4 'the last jobs, newest first'
+  # Nothing changed: the file is not written again (Drive is not kept busy).
+  $before = (Get-Item -LiteralPath (Join-Path $Folder 'live-agy.json')).LastWriteTimeUtc
+  Start-Sleep -Milliseconds 30
+  Set-Chip $GEMINI @{ done = 4 } | Out-Null
+  Same (Get-Item -LiteralPath (Join-Path $Folder 'live-agy.json')).LastWriteTimeUtc $before 'not written again'
+  # The status file carries the same, for the page.
+  Write-Status (Get-Tools) (Load-State) @() (Get-Boxes (Read-Json (Join-Path $Folder 'requests.json')))
+  $st = (Read-Json (Join-Path $Folder 'helper-status.json')).chips.$GEMINI
+  Same $st.done 4 'done in helper-status.json'
+  Same "$($st.last[0].kind) $($st.last[0].page)" 'settle 2' 'last job in helper-status.json'
+}
+
+Test 'live view: a used-up limit and a refusal are in the model''s last jobs' {
+  Set-Boxes @($GEMINI, $GROK) @()
+  $dir = Make-Book 'book1' @(1) @() $false @{ 1 = $WRONG }
+  $script:Answer = { param($tool, $model, $kind, $task) @{ text = ''; code = 1; err = 'Error: 429 Too Many Requests: rate limit' } }
+  Work 'agy' | Out-Null
+  $c = (Read-Json (Join-Path $Folder 'live-agy.json')).chips.$GEMINI
+  Same $c.state 'exhausted' 'resting'
+  Same "$($c.last[0].page) $($c.last[0].result)" '1 quota' 'the limit, on page 1'
+  $script:Answer = { param($tool, $model, $kind, $task) @{ text = "I'm sorry, I can't help with transcribing this page." } }
+  Work 'grok' | Out-Null
+  $c = (Read-Json (Join-Path $Folder 'live-grok.json')).chips.$GROK
+  Same "$($c.last[0].page) $($c.last[0].result)" '1 refused' 'the refusal'
+  Same $c.done 0 'nothing done'
+}
+
 Remove-Item -LiteralPath $Tmp -Recurse -Force -ErrorAction SilentlyContinue
 Write-Host ''
 Write-Host "$($script:Count - $script:Failed) of $($script:Count) tests passed$(if ($script:Failed) { ", $($script:Failed) FAILED" })"

@@ -1,4 +1,5 @@
 import argparse
+import collections
 import hashlib
 import json
 import os
@@ -18,6 +19,7 @@ from google.genai import types
 
 import crosscheck
 import helperbox
+import live
 import review
 
 # Bump when the OCR prompt or page format changes, so cached pages are redone.
@@ -92,6 +94,15 @@ class QuotaExhausted(Exception):
 
     def __init__(self, model):
         super().__init__(f"daily quota exhausted for {model}")
+        self.model = model
+
+
+class TimeUp(QuotaExhausted):
+    """This run starts no more page work (ModelPool.stops): its Drive token, which the live
+    view needs, is about to run out. The page waits for the next run, like a used-up quota."""
+
+    def __init__(self, model):
+        Exception.__init__(self, f"no more page work in this run ({model})")
         self.model = model
 
 
@@ -273,9 +284,23 @@ class ModelPool:
         # Models this account does not have (404): unlike a used-up quota, they never come back.
         self.missing = set()
         self.quota_day = ""
+        # The status page's live view (live.py): what each model is doing.
+        self.live = live.NULL
+        # No reading starts after stops["read"], no settling after stops["settle"] (epoch
+        # seconds; none when empty); time_up: one was refused for it.
+        self.stops = {}
+        self.time_up = False
 
     def available(self, model):
         return bool(model) and model not in self.exhausted
+
+    def past(self, kind):
+        """No more page work of this kind ("read" or "settle") in this run (stops)."""
+        stop = self.stops.get(kind)
+        if stop and time.time() > stop:
+            self.time_up = True
+            return True
+        return False
 
     def set_extra(self, models):
         self.extra = [m for m in dict.fromkeys(models) if m and m not in (self.model, self.second, self.rescue)]
@@ -317,13 +342,23 @@ class ModelPool:
         )
 
     def _call(self, model, png, prompt):
-        self._limiter(model).wait()
-        with self.lock:
-            self.requests[model] = self.requests.get(model, 0) + 1
-        # png: one page image, a list of images (several pages in one request), or None.
-        images = [] if png is None else (png if isinstance(png, list) else [png])
-        contents = [types.Part.from_bytes(data=i, mime_type="image/png") for i in images] + [prompt]
-        response = self.client.models.generate_content(model=model, contents=contents, config=self._config(model))
+        # The live view shows each request waiting for its turn, then on its way.
+        h = self.live.begin(model, *live.now_doing())
+        answered = False
+        try:
+            self._limiter(model).wait()
+            self.live.sent(h)
+            with self.lock:
+                self.requests[model] = self.requests.get(model, 0) + 1
+            # png: one page image, a list of images (several pages in one request), or None.
+            images = [] if png is None else (png if isinstance(png, list) else [png])
+            contents = [types.Part.from_bytes(data=i, mime_type="image/png") for i in images] + [prompt]
+            began = time.time()
+            response = self.client.models.generate_content(model=model, contents=contents, config=self._config(model))
+            live.took(time.time() - began)
+            answered = True
+        finally:
+            self.live.done(h, answered)
         finish, text = "", ""
         if response.candidates:
             cand = response.candidates[0]
@@ -334,11 +369,16 @@ class ModelPool:
         return text.strip(), finish
 
     def read(self, png, prompt, model, attempts=3):
-        """Returns (text, finish_reason). Raises QuotaExhausted or the last error."""
+        """Returns (text, finish_reason). Raises QuotaExhausted (TimeUp for page work once its
+        stop time has passed) or the last error."""
         last = None
+        page, kind = live.now_doing()
+        stop = ("settle" if kind == "settle" else "read") if kind in ("a", "b", "settle") else None
         for attempt in range(attempts):
             if model in self.exhausted:
                 raise QuotaExhausted(model)
+            if stop and self.past(stop):
+                raise TimeUp(model)
             try:
                 return self._call(model, png, prompt)
             except Exception as e:
@@ -353,15 +393,18 @@ class ModelPool:
                             self.exhausted.add(model)
                             self.missing.add(model)
                         print(f"  {model}: no free quota on this key, skipped")
+                        self.live.note(model, "missing", page, kind)
                         raise QuotaExhausted(model) from e
                     if "perday" in low.replace(" ", "") or "per day" in low or "daily" in low:
                         with self.lock:
                             self.exhausted.add(model)
                             self.quota_day = self.quota_day or pacific_day()
                         print(f"  {model}: daily quota used up")
+                        self.live.note(model, "out", page, kind, n=live.quota_limit(msg))
                         raise QuotaExhausted(model) from e
                     m = re.search(r"retry(?:Delay)?['\"]?\s*[:=]?\s*['\"]?(\d+)", msg, re.I)
                     wait = int(m.group(1)) + 2 if m else 65
+                    self.live.note(model, "rest", page, kind, secs=wait)
                 elif "400" in msg and model not in self.no_tuning and (
                         "thinking" in low or "media_resolution" in low or "safety" in low):
                     print(f"  {model} rejected tuning options, retrying without them: {msg[:200]}")
@@ -370,17 +413,21 @@ class ModelPool:
                 elif any(code in msg for code in ("500", "502", "503", "504")) or "unavailable" in low \
                         or "timed out" in low or "timeout" in low or "deadline" in low:
                     wait = 20 * (2 ** attempt)
+                    self.live.note(model, "retry", page, kind, secs=wait, extra=msg[:80])
                 elif "404" in msg or "not_found" in low:
                     # A model name this account does not have: not asked again in this run.
                     with self.lock:
                         self.exhausted.add(model)
                         self.missing.add(model)
                     print(f"  {model}: not found, skipped: {msg[:160]}")
+                    self.live.note(model, "missing", page, kind)
                     raise QuotaExhausted(model) from e
                 else:
+                    self.live.note(model, "error", page, kind, extra=msg[:100])
                     raise
                 print(f"  {model}: {msg[:160]} -> retry in {wait}s")
                 time.sleep(wait)
+        self.live.note(model, "error", page, kind, extra=str(last)[:100])
         raise last
 
 
@@ -542,6 +589,31 @@ def text_layer_record(doc, index, cache_dir):
     return rec
 
 
+def page_state(rec):
+    """A page's state for the live view (live.Live.page)."""
+    if not rec or rec.get("status") == "pending":
+        return "unread"
+    if rec.get("status") in ("empty", "text-layer") or review.pin_of(rec):
+        return "done"
+    if rec.get("status") in ("failed", "suspicious"):
+        return "failed"
+    c = rec.get("check") or {}
+    if c.get("v") == CHECK_VERSION and c.get("state") in ("agreed", "reconciled", "single", "unsure", "human"):
+        return "unsure" if c.get("state") == "unsure" else "done"
+    return "read2" if (rec.get("b") or {}).get("status") == "ok" else "read1"
+
+
+def note_reading(pool, page_no, kind, status, reading, error):
+    """One reading of a page in the live view: who read it, how it went, how long it took."""
+    reading = reading or {}
+    model = reading.get("model") or (error.split(":", 1)[0] if error else "")
+    result = {"ok": "ok", "empty": "empty", "failed": "error"}.get(status, "short")
+    if reading.get("refused") and status != "ok":
+        result = "refused"
+    pool.live.note(model, result, page_no, kind, secs=live.took(), n=len(reading.get("text") or ""),
+                   extra="halves" if reading.get("via") == "halves" else "")
+
+
 def read_page(pool, doc, index, cache_dir, total, dual):
     """First and second reading of one page, saved to cache_dir/NNNN.json.
     Returns the record, or None when the page has to wait for tomorrow's quota."""
@@ -561,15 +633,20 @@ def read_page(pool, doc, index, cache_dir, total, dual):
     need_b = dual and (need_a or b is None or b.get("status") in ("failed", "suspicious"))
     if not need_a and not need_b:
         return rec
+    if need_a and (pool.free_out() or pool.past("read")):
+        # Nobody can read it in this run: no image is made for nothing.
+        return None
 
     png, pix = page_image(doc, page)
     ink = ink_ratio(pix)
     spread = pix.width > pix.height * 1.15
     prompt = OCR_PROMPT.format(spread=SPREAD_HINT if spread else "")
     if need_a:
-        status, reading, error = read_with(pool, pool.readers(), page, png, pix, prompt, ink, rescue=pool.rescue)
+        with live.doing(page_no, "a"):
+            status, reading, error = read_with(pool, pool.readers(), page, png, pix, prompt, ink, rescue=pool.rescue)
         if status == "pending":
             return None
+        note_reading(pool, page_no, "a", status, reading, error)
         rec = {"page": page_no, "ink": round(ink, 4), "spread": spread, "status": status,
                "text": reading["text"] if reading else "", "a": reading, **handed_back}
         if error:
@@ -579,16 +656,19 @@ def read_page(pool, doc, index, cache_dir, total, dual):
         # Gemma may give it only when Gemini refused this page.
         others = [m for m in pool.readers(pool.second) if m != rec["a"]["model"]]
         rescue = pool.rescue if rec["a"].get("refused") and rec["a"]["model"] != pool.rescue else ""
-        status, reading, error = read_with(pool, others, page, png, pix, prompt, ink, rescue=rescue)
+        with live.doing(page_no, "b"):
+            status, reading, error = read_with(pool, others, page, png, pix, prompt, ink, rescue=rescue)
         if status == "pending":
             rec.pop("b", None)
         else:
+            note_reading(pool, page_no, "b", status, reading, error)
             rec["b"] = reading or {"model": "", "text": "", "status": "failed"}
             rec["b"]["status"] = status
             if error:
                 rec["b"]["error"] = error
     rec.pop("check", None)
     save_record(cache_dir, rec)
+    pool.live.page(page_no, page_state(rec))
     second = (rec.get("b") or {}).get("model", "-") if dual else "off"
     print(f"  page {page_no}/{total}: {rec['status']} ({(rec.get('a') or {}).get('model', '-')} + {second})")
     return rec
@@ -633,47 +713,59 @@ def check_page(pool, doc, rec, tess, vocab, lite=True):
     info = {"ratio": round(ratio, 4), "diffs": len(diffs), "missing_a": len(miss_a)}
     if b:
         info["missing_b"] = len(miss_b)
+    page_no = rec["page"]
     if not miss_a and (not b or not diffs):
         rec["text"] = a
         rec["check"] = {**info, "v": CHECK_VERSION, "state": "agreed" if b else "single"}
+        pool.live.note("", "agreed" if b else "single", page_no, "page")
         return "done"
 
     # A page Gemini refused was read in halves or by the rescue model; asking
     # Gemini about the whole page again would only be refused again.
     if rec["a"].get("refused"):
         settle_state(rec, info, a, b, diffs, miss_a, miss_b)
+        pool.live.note("", rec["check"]["state"], page_no, "page")
         return "done"
 
-    page = doc[rec["page"] - 1]
+    if pool.past("settle") or not pool.settlers(lite):
+        # Nobody can settle it in this run: no image is made for nothing.
+        return "wait"
+    page = doc[page_no - 1]
     png, pix = page_image(doc, page)
     rules = OCR_RULES.format(spread=SPREAD_HINT if pix.width > pix.height * 1.15 else "")
     prompt = crosscheck.reconcile_prompt(rules, a, b, diffs, list(dict.fromkeys(miss_a + miss_b)))
     answered = errored = False
-    for model in pool.settlers(lite):
-        try:
-            text, finish = pool.read(png, prompt, model)
-        except QuotaExhausted:
-            continue
-        except Exception as e:
-            # Often an overload of one model only: try the other one.
-            errored = True
-            info["error"] = str(e)[:200]
-            continue
-        answered = True
-        text = clean_settled(text)
-        if not text or "MAX_TOKENS" in finish or is_refusal(finish):
-            info["rejected"] = f"{model}: no answer ({finish[:40]})"
-        elif not crosscheck.validate_final(text, a, b):
-            info["rejected"] = f"{model}: drops text the readings agree on"
-        else:
-            miss_f = missing_lines(tess, text, vocab) if tess else []
-            if len(miss_f) <= min([len(miss_a)] + ([len(miss_b)] if b else [])):
-                rec["text"] = text
-                info.update(model=model, missing_final=len(miss_f))
-                rec["check"] = {**info, "v": CHECK_VERSION, "state": "unsure" if miss_f else "reconciled"}
-                return "done"
-            info["rejected"] = f"{model}: {len(miss_f)} lines missing (readings: {len(miss_a)}/{len(miss_b)})"
-        break
+    with live.doing(page_no, "settle"):
+        for model in pool.settlers(lite):
+            try:
+                text, finish = pool.read(png, prompt, model)
+            except QuotaExhausted:
+                continue
+            except Exception as e:
+                # Often an overload of one model only: try the other one.
+                errored = True
+                info["error"] = str(e)[:200]
+                continue
+            answered = True
+            text = clean_settled(text)
+            if not text or "MAX_TOKENS" in finish or is_refusal(finish):
+                info["rejected"] = f"{model}: no answer ({finish[:40]})"
+                pool.live.note(model, "noanswer", page_no, "settle", secs=live.took())
+            elif not crosscheck.validate_final(text, a, b):
+                info["rejected"] = f"{model}: drops text the readings agree on"
+                pool.live.note(model, "drops", page_no, "settle", secs=live.took())
+            else:
+                miss_f = missing_lines(tess, text, vocab) if tess else []
+                if len(miss_f) <= min([len(miss_a)] + ([len(miss_b)] if b else [])):
+                    rec["text"] = text
+                    info.update(model=model, missing_final=len(miss_f))
+                    rec["check"] = {**info, "v": CHECK_VERSION, "state": "unsure" if miss_f else "reconciled"}
+                    pool.live.note(model, "unsure" if miss_f else "settled", page_no, "settle", secs=live.took(),
+                                   n=len(diffs))
+                    return "done"
+                info["rejected"] = f"{model}: {len(miss_f)} lines missing (readings: {len(miss_a)}/{len(miss_b)})"
+                pool.live.note(model, "lines", page_no, "settle", secs=live.took(), n=len(miss_f))
+            break
     if not answered:
         if not errored:
             return "wait"
@@ -683,6 +775,8 @@ def check_page(pool, doc, rec, tess, vocab, lite=True):
             rec["check"] = {**info, "state": "retry"}
             return "retry"
     settle_state(rec, info, a, b, diffs, miss_a, miss_b)
+    if rec["check"]["state"] == "unsure":
+        pool.live.note("", "unsure", page_no, "page")
     return "done"
 
 
@@ -691,19 +785,22 @@ def from_helper(rec):
     return (rec.get("b") or {}).get("via") == "helper"
 
 
-def check_helper_page(rec, tess, vocab):
+def check_helper_page(rec, tess, vocab, lv=live.NULL):
     """check_page for a page whose second reading, and settled text, came from the
     helper's models: nothing is asked of Gemini, and their text has to pass the same tests
-    as a settled text from Gemini. Returns 'done' or 'wait' (not settled by them yet)."""
+    as a settled text from Gemini. Returns 'done' or 'wait' (not settled by them yet).
+    lv: the live view, told how their settled text fared."""
     a = rec["a"]["text"]
     b = rec["b"]["text"]
     miss_a = missing_lines(tess, a, vocab) if tess else []
     miss_b = missing_lines(tess, b, vocab) if tess else []
     ratio, diffs = crosscheck.compare(a, b)
     info = {"ratio": round(ratio, 4), "diffs": len(diffs), "missing_a": len(miss_a), "missing_b": len(miss_b)}
+    page_no = rec["page"]
     if not miss_a and not diffs:
         rec["text"] = a
         rec["check"] = {**info, "v": CHECK_VERSION, "state": "agreed"}
+        lv.note("", "agreed", page_no, "page")
         return "done"
     final = rec.get("hfinal")
     if not final:
@@ -712,17 +809,23 @@ def check_helper_page(rec, tess, vocab):
     text = clean_settled(final["text"])
     if not text:
         info["rejected"] = f"{model}: no answer"
+        lv.note(model, "noanswer", page_no, "settle", extra="helper")
     elif not crosscheck.validate_final(text, a, b):
         info["rejected"] = f"{model}: drops text the readings agree on"
+        lv.note(model, "drops", page_no, "settle", extra="helper")
     else:
         miss_f = missing_lines(tess, text, vocab) if tess else []
         if len(miss_f) <= min(len(miss_a), len(miss_b)):
             rec["text"] = text
             info.update(model=model, missing_final=len(miss_f))
             rec["check"] = {**info, "v": CHECK_VERSION, "state": "unsure" if miss_f else "reconciled"}
+            lv.note(model, "unsure" if miss_f else "settled", page_no, "settle", n=len(diffs), extra="helper")
             return "done"
         info["rejected"] = f"{model}: {len(miss_f)} lines missing (readings: {len(miss_a)}/{len(miss_b)})"
+        lv.note(model, "lines", page_no, "settle", n=len(miss_f), extra="helper")
     settle_state(rec, info, a, b, diffs, miss_a, miss_b)
+    if rec["check"]["state"] == "unsure":
+        lv.note("", "unsure", page_no, "page")
     return "done"
 
 
@@ -791,15 +894,19 @@ def check_pages(pool, filepath, records, cache_dir, dual, workers, reads=False, 
     by_helper = [r for r in due if theirs(r)]
     waiting = {r["page"] for r in due if not theirs(r) and turn(r)}
     todo = [r for r in due if not theirs(r) and r["page"] not in waiting and (not dual or "b" in r)]
+    lv = pool.live if pool else live.NULL
     if not todo and not by_helper:
+        for p in waiting:
+            lv.page(p, "helper")
         return waiting
     vocab = book_vocab(records)
     with ThreadPoolExecutor(max_workers=os.cpu_count() or 2) as tp:
         tess = dict(zip((r["page"] for r in todo + by_helper),
                         tp.map(lambda r: tesseract_for(filepath, cache_dir, r["page"]), todo + by_helper)))
     for r in by_helper:
-        if check_helper_page(r, tess[r["page"]], vocab) == "done":
+        if check_helper_page(r, tess[r["page"]], vocab, lv) == "done":
             save_record(cache_dir, r)
+            lv.page(r["page"], page_state(r))
             print(f"  check page {r['page']}: {r['check']['state']} (helper, diffs {r['check']['diffs']})")
         elif turn(r):
             waiting.add(r["page"])
@@ -807,9 +914,13 @@ def check_pages(pool, filepath, records, cache_dir, dual, workers, reads=False, 
             # The helper is off, or every model in its box refused to settle the page
             # (skip.json): Gemini settles what its models read.
             todo.append(r)
+    for p in waiting:
+        lv.page(p, "helper")
     if not todo:
         return waiting
     print(f"Checking {len(todo)} pages against each other and Tesseract")
+    results = collections.Counter()
+    lock = threading.Lock()
 
     def work(rec):
         local = open_pdf(filepath)
@@ -817,13 +928,19 @@ def check_pages(pool, filepath, records, cache_dir, dual, workers, reads=False, 
             result = check_page(pool, local, rec, tess[rec["page"]], vocab)
         finally:
             close_pdf(local)
+        with lock:
+            results[result] += 1
         if result != "wait":
             save_record(cache_dir, rec)
+            lv.page(rec["page"], page_state(rec))
             c = rec["check"]
             print(f"  check page {rec['page']}: {c['state']} (diffs {c['diffs']}, missing {c['missing_a']})")
 
     with ThreadPoolExecutor(max_workers=workers) as tp:
         list(tp.map(work, todo))
+    if results["wait"]:
+        # One line for them all: no settler is left in this run (quota, or its time is up).
+        lv.note("", "wait", kind="page", n=results["wait"])
     return waiting
 
 
@@ -1340,12 +1457,13 @@ def write_status(path, summary, title, epub_name, quota_day=""):
     data = {k: v for k, v in summary.items() if k not in ("counts", "samples", "reasons")}
     data.update(book=title, epub=epub_name or "",
                 updated_at=datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"))
-    if summary["state"] in ("paused", "helper", "reader"):
+    if summary["state"] in ("paused", "helper", "reader", "time"):
         # The Pacific date the quota ran out on; the inbox starts again the day after.
         data["quota_day"] = quota_day or pacific_day()
-    if summary["state"] in ("helper", "reader"):
+    if summary["state"] in ("helper", "reader", "time"):
         # Written as "paused" so an older inbox script (which knows none of them) still
-        # waits for the next day; the current one parks the book on waiting_for.
+        # waits for the next day; the current one parks the book on waiting_for ("time": it
+        # starts the next run at once; only runs it gave a live file to stop for time).
         data.update(state="paused", waiting_for=summary["state"])
     with open(path, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=1)
@@ -1418,7 +1536,7 @@ def extract_cover_from_pdf(doc, cover_path, index=0):
     return False
 
 
-EXIT_CODES = {"done": 0, "incomplete": 2, "paused": 3, "helper": 5, "reader": 6}
+EXIT_CODES = {"done": 0, "incomplete": 2, "paused": 3, "helper": 5, "reader": 6, "time": 7}
 
 
 def load_pins(path, book_hash):
@@ -1502,7 +1620,7 @@ def free_second(rec):
     return b if b.get("status") == "ok" and b.get("via") != "helper" and b.get("text") else None
 
 
-def send_readings(box, filepath, records, cache_dir):
+def send_readings(box, filepath, records, cache_dir, lv=live.NULL):
     """The free models' readings the helper has not got yet: pNNNN.a.json, with the lines
     Tesseract saw that it may have dropped (as the settling request lists them), and
     pNNNN.b.json, a second reading the Flash models could not settle on."""
@@ -1535,6 +1653,8 @@ def send_readings(box, filepath, records, cache_dir):
         if r["page"] in sent or r["page"] in sent_b:
             save_record(cache_dir, r)
     print(f"Helper: {len(sent)} first and {len(sent_b)} second readings sent")
+    if sent or sent_b:
+        lv.note("", "sent", kind="helper", n=len(set(sent) | set(sent_b)))
 
 
 def tell_helper(box, args, total, recs, lite_out, share=()):
@@ -1554,6 +1674,28 @@ def tell_helper(box, args, total, recs, lite_out, share=()):
 # the run's Drive token lasts about an hour, and the pages they leave must go back to the
 # helper's models (book.json) before it runs out. The Drive inbox starts the next run soon.
 FREE_PASS_SECONDS = 35 * 60
+
+
+# With the live view on (live.py), the free models alone start no page work after the run's
+# Drive token would run out, less a margin for the work under way and the last writes; the
+# last part of that time is for settling only, so the pages read are settled in the same run.
+TOKEN_GUESS_SECONDS = 55 * 60
+TOKEN_MARGIN_SECONDS = 8 * 60
+SETTLE_SECONDS = 12 * 60
+# Less time than this left on the token: no stop (an odd token never makes runs loop).
+MIN_RUN_SECONDS = 5 * 60
+
+
+def run_stops(token, now=None, left=None):
+    """{"read": t, "settle": t} (epoch seconds) for ModelPool.stops, or {} when the token's
+    time left is too short to plan with. left: the token's seconds left (asked of Google)."""
+    now = time.time() if now is None else now
+    left = live.token_seconds_left(token) if left is None else left
+    budget = (TOKEN_GUESS_SECONDS if left is None else left) - TOKEN_MARGIN_SECONDS
+    if budget < MIN_RUN_SECONDS:
+        return {}
+    settle = min(SETTLE_SECONDS, budget * 0.3)
+    return {"read": now + budget - settle, "settle": now + budget}
 
 
 def free_share(recs, half=True):
@@ -1609,13 +1751,14 @@ def free_pass(pool, filepath, share, outs, cache_dir, total, workers, deadline, 
                 return
             tess = tesseract_for(filepath, cache_dir, p)
             if rec.get("hfinal"):
-                result = check_helper_page(rec, tess, vocab)
+                result = check_helper_page(rec, tess, vocab, pool.live)
             else:
                 result = check_page(pool, local, rec, tess, vocab, lite=lite or bool(rec.get("hskip")))
             if result == "wait":
                 # No Flash model left today: the helper's models settle it (send_readings).
                 return
             save_record(cache_dir, rec)
+            pool.live.page(p, page_state(rec))
             c = rec.get("check") or {}
             print(f"  free page {p}: {c.get('state')} (diffs {c.get('diffs')})")
             if result == "done":
@@ -1646,18 +1789,27 @@ def generate_epub_from_pdf(filepath, output_path, args):
         if isinstance(got, dict):
             answers.update(got)
 
+    # The status page's live view (live.py): silent when the run was started without one.
+    lv = live.open_live(args.live, os.environ.get("DRIVE_TOKEN", ""))
     for i in selected:
         rec = load_record(cache_dir, i + 1, args.rescue_model)
         if rec and not review.pin_of(rec) and scrub(rec, drop=not args.review_only):
             save_record(cache_dir, rec)
+        lv.page(i + 1, "done" if (i + 1) in pins else page_state(rec))
+    lv.set_phase("apply" if args.review_only else "start")
+    lv.start()
 
     pool = None
     needs_ocr = any(len(doc[i].get_text().strip()) < MIN_TEXT_LAYER_CHARS for i in selected)
     if needs_ocr:
         pool = ModelPool(args.model, args.second_model if args.dual else "", args.rescue_model, args.rpm)
+        pool.live = lv
         if not args.review_only:
             # Every free model reads and settles: the Flash models once both Lite readers are out.
             pool.set_extra(resolve_models(pool, [m.strip() for m in args.extra_models.split(",") if m.strip()]))
+            for model, role in [(pool.model, "read1"), (pool.second, "read2")] + \
+                    [(m, "settle") for m in pool.extra] + [(pool.rescue, "rescue")]:
+                lv.role(model, role)
     dual = bool(pool and args.dual and args.second_model)
 
     # The helper on the user's computer (docs/helper-boxes-plan.md): its files are taken
@@ -1698,6 +1850,7 @@ def generate_epub_from_pdf(filepath, output_path, args):
         if transcribe:
             box.start_images(sorted(set(need) | set(share)), lambda p: page_jpeg(filepath, p))
             print(f"Free models: {len(share)} pages from the end of the book; the helper's models: {len(need)}")
+            lv.set_phase("free", pages=len(share), helper=len(need), reads=box.reads, settles=box.settles)
             free_done, free_moved = free_pass(pool, filepath, share, outs, cache_dir, len(doc), args.workers,
                                   box.drive.started + FREE_PASS_SECONDS, book_vocab([r for r in start.values() if r]),
                                   lite=not box.settles)
@@ -1724,6 +1877,15 @@ def generate_epub_from_pdf(filepath, output_path, args):
         finally:
             close_pdf(local)
 
+    if lv.on and pool and not args.review_only and not transcribe:
+        # The live view needs the run's Drive token: no page work starts after it would run
+        # out, and the Drive inbox starts the next run at once (state "time").
+        pool.stops = run_stops(os.environ.get("DRIVE_TOKEN", ""))
+        lv.set_stops(**pool.stops)
+    if pool and not args.review_only and not transcribe:
+        lv.set_phase("read", pages=sum(1 for i in selected if (i + 1) not in pins
+                                       and page_state(load_record(cache_dir, i + 1, args.rescue_model))
+                                       in ("unread", "read1")))
     # Stage 1: two readings of every page. Stage 2: compare them and settle differences.
     with ThreadPoolExecutor(max_workers=args.workers) as tp:
         records = [rec or {"page": i + 1, "status": "pending"} for i, rec in zip(selected, tp.map(work, selected))]
@@ -1736,13 +1898,15 @@ def generate_epub_from_pdf(filepath, output_path, args):
         print(f"Answers: {len(applied['results'])}, pages pinned: {compress(sorted(applied['touched']))}")
     helper_wait = set()
     if box:
+        lv.set_phase("helper")
         if transcribe:
-            send_readings(box, filepath, records, cache_dir)
+            send_readings(box, filepath, records, cache_dir, lv)
         # What the helper did while the free models worked.
         recs = {r["page"]: r for r in records if r.get("status") not in ("text-layer", "empty")}
         take_helper_files(recs)
         records = [recs.get(r["page"], r) for r in records]
     if pool and not args.review_only:
+        lv.set_phase("check", pages=sum(1 for r in records if page_state(r) in ("read2", "read1")))
         helper_wait = check_pages(pool, filepath, records, cache_dir, dual, args.workers,
                                   transcribe and box.reads, transcribe and box.settles)
     free_left = False
@@ -1773,6 +1937,7 @@ def generate_epub_from_pdf(filepath, output_path, args):
                 save_record(cache_dir, r)
         print(f"Review: {sum(len(p['items']) for p in review_pages)} places on {len(review_pages)} pages")
 
+    lv.set_phase("build")
     reader_wait, readers_left = waiting_for_reader(None if args.review_only else pool, records, dual)
     summary = summarize(records, dual, review_pages, applied, helper_wait, reader_wait, readers_left)
     if transcribe:
@@ -1780,6 +1945,11 @@ def generate_epub_from_pdf(filepath, output_path, args):
         if summary["state"] == "paused" and free_left:
             # Pages not read yet only because the run's time was up: the next run reads them.
             summary["state"] = "helper"
+    if summary["state"] == "paused" and pool and pool.time_up and not pool.free_out():
+        # Stopped before the Drive token ran out, with quota left: the next run goes on at once.
+        summary["state"] = "time"
+    summary["stages"] = dict(collections.Counter("helper" if r["page"] in helper_wait else page_state(r)
+                                                 for r in records))
     md = assemble(records, review_pages)
     if not args.pages:
         md = keep_main_headings(md, pool, cache_dir)
@@ -1804,7 +1974,17 @@ def generate_epub_from_pdf(filepath, output_path, args):
     if args.review_out:
         review.write(args.review_out, review_pages, images, args.title, book_hash, records, applied["seen"],
                      applied["results"])
+    if pool:
+        # Every request of the run (the cover's and the table of contents' too), and the
+        # models whose daily quota it found used up.
+        summary["requests"] = dict(pool.requests)
+        summary["models_out"] = sorted(pool.exhausted - pool.missing)
     write_status(args.status, summary, args.title, os.path.basename(output_path), pool.quota_day if pool else "")
+    for r in records:
+        lv.page(r["page"], "helper" if r["page"] in helper_wait else page_state(r))
+    lv.finish(summary["state"], unsure=len(summary["pages_unsure"]), waiting=len(summary["pages_waiting"]),
+              helper=len(summary["pages_helper"]), missing=len(summary["pages_missing"]),
+              out=summary.get("models_out"))
     return EXIT_CODES[summary["state"]]
 
 
@@ -1892,6 +2072,9 @@ def main():
     parser.add_argument("--review-only", action="store_true",
                         help="Apply the answers and rebuild the book from saved pages only: no reading "
                              "or settling request")
+    parser.add_argument("--live", default="",
+                        help="The Drive file of the status page's live view (live.py); the Drive token is in "
+                             "DRIVE_TOKEN. With it, no page work starts after the token would run out")
     parser.add_argument("--helper", default="",
                         help="The book's Drive folder for the helper on the user's computer, as "
                              "<folder id>:transcribe (its models read and settle), :read (they only read), "

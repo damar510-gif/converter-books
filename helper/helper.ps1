@@ -6,7 +6,7 @@
 # places through the folders «كتب», «مراجعة» and «أحكام» (docs/helper-boxes-plan.md).
 # Windows PowerShell 5.1: no ?? or ?: operators.
 
-$HelperVersion = '2026-10-22.4'
+$HelperVersion = '2026-10-23.1'
 $BooksName = 'كتب'
 $ReviewsName = 'مراجعة'
 $VerdictsName = 'أحكام'
@@ -394,14 +394,20 @@ function Local-Time([string]$iso) {
 }
 
 # --- Chip states: one file per tool, written by its worker ---
+# Each chip: state, text, until, fails, outs; and for the status page's live view: the page
+# it is on (page, kind, book, since), how many it finished (done) and its last jobs (last).
 
 function Load-Chips([string]$tool) {
   $o = Read-Json (Join-Path $Local "chips-$tool.json")
   $h = @{}
   if ($o) {
     foreach ($p in $o.PSObject.Properties) {
-      $h[$p.Name] = @{ state = [string]$p.Value.state; text = [string]$p.Value.text; until = [string]$p.Value.until
-        fails = [int]$p.Value.fails; outs = [int]$p.Value.outs }
+      $v = $p.Value
+      $h[$p.Name] = @{ state = [string]$v.state; text = [string]$v.text; until = [string]$v.until
+        fails = [int]$v.fails; outs = [int]$v.outs; page = [int]$v.page; kind = [string]$v.kind; book = [string]$v.book
+        since = (Iso-Of $v.since); done = [int]$v.done
+        last = @(@($v.last) | Where-Object { $_ } | ForEach-Object {
+            @{ page = [int]$_.page; kind = [string]$_.kind; result = [string]$_.result; seconds = [int]$_.seconds; at = (Iso-Of $_.at) } }) }
     }
   }
   return $h
@@ -413,16 +419,50 @@ function All-Chips {
   return $h
 }
 
-# Changes one chip's state: @{state; text; until; fails; outs} (fields left out stay).
+# Changes one chip's state: @{state; text; until; fails; outs; page; kind; book; since; done;
+# last} (fields left out stay). The tool's live file follows (Write-ToolLive).
 function Set-Chip([string]$chip, $changes) {
   $tool = Chip-Tool $chip
   $h = Load-Chips $tool
   $c = $h[$chip]
-  if (-not $c) { $c = @{ state = 'idle'; text = ''; until = ''; fails = 0; outs = 0 } }
+  if (-not $c) { $c = @{ state = 'idle'; text = ''; until = ''; fails = 0; outs = 0; page = 0; kind = ''; book = ''; since = ''; done = 0; last = @() } }
   foreach ($k in $changes.Keys) { $c[$k] = $changes[$k] }
+  # A model that is not at work is on no page.
+  if ($c.state -ne 'working') { $c.page = 0; $c.since = '' }
   $h[$chip] = $c
-  Write-Utf8 (Join-Path $Local "chips-$tool.json") ($h | ConvertTo-Json -Depth 4)
+  Write-Utf8 (Join-Path $Local "chips-$tool.json") ($h | ConvertTo-Json -Depth 5)
+  Write-ToolLive $tool $h
   return $c
+}
+
+# The status page's live view of this tool's models: «بيانات المساعد/live-<tool>.json», which
+# Drive for desktop brings to Drive within seconds. Written only when something in it changed.
+$script:LiveText = @{}
+function Write-ToolLive([string]$tool, $h) {
+  $chips = [ordered]@{}
+  foreach ($k in @($h.Keys | Sort-Object)) {
+    $c = $h[$k]
+    $chips[$k] = [ordered]@{ state = [string]$c.state; text = [string]$c.text; page = [int]$c.page; kind = [string]$c.kind
+      book = [string]$c.book; since = [string]$c.since; done = [int]$c.done; last = @($c.last) }
+  }
+  $key = $chips | ConvertTo-Json -Depth 6 -Compress
+  if ($script:LiveText[$tool] -eq $key) { return }
+  $script:LiveText[$tool] = $key
+  $data = [ordered]@{ v = 1; tool = $tool; at = (Now-Iso); computer = $env:COMPUTERNAME; version = $HelperVersion; chips = $chips }
+  try { Write-Utf8 (Join-Path $Folder "live-$tool.json") ($data | ConvertTo-Json -Depth 6) } catch { Write-Log "live file of ${tool}: $_" }
+}
+
+# One job finished (result ok, same, refused, failed or quota): first in the model's last
+# jobs, and counted when done.
+function Note-Job([string]$chip, [string]$kind, [int]$page, [string]$result, [int]$seconds) {
+  $c = (Load-Chips (Chip-Tool $chip))[$chip]
+  $last = @()
+  if ($c -and $c.last) { $last = @($c.last) }
+  $entry = @{ page = $page; kind = $kind; result = $result; seconds = $seconds; at = (Now-Iso) }
+  $done = 0
+  if ($c) { $done = [int]$c.done }
+  if ($result -eq 'ok' -or $result -eq 'same') { $done++ }
+  Set-Chip $chip @{ last = @(@($entry) + @($last | Select-Object -First 4)); done = $done; page = 0; since = '' } | Out-Null
 }
 
 # Not resting after a used-up limit or repeated failures.
@@ -753,7 +793,8 @@ function Invoke-TranscribeJob($job, [string]$exe, [string]$work, $boxes) {
   $tool = Chip-Tool $chip
   $spread = Is-Spread $s
   $what = @{ settle = 'يحسم'; readB = 'يقرأ'; readA = 'يقرأ (القراءة الأولى)' }[$job.kind]
-  Set-Chip $chip @{ state = 'working'; text = "$what ص $p من «$($book.title)»"; until = '' } | Out-Null
+  Set-Chip $chip @{ state = 'working'; text = "$what ص $p من «$($book.title)»"; until = ''; page = $p; kind = $job.kind
+    book = [string]$book.title; since = (Now-Iso) } | Out-Null
   if ($job.kind -eq 'settle') {
     $a = [string]$s.first.text
     $b = [string]$s.hb.text
@@ -764,6 +805,7 @@ function Invoke-TranscribeJob($job, [string]$exe, [string]$work, $boxes) {
       # The readings agree: nothing to ask.
       Write-PageFile $book $p 'final' @{ page = $p; model = [string]$s.hb.model; text = $a; a_sha = (Text-Sha $a)
         b_sha = (Text-Sha $b); same = $true; at = (Now-Iso) }
+      Note-Job $chip $job.kind $p 'same' 0
       return
     }
     Write-Task $work (Get-SettleTask $a $b $spans $missing $spread)
@@ -777,13 +819,14 @@ function Invoke-TranscribeJob($job, [string]$exe, [string]$work, $boxes) {
   Copy-Item -LiteralPath $s.img -Destination (Join-Path $work 'page.jpg') -Force
   $r = Use-Tool $tool { Invoke-Page $tool $exe (Chip-Model $chip) $effort $work 'page.jpg' $prompt }
   $text = ([string]$r.text).Replace("`r`n", "`n").Trim()
-  if (Test-Quota $r) { Rest-Chip $chip; return }
+  if (Test-Quota $r) { Rest-Chip $chip; Note-Job $chip $job.kind $p 'quota' $r.seconds; return }
   $first = ''
   if ($s.first) { $first = [string]$s.first.text }
   if ($job.kind -eq 'settle' -or ($job.kind -eq 'readA' -and $s.hb)) { $first = [string]$s.hb.text }
   $refused = $r.code -eq 0 -and $text -and (Test-Refusal $text $first)
   if (-not $refused -and ($r.code -ne 0 -or -not $text -or $r.timedOut)) {
     $why = if ($r.timedOut) { 'انتهى الوقت' } elseif (-not $text) { 'رد فارغ' } else { "خطأ $($r.code)" }
+    Note-Job $chip $job.kind $p 'failed' $r.seconds
     if (-not (Fail-Job $job $why)) { return }
     # A tool error (signed out, network down, a wrong model name) says nothing about the page:
     # the model rests (Fail-Job) and comes back to it. Only a page that times out or gets
@@ -792,6 +835,7 @@ function Invoke-TranscribeJob($job, [string]$exe, [string]$work, $boxes) {
     $refused = $true
   }
   if ($refused) {
+    Note-Job $chip $job.kind $p 'refused' $r.seconds
     Add-Refused $book.id $p $chip
     $all = Get-Refused $book.id
     $left = @(@(Stage-Box $boxes $s) | Where-Object { @($all[$p]) -notcontains $_ })
@@ -809,6 +853,7 @@ function Invoke-TranscribeJob($job, [string]$exe, [string]$work, $boxes) {
     Write-PageFile $book $p $(if ($job.kind -eq 'readA') { 'ha' } else { 'hb' }) @{ page = $p; model = $chip; text = $text
       at = (Now-Iso); seconds = $r.seconds }
   }
+  Note-Job $chip $job.kind $p 'ok' $r.seconds
 }
 
 # --- Review: books in «مراجعة», with items.json and the place images from the run ---
@@ -980,15 +1025,17 @@ function Invoke-JudgeJob($job, [string]$exe, [string]$work, $titles) {
   $tool = Chip-Tool $chip
   $p = [int]$job.page.page
   $title = $titles[$job.book.id]
-  Set-Chip $chip @{ state = 'working'; text = "يراجع ص $p من «$title»"; until = '' } | Out-Null
+  Set-Chip $chip @{ state = 'working'; text = "يراجع ص $p من «$title»"; until = ''; page = $p; kind = 'judge'
+    book = [string]$title; since = (Now-Iso) } | Out-Null
   Copy-Item -LiteralPath $job.img -Destination (Join-Path $work 'page.jpg') -Force
   Write-Task $work (Get-JudgeTask $job.items)
   $r = Use-Tool $tool { Invoke-Page $tool $exe (Chip-Model $chip) $JudgeEffort $work 'page.jpg' 'judge' }
-  if (Test-Quota $r) { Rest-Chip $chip; return }
+  if (Test-Quota $r) { Rest-Chip $chip; Note-Job $chip 'judge' $p 'quota' $r.seconds; return }
   $verdicts = $null
   if ($r.code -eq 0 -and $r.text) { $verdicts = Parse-Verdicts ([string]$r.text) $job.items }
   if ($null -eq $verdicts) {
     $why = if ($r.timedOut) { 'انتهى الوقت' } elseif ($r.code -ne 0) { "خطأ $($r.code)" } else { 'رد غير مفهوم' }
+    Note-Job $chip 'judge' $p 'failed' $r.seconds
     if (-not (Fail-Job @{ chip = $chip; kind = 'judge'; book = $job.book; page = $p } $why)) { return }
     # A tool error says nothing about the places: the model rests and comes back to them.
     if ($r.code -ne 0 -and -not $r.timedOut) { return }
@@ -997,6 +1044,7 @@ function Invoke-JudgeJob($job, [string]$exe, [string]$work, $titles) {
     foreach ($it in $job.items) { $verdicts[[string]$it.id] = @{ verdict = 'unsure'; text = '' } }
   } else {
     Job-Done $chip
+    Note-Job $chip 'judge' $p 'ok' $r.seconds
   }
   # The book left the review while the model judged it (deleted, or nothing open): its
   # verdicts are not kept, and nothing is written in a folder that is going.
@@ -1239,8 +1287,10 @@ function Write-Status($found, $state, $running, $boxes) {
       elseif ($window -eq 'later') { $chips[$c] = @{ state = 'idle'; text = "ينتظر وقت البدء: نحو $(Local-Time $boxes.times[$c].start)" } }
       elseif ($window -eq 'over') { $chips[$c] = @{ state = 'idle'; text = 'توقّف في الوقت الذي حددته' } }
       elseif ($st -and -not (Chip-Ready $st)) { $chips[$c] = @{ state = $st.state; text = $st.text } }
-      elseif ($st -and $st.state -eq 'working') { $chips[$c] = @{ state = 'working'; text = $st.text } }
+      elseif ($st -and $st.state -eq 'working') { $chips[$c] = @{ state = 'working'; text = $st.text; page = $st.page; kind = $st.kind; since = $st.since } }
       elseif ($st) { $chips[$c] = @{ state = 'idle'; text = $(if ($st.text) { $st.text } else { 'لا عمل له الآن' }) } }
+      # What it did last, for the status page.
+      if ($st -and $chips.Contains($c)) { $chips[$c].done = [int]$st.done; $chips[$c].last = @($st.last | Select-Object -First 3) }
     }
   }
   $books = [ordered]@{}

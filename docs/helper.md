@@ -17,6 +17,7 @@ or key there, and the helper never calls a Google or GitHub API.
 | `صفحات الاختبار/` | Apps Script (copy of `compare/pages` in the results branch) | The six hard test pages (`page_image`). |
 | `requests.json` | Apps Script | `{v, at, requests: [{id, action, choices, label, at}], books: [{id, title, stage, unsure}], reviews: [fileId]}` |
 | `helper-status.json` | helper | `{v, at, version, computer, busy, handled: [ids], lines: [{text, kind, path, linkText}], actions: [...]}` |
+| `live-<tool>.json` | the tool's box worker | The status page's live view of the tool's models, written whenever one starts or finishes a page (only when something changed): `{v, tool, at, computer, version, chips: {id: {state, text, page, kind, book, since, done, last: [{page, kind, result, seconds, at}]}}}`. `result`: `ok`, `same` (the readings agreed: no request), `refused`, `failed` or `quota`. Drive for desktop brings it to Drive within seconds; the page reads it every few seconds (`getLive`). |
 | `probe.txt` | helper | Each tool's `--help`/`--version` and a one-word headless answer, rewritten when the helper's version or the set of tools changes: read it to fix the command lines in `helper.ps1`. |
 | `نتائج/<date> <kind> <model>/` | helper (until 2026-10-21) | The trials of the six test pages: `pNNN.md` per page, `log.txt`, `meta.json`, and `مقارنة.md`. The trial button is gone. |
 | `كتب/<fileId>/` | Apps Script makes it; the run and the helper fill it | Transcription by the models in the boxes: see "Boxes" below. |
@@ -25,8 +26,8 @@ or key there, and the helper never calls a Google or GitHub API.
 
 `requests.json` also carries `boxes: {transcribe: [ids], review: [ids]}` (ids are
 `<tool>|<model>`), and `helper-status.json` also carries `models` (every model of the tools
-found: `{id, label, tool, warn}`), `chips` (`{id: {state: working|idle|exhausted|failing, text}}`
-for the models in the boxes) and `books` (`{fileId: {need, finished, book_at}}`, the helper's
+found: `{id, label, tool, warn}`), `chips` (`{id: {state: working|idle|exhausted|failing, text, page, kind, since, done, last}}`
+for the models in the boxes: the page each is on, how many it finished and its last jobs) and `books` (`{fileId: {need, finished, book_at}}`, the helper's
 work on each book's pages). `reviews` in `requests.json` lists the books open for review (a book the
 user deleted is left out): the helper reviews only those folders of `مراجعة/`, even while
 Drive for desktop has not yet removed a folder from the computer, and drops a verdict on a book

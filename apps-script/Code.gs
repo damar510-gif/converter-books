@@ -94,7 +94,23 @@ var CONFIG = {
   // "Finished" must be seen by two checks this far apart, so its last files reached Drive.
   HELPER_DONE_WAIT_MS: 8 * 60 * 1000,
   // Review files copied for the helper in one check.
-  HELPER_REVIEW_FILES: 60
+  HELPER_REVIEW_FILES: 60,
+  // The live view (live.py in the repository): the runs write what they do, every few
+  // seconds, into one file with their own Drive token, and the page reads it as often.
+  LIVE_FOLDER: 'بيانات البث',
+  LIVE_FILE: 'live.json',
+  // A live file not written for this long: its run stopped writing (its token, or its end).
+  LIVE_QUIET_MS: 90 * 1000,
+  // The GitHub run's own steps, asked at most this often while the live file is quiet.
+  RUN_STEPS_MS: 20 * 1000,
+  // The helper's live files (one per tool, written by its workers): live-<tool>.json.
+  HELPER_LIVE_RE: /^live-(grok|agy|codex|claude)\.json$/,
+  // What the script did, in Arabic, for the page («آخر ما حدث»).
+  JOURNAL_MAX: 40,
+  JOURNAL_MAX_BYTES: 8000,
+  // Runs stopped for time (their Drive token) in one Pacific day before the book waits
+  // for the next day anyway: no endless chain if something goes wrong.
+  MAX_TIME_RUNS: 12
 };
 
 var SUPPORTED_EXT = { pdf: true, docx: true, txt: true };
@@ -114,6 +130,8 @@ var REST_ID_RE = /^p(\d{1,5})-rest-[0-9a-z]{1,20}$/;
 // A model on the user's computer: "<tool>|<model>" (helper/helper.ps1, $Tools).
 var CHIP_RE = /^(grok|agy|codex|claude)\|[A-Za-z0-9._-]{1,60}$/;
 var INCOMPLETE_SUFFIX = ' (فيه صفحات ناقصة)';
+// The note beside a book in «5- مشكلة».
+var PROBLEM_NOTE = ' - سبب المشكلة.txt';
 
 // Set by gh_() from the GitHub-Authentication-Token-Expiration response header.
 var SEEN_TOKEN_EXPIRY = '';
@@ -267,6 +285,11 @@ function getStatus() {
     };
 
     var a = activeJob_(jobs);
+    // A run going now (a review round may run while the book holding the slot waits).
+    var going = Object.keys(jobs).some(function (id) {
+      var j = jobs[id];
+      return j && j.stage === 'running' && !j.pausedDay;
+    });
     if (a) {
       var since = a.dispatchedAt || a.createdAt || '';
       out.active = {
@@ -281,9 +304,17 @@ function getStatus() {
         resumeAt: a.pausedDay ? pacificMidnightAfter_(a.pausedDay).toISOString() : '',
         pagesDone: a.pagesDone || 0,
         pagesTotal: a.pagesTotal || 0,
-        lastError: a.lastError || ''
+        lastError: a.lastError || '',
+        // Where the pages stand, and why the book waits (from its last run).
+        stages: a.stages || null,
+        why: a.pauseWhy || '',
+        // "شغّل الآن": it waits for its quota's new day, and no other run is going.
+        canRun: !!a.pausedDay && !going,
+        round: a.humanRound ? (a.judgeRound ? 'judge' : a.prepareRound ? 'prepare' : 'review') : ''
       };
     }
+    out.journal = journalAfter_(0).slice(-20);
+    out.usage = usage_();
 
     var folders = out.setUp ? existingFolders_() : null;
     if (folders) {
@@ -325,7 +356,8 @@ function getStatus() {
       .sort(function (x, y) { return String(x.helperAt || x.createdAt) < String(y.helperAt || y.createdAt) ? -1 : 1; })
       .forEach(function (j) {
         if (j.stage !== 'helper') {
-          out.parked.push({ title: j.title, stage: j.stage });
+          out.parked.push({ title: j.title, stage: j.stage, fileId: j.fileId, canRun: !a && !going,
+            resumeAt: j.readerDay ? pacificMidnightAfter_(j.readerDay).toISOString() : '' });
           return;
         }
         var total = Number(j.pagesTotal) || 0;
@@ -334,14 +366,18 @@ function getStatus() {
         var soon = !!j.freeLeft || String(j.freeDay || '') < today;
         out.working.push({ title: j.title, fileId: j.fileId, total: total, helperDone: done,
           done: total ? Math.min(total, (Number(j.pagesDone) || 0) + done) : 0,
-          freeAt: soon ? '' : pacificMidnightAfter_(j.freeDay).toISOString() });
+          freeAt: soon ? '' : pacificMidnightAfter_(j.freeDay).toISOString(),
+          stages: j.stages || null, helperPages: Number(j.helperPages) || 0, canRun: !a && !going });
       });
 
-    // The last ten, leaving out the books the user deleted.
+    // The last ten, leaving out the books the user deleted, and the books the user took out
+    // of «5- مشكلة» (back to «1- جديد» to try again): they are no problem any more.
     var shown = [];
+    var problemId = folders ? folders.problem.getId() : '';
     finishedJobs_(jobs).forEach(function (j) {
       if (shown.length >= 10 || isParked_(j)) return;
       if ((j.epubId && !fileAlive_(j.epubId)) || (!j.final && !fileAlive_(j.fileId))) return;
+      if (j.stage === 'problem' && problemId && whereIs_(j.fileId) !== problemId) return;
       shown.push(j);
     });
     out.recent = shown.map(function (j) {
@@ -619,6 +655,7 @@ function runTick_() {
   var ctx = { cfg: cfg, folders: getFolders_(), jobs: loadJobs_(), dispatched: 0 };
   var notes = [];
   dropGoneBooks_(ctx);
+  reviveProblems_(ctx);
 
   // A review round started while another book waits for its quota goes first: it is quick
   // and never pauses.
@@ -676,6 +713,11 @@ function handleStatus_(ctx, job, s) {
   job.lastState = s.state;
   if (s.pages_total) job.pagesTotal = Number(s.pages_total) || 0;
   if (s.pages_done !== undefined) job.pagesDone = Number(s.pages_done) || 0;
+  // Where each page stands (read twice, settled, with the user's models…), for the page.
+  job.stages = cleanStages_(s.stages);
+  noteUsage_(s);
+  var forced = !!job.forced;
+  delete job.forced;
 
   // Failures count in a row only: any other result starts the count again.
   if (s.state !== 'failed') job.failStreak = 0;
@@ -686,7 +728,7 @@ function handleStatus_(ctx, job, s) {
   // go to the user's own models and the user.
   var waiting = s.state === 'paused' ? String(s.waiting_for || '') : '';
   var state = waiting === 'judges' ? 'done' : waiting === 'helper' ? 'helper'
-    : waiting === 'reader' ? 'readerWait' : s.state;
+    : waiting === 'reader' ? 'readerWait' : waiting === 'time' ? 'time' : s.state;
   switch (state) {
     case 'done':
       return deliver_(ctx, job, s, false);
@@ -694,26 +736,30 @@ function handleStatus_(ctx, job, s) {
     case 'incomplete':
       if (job.attempts < CONFIG.MAX_INCOMPLETE_ATTEMPTS) {
         saveJobs_(ctx.jobs);
-        return 'incomplete, retry: ' + dispatch_(ctx, job, true);
+        return 'incomplete, retry: ' + dispatch_(ctx, job, true, 'بقيت صفحات لم تُقرأ، فيعيدها');
       }
       return deliver_(ctx, job, s, true);
 
-    case 'paused':
-      // quota_day is the Pacific date the quota ran out; the next attempt waits for a
-      // later Pacific date. A paused restart is not a failed attempt.
-      job.pausedDay = isDay_(s.quota_day) ? s.quota_day : pacificDay_(new Date(Date.parse(s.updated_at)));
-      job.pausedAt = s.updated_at;
-      job.pauses = (job.pauses || 0) + 1;
-      if (job.pauses > CONFIG.MAX_PAUSES) {
-        return giveUp_(ctx, job, 'توقف الكتاب يومياً لأكثر من ' + CONFIG.MAX_PAUSES + ' يوماً دون أن يكتمل.');
+    case 'time':
+      // The run stopped before its Drive token ran out (the live view needs it), with the
+      // free models' quota left: the next run goes on at once. A day has at most
+      // MAX_TIME_RUNS of them; then the book waits for the next day like a used-up quota.
+      var today = pacificDay_(now_());
+      if (job.timeDay !== today) {
+        job.timeDay = today;
+        job.timeRuns = 0;
       }
-      saveJobs_(ctx.jobs);
-      if (!job.pauseMailed) {
-        job.pauseMailed = true;
+      job.timeRuns = (job.timeRuns || 0) + 1;
+      if (job.timeRuns <= CONFIG.MAX_TIME_RUNS) {
         saveJobs_(ctx.jobs);
-        mailPaused_(job);
+        journal_('end', 'انتهى وقت التشغيل ورصيد النماذج المجانية باقٍ: ' + stagesText_(job.stages) + '.', job.title);
+        return 'time up, go on: ' + dispatch_(ctx, job, false, 'يكمل ما بقي');
       }
-      return resumeIfNewDay_(ctx, job);
+      s.quota_day = today;
+      return pause_(ctx, job, s, forced);
+
+    case 'paused':
+      return pause_(ctx, job, s, forced);
 
     case 'readerWait':
       // One free reader's quota is used up and the other still has some: the pages wait
@@ -728,6 +774,8 @@ function handleStatus_(ctx, job, s) {
         return giveUp_(ctx, job, 'انتظر الكتاب القارئ الثاني أكثر من ' + CONFIG.MAX_PAUSES + ' يوماً دون أن يكتمل.');
       }
       saveJobs_(ctx.jobs);
+      journal_('park', 'نفد اليوم رصيد أحد القارئين المجانيين: تنتظر ' + pageList_(s.pages_waiting).length +
+        ' صفحة قراءتها الثانية منه بعد تجدد رصيده، ويبدأ الكتاب التالي الآن.', job.title);
       if (!job.readerMailed) {
         job.readerMailed = true;
         saveJobs_(ctx.jobs);
@@ -756,6 +804,8 @@ function handleStatus_(ctx, job, s) {
       job.freeDay = s.free_left ? '' : isDay_(s.quota_day) ? s.quota_day : pacificDay_(new Date(Date.parse(s.updated_at)));
       delete job.helperDoneSeen;
       saveJobs_(ctx.jobs);
+      journal_('park', 'أُعطيت نماذجك على جهازك ' + job.helperPages + ' صفحة' +
+        (s.free_left ? '، والنماذج المجانية تكمل في التشغيل التالي' : '') + '. ' + stagesText_(job.stages) + '.', job.title);
       return 'helper (parked)';
 
     case 'failed':
@@ -767,14 +817,83 @@ function handleStatus_(ctx, job, s) {
   }
 }
 
+/**
+ * The free models' daily quota ran out: the book waits for the next Pacific day (or for
+ * the helper's models to finish what they were given). forced: a run the user asked for
+ * ("شغّل الآن") is no daily pause of the book's own.
+ */
+function pause_(ctx, job, s, forced) {
+  // quota_day is the Pacific date the quota ran out; the next attempt waits for a
+  // later Pacific date. A paused restart is not a failed attempt.
+  job.pausedDay = isDay_(s.quota_day) ? s.quota_day : pacificDay_(new Date(Date.parse(s.updated_at)));
+  job.pausedAt = s.updated_at;
+  job.pauseWhy = outText_(s.models_out);
+  if (!forced) job.pauses = (job.pauses || 0) + 1;
+  if (job.pauses > CONFIG.MAX_PAUSES) {
+    return giveUp_(ctx, job, 'توقف الكتاب يومياً لأكثر من ' + CONFIG.MAX_PAUSES + ' يوماً دون أن يكتمل.');
+  }
+  saveJobs_(ctx.jobs);
+  journal_('pause', (job.pauseWhy || 'نفد رصيد النماذج المجانية لهذا اليوم') + '. ' + stagesText_(job.stages) +
+    '. يكمل نحو ' + Utilities.formatDate(pacificMidnightAfter_(job.pausedDay), scriptTz_(), 'HH:mm') + ' بتوقيتك.', job.title);
+  if (!job.pauseMailed) {
+    job.pauseMailed = true;
+    saveJobs_(ctx.jobs);
+    mailPaused_(job);
+  }
+  return resumeIfNewDay_(ctx, job);
+}
+
 function resumeIfNewDay_(ctx, job) {
   var today = pacificDay_(now_());
   if (today > job.pausedDay) {
-    return 'quota reset, resume: ' + dispatch_(ctx, job, false);
+    return 'quota reset, resume: ' + dispatch_(ctx, job, false, 'تجدد رصيد النماذج المجانية');
   }
   // The helper's models read what the free model could not: no need to wait for tomorrow.
-  if (helperDoneFor_(ctx, job)) return 'helper finished, resume: ' + dispatch_(ctx, job, false);
+  if (helperDoneFor_(ctx, job)) return 'helper finished, resume: ' + dispatch_(ctx, job, false, 'أنهت نماذجك ما أُعطيت');
   return 'paused until after ' + job.pausedDay + ' (Pacific)';
+}
+
+/** A run's page stages ({done, unsure, read2, read1, unread, failed, helper}: counts), checked. */
+function cleanStages_(v) {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return undefined;
+  var out = {};
+  ['done', 'unsure', 'read2', 'read1', 'unread', 'failed', 'helper'].forEach(function (k) {
+    var n = Number(v[k]);
+    if (n > 0) out[k] = Math.floor(n);
+  });
+  return out;
+}
+
+/** Where a book's pages stand, in Arabic ("أُنجزت 54، قُرئت قراءتين وتنتظر الحسم 441…"). */
+function stagesText_(st) {
+  if (!st) return 'ما أُنجز محفوظ';
+  var parts = [];
+  if (st.done || st.unsure) parts.push('أُنجزت ' + ((st.done || 0) + (st.unsure || 0)) + (st.unsure ? ' (منها ' + st.unsure + ' مشكوك فيها)' : ''));
+  if (st.read2) parts.push('قُرئت قراءتين وتنتظر الحسم ' + st.read2);
+  if (st.helper) parts.push('مع نماذجك على جهازك ' + st.helper);
+  if (st.read1) parts.push('قُرئت مرة ' + st.read1);
+  if (st.unread) parts.push('لم تُقرأ ' + st.unread);
+  if (st.failed) parts.push('تعذّرت قراءتها ' + st.failed);
+  return parts.length ? 'الصفحات: ' + parts.join('، ') : 'ما أُنجز محفوظ';
+}
+
+/** "Gemini 3.5 Flash-Lite" for "gemini-3.5-flash-lite". */
+function modelLabel_(id) {
+  id = String(id || '');
+  var preview = /-preview$/.test(id);
+  var words = id.replace(/-preview$|-latest$/, '').split('-').map(function (w) {
+    return w === 'it' ? '' : /^\d/.test(w) ? w.toUpperCase() : w.charAt(0).toUpperCase() + w.slice(1);
+  }).filter(function (w) { return w; });
+  var text = words.join(' ').replace(/ Flash Lite$/, ' Flash-Lite');
+  return text + (preview ? ' (معاينة)' : '');
+}
+
+/** "نفد رصيد Gemini 3.5 Flash-Lite وGemini 3.1 Flash-Lite لهذا اليوم", or ''. */
+function outText_(models) {
+  var list = (Array.isArray(models) ? models : []).filter(function (m) { return /lite/.test(String(m)); });
+  if (!list.length) list = Array.isArray(models) ? models.slice(0, 3) : [];
+  if (!list.length) return '';
+  return 'نفد رصيد ' + list.map(modelLabel_).join(' و') + ' لهذا اليوم';
 }
 
 function handleNoStatus_(ctx, job) {
@@ -791,7 +910,7 @@ function handleNoStatus_(ctx, job) {
   // cancelled before it could write status.json.
   Logger.log('dispatch of ' + job.fileId + ' looks lost (attempt ' + job.attempts + ')');
   if (job.attempts < CONFIG.MAX_LOST_ATTEMPTS) {
-    return 'lost, retry: ' + dispatch_(ctx, job, true);
+    return 'lost, retry: ' + dispatch_(ctx, job, true, 'لم يبدأ التشغيل السابق على GitHub');
   }
   return giveUp_(ctx, job, 'بدأ التحويل ' + job.attempts + ' مرات ولم يصل أي رد من GitHub.');
 }
@@ -801,7 +920,7 @@ function failedOrGiveUp_(ctx, job, reason) {
   if (job.failStreak < CONFIG.MAX_FAILED_ATTEMPTS) {
     job.lastState = 'failed';
     saveJobs_(ctx.jobs);
-    return 'failed, retry: ' + dispatch_(ctx, job, true);
+    return 'failed, retry: ' + dispatch_(ctx, job, true, 'تعثّر التشغيل السابق، فيعيده');
   }
   return giveUp_(ctx, job, reason);
 }
@@ -832,7 +951,7 @@ function startNext_(ctx) {
     var job = newJob_(file);
     ctx.jobs[job.fileId] = job;
     saveJobs_(ctx.jobs);
-    return 'started ' + job.fileId + ': ' + dispatch_(ctx, job, true);
+    return 'started ' + job.fileId + ': ' + dispatch_(ctx, job, true, 'كتاب جديد من «' + CONFIG.FOLDERS.inbox + '»');
   }
   return 'idle (files could not be moved)';
 }
@@ -879,7 +998,7 @@ function resumeReaderNext_(ctx) {
   pick.stage = 'queued';
   pick.pendingCount = false;
   saveJobs_(ctx.jobs);
-  return 'reader renewed ' + pick.fileId + ': ' + dispatch_(ctx, pick, false);
+  return 'reader renewed ' + pick.fileId + ': ' + dispatch_(ctx, pick, false, 'تجدد رصيد القارئ الثاني');
 }
 
 /**
@@ -896,7 +1015,7 @@ function judgeNext_(ctx) {
   pick.stage = 'queued';
   pick.pendingCount = false;
   saveJobs_(ctx.jobs);
-  return 'judging ' + pick.fileId + ': ' + dispatch_(ctx, pick, false);
+  return 'judging ' + pick.fileId + ': ' + dispatch_(ctx, pick, false, 'تشغيل أخير يسلّمه');
 }
 
 function newJob_(file) {
@@ -927,9 +1046,9 @@ function newJob_(file) {
 
 /**
  * Starts (or restarts) the workflow for a job. countAttempt is false only for the
- * restart after a quota pause.
+ * restart after a quota pause. why: the reason, in the user's words, for the journal.
  */
-function dispatch_(ctx, job, countAttempt) {
+function dispatch_(ctx, job, countAttempt, why) {
   if (ctx.dispatched > 0) {
     Logger.log('second dispatch in one check refused for ' + job.fileId);
     return 'deferred';
@@ -961,6 +1080,9 @@ function dispatch_(ctx, job, countAttempt) {
   if (helper) body.inputs.helper = helper;
   var verdicts = verdictsFile_(job.fileId);
   if (verdicts) body.inputs.judge = verdicts.getId();
+  // The live view: the run writes what it does into this file (live.py).
+  var live = resetLive_(job, at.toISOString());
+  if (live) body.inputs.live = live;
   var r = gh_(ctx.cfg, 'post', '/repos/' + ctx.cfg.repo + '/actions/workflows/' + CONFIG.WORKFLOW + '/dispatches', body);
 
   if (r.code === 204 || r.code === 200) {
@@ -968,9 +1090,12 @@ function dispatch_(ctx, job, countAttempt) {
     job.dispatchedAt = at.toISOString();
     if (countAttempt) job.attempts = (job.attempts || 0) + 1;
     job.pausedDay = '';
+    job.pauseWhy = '';
     job.lastError = '';
     delete job.pendingCount;
     delete job.helperDoneSeen;
+    journal_('start', startText_(job, helper) + (why ? ' (' + why + ')' : '') +
+      (job.attempts > 1 && countAttempt ? '، المحاولة رقم ' + job.attempts : '') + '.', job.title);
     if (rv && rv.a) {
       // Answers saved until now travel with this run; the old mark comes back if a
       // review round fails.
@@ -991,7 +1116,19 @@ function dispatch_(ctx, job, countAttempt) {
   job.lastError = shorten_('dispatch: ' + describeResponse_(r), 200);
   saveJobs_(ctx.jobs);
   reportGitHubProblem_(ctx, r, 'dispatch');
+  journal_('error', 'لم يقبل GitHub بدء التشغيل (' + describeResponse_(r) + ')، وسأحاول في الفحص القادم.', job.title);
   return 'dispatch failed (' + r.code + ')';
+}
+
+/** "A run started", in the user's words: what kind of run, and who works on the book in it. */
+function startText_(job, helper) {
+  if (job.judgeRound) return 'بدأت جولة تطبيق أحكام نماذجك';
+  if (job.prepareRound) return 'بدأ تجهيز مواضع المراجعة';
+  if (job.humanRound) return 'بدأت جولة تطبيق مراجعتك';
+  var mode = /:(\w+)$/.exec(helper || '');
+  var who = !mode ? '' : mode[1] === 'transcribe' ? ' مع نماذجك (القراءة والحسم)' : mode[1] === 'read' ? ' مع نماذجك (القراءة)'
+    : mode[1] === 'settle' ? ' مع نماذجك (الحسم)' : '';
+  return 'بدأ تشغيل على GitHub' + who;
 }
 
 // ============================================================================
@@ -1147,6 +1284,7 @@ function dropGoneBooks_(ctx) {
   });
   gone.forEach(function (id) {
     dropBookFolder_(id);
+    journal_('gone', 'حذفتَ الكتاب، فتوقف العمل عليه.', ctx.jobs[id].title);
     delete ctx.jobs[id];
   });
   if (changed || gone.length) saveJobs_(ctx.jobs);
@@ -1288,7 +1426,8 @@ function startReviewRound_(ctx, job, prepare) {
   job.stage = 'queued';
   job.pendingCount = false;
   saveJobs_(ctx.jobs);
-  return (prepare ? 'preparing ' : 'review ') + job.fileId + ': ' + dispatch_(ctx, job, false);
+  return (prepare ? 'preparing ' : 'review ') + job.fileId + ': ' + dispatch_(ctx, job, false,
+    prepare ? 'كتاب أقدم من خاصية المراجعة' : job.judgeRound ? 'أنهت نماذجك أحكامها' : 'أرسلتَ تصحيحاتك');
 }
 
 function advanceReview_(ctx, job) {
@@ -1342,6 +1481,7 @@ function reviewFailed_(ctx, job, why) {
   }
   saveRv_(job.fileId, rv);
   saveJobs_(ctx.jobs);
+  if (!prepare) journal_('error', 'لم تكتمل جولة المراجعة (' + why + ')، فبقي الكتاب كما كان' + (mail ? '.' : '، وسأحاول مرة أخرى.'), job.title);
   if (mail) {
     sendMail_('تعذّر تطبيق المراجعة: ' + job.title, [
       'حاولت مرتين تطبيق مراجعتك على «' + job.title + '» ولم تنجح المحاولة، فبقي الكتاب كما كان.',
@@ -1415,6 +1555,10 @@ function deliverReview_(ctx, job, s) {
   var finalNow = !unsure.length;
   if (finalNow) finalize_(ctx, job, false);
   saveJobs_(ctx.jobs);
+  journal_('deliver', prepare ? 'جُهّزت مواضع المراجعة: ' + (rv.o || 0) + ' موضعاً.'
+    : (judged ? 'طُبّقت أحكام نماذجك: ' : 'طُبّقت مراجعتك: ') + (Number(s.review_applied) || 0) + ' تصحيحاً و' +
+      (Number(s.review_kept) || 0) + ' تأكيداً؛ الصفحات المشكوك فيها ' + before + ' ← ' + unsure.length +
+      (finalNow ? '، ونُقل إلى «' + CONFIG.FOLDERS.final + '»' : '') + '.', job.title);
 
   var url = 'https://drive.google.com/file/d/' + job.epubId + '/view';
   if (prepare) {
@@ -1544,6 +1688,7 @@ function deliver_(ctx, job, s, incomplete) {
     job.oldEpubId = '';
     job.oldReportId = '';
     job.unsureList = shorten_(compressPages_(unsure), 300);
+    journal_('deliver', 'حُدّث الكتاب: الصفحات المشكوك فيها ' + before + ' ← ' + unsure.length + '.', job.title);
     if (!unsure.length) {
       finalize_(ctx, job, true);
       return 'refined and final (' + before + ' -> 0)';
@@ -1559,6 +1704,10 @@ function deliver_(ctx, job, s, incomplete) {
     folderName = CONFIG.FOLDERS.final;
   }
   saveJobs_(ctx.jobs);
+  journal_('deliver', 'اكتمل وسُلّم إلى «' + folderName + '»' +
+    (incomplete && missing.length ? '، وفيه ' + missing.length + ' صفحة لم تُقرأ' : '') +
+    (unsure.length ? '، وفيه ' + unsure.length + ' صفحة مشكوك فيها' : '') +
+    (rv && rv.o > 0 ? ' و' + rv.o + ' موضعاً للمراجعة' : '') + '.', job.title);
   var lines = [
     incomplete
       ? 'كتابك «' + job.title + '» جاهز، لكن فيه صفحات لم تُقرأ بعد ' + job.attempts + ' محاولات.'
@@ -1601,7 +1750,7 @@ function giveUp_(ctx, job, reason) {
       'تفاصيل تقنية: ' + (job.lastError || job.lastState || '-') + ' / ' + job.fileId
     ].join('\n');
     try {
-      var nf = ctx.folders.problem.createFile(job.title + ' - سبب المشكلة.txt', note, 'text/plain');
+      var nf = ctx.folders.problem.createFile(job.title + PROBLEM_NOTE, note, 'text/plain');
       job.noteId = nf.getId();
       saveJobs_(ctx.jobs);
     } catch (err) {
@@ -1614,6 +1763,8 @@ function giveUp_(ctx, job, reason) {
   job.lastError = shorten_(reason, 200);
   job.finishedAt = now_().toISOString();
   saveJobs_(ctx.jobs);
+  journal_('problem', 'نُقل إلى «' + CONFIG.FOLDERS.problem + '»: ' + reason + ' للمحاولة مرة أخرى انقله إلى «' +
+    CONFIG.FOLDERS.inbox + '».', job.title);
   sendMail_('مشكلة في تحويل: ' + job.title, [
     'لم أستطع تحويل «' + job.title + '».',
     'السبب: ' + reason,
@@ -1857,8 +2008,7 @@ function helperInfo_(now) {
     Object.keys(chips).slice(0, 40).forEach(function (id) {
       var c = chips[id];
       if (!CHIP_RE.test(id) || !c || typeof c !== 'object') return;
-      info.chips[id] = { state: /^(working|idle|exhausted|failing)$/.test(c.state) ? c.state : 'idle',
-        text: shorten_(String(c.text || ''), 160) };
+      info.chips[id] = cleanChip_(c);
     });
     var books = status && status.books && typeof status.books === 'object' ? status.books : {};
     Object.keys(books).slice(0, 50).forEach(function (id) {
@@ -1873,6 +2023,28 @@ function helperInfo_(now) {
     Logger.log('helperInfo_ failed: ' + (err && err.stack ? err.stack : err));
     return { error: String(err && err.message ? err.message : err) };
   }
+}
+
+/**
+ * One model's state from the helper, with only what the page shows: what it does (state,
+ * text), the page it is on (page, kind, since), how many it finished (done) and its last jobs.
+ */
+function cleanChip_(c) {
+  var out = { state: /^(working|idle|exhausted|failing)$/.test(c.state) ? c.state : 'idle', text: shorten_(String(c.text || ''), 160) };
+  if (Number(c.page) > 0) {
+    out.page = Math.floor(Number(c.page));
+    out.kind = shorten_(String(c.kind || ''), 12);
+    if (isFinite(Date.parse(c.since))) out.since = String(c.since);
+  }
+  if (Number(c.done) > 0) out.done = Math.floor(Number(c.done));
+  if (Array.isArray(c.last)) {
+    out.last = c.last.slice(0, 5).filter(function (j) { return j && typeof j === 'object'; }).map(function (j) {
+      return { page: Math.floor(Number(j.page)) || 0, kind: shorten_(String(j.kind || ''), 12),
+        result: shorten_(String(j.result || ''), 12), seconds: Math.floor(Number(j.seconds)) || 0,
+        at: isFinite(Date.parse(j.at)) ? String(j.at) : '' };
+    });
+  }
+  return out;
 }
 
 /** Every check: drop the requests the helper finished, and refresh its files. */
@@ -2027,7 +2199,10 @@ function helperNext_(ctx) {
     // Off or stalled: the free models do the rest (transcribing would only park it again).
     if (why === 'helper off' || why === 'helper stalled') j.helperOff = true;
     saveJobs_(ctx.jobs);
-    return 'helper ' + j.fileId + ' (' + why + '): ' + dispatch_(ctx, j, false);
+    var words = { 'helper off': 'جهازك غير متصل أو لا نموذج في المربع: يكمل المجاني', 'helper done': 'أنهت نماذجك صفحاتها',
+      'helper stalled': 'لم تتقدم نماذجك منذ ساعات: يكمل المجاني', 'free models': 'للنماذج المجانية رصيد',
+      'free quota renewed': 'تجدد رصيد النماذج المجانية' }[why];
+    return 'helper ' + j.fileId + ' (' + why + '): ' + dispatch_(ctx, j, false, words);
   }
   return '';
 }
@@ -2399,6 +2574,336 @@ function helperPathUrl_(path) {
 }
 
 // ============================================================================
+// The live view and the journal: what happens now, and what the script did
+// ============================================================================
+
+/**
+ * One line of what the script did, in Arabic, for the page («آخر ما حدث»): {i, t, k, x, b}
+ * (number, time, kind, text, book title), the newest last. Kept small (Script Properties).
+ */
+function journal_(kind, text, title) {
+  try {
+    var props = props_();
+    var list = parseJson_(props.getProperty('JOURNAL'));
+    list = Array.isArray(list) ? list : [];
+    var i = (Number(props.getProperty('JOURNAL_N')) || 0) + 1;
+    list.push({ i: i, t: now_().toISOString(), k: kind, x: shorten_(text, 220), b: shorten_(title || '', 50) });
+    while (list.length > CONFIG.JOURNAL_MAX ||
+      (list.length > 1 && utf8Length_(JSON.stringify(list)) > CONFIG.JOURNAL_MAX_BYTES)) list.shift();
+    props.setProperties({ JOURNAL: JSON.stringify(list), JOURNAL_N: String(i) });
+  } catch (err) {
+    Logger.log('journal: ' + err);
+  }
+}
+
+/** The journal lines after number `after` (all when 0), the newest last. */
+function journalAfter_(after) {
+  var list = parseJson_(props_().getProperty('JOURNAL'));
+  return (Array.isArray(list) ? list : []).filter(function (e) { return e && Number(e.i) > (Number(after) || 0); });
+}
+
+/**
+ * USAGE: the free models' answered requests on the current Pacific day, from the runs'
+ * status.json ({day, m: {model: {n, out, at}}, runs: [run ids counted]}). The quotas reset
+ * at midnight Pacific time.
+ */
+function noteUsage_(s) {
+  if (!s || !s.requests || typeof s.requests !== 'object' || Array.isArray(s.requests)) return;
+  var props = props_();
+  var at = Date.parse(s.updated_at) || now_().getTime();
+  var day = pacificDay_(new Date(at));
+  var u = parseJson_(props.getProperty('USAGE'));
+  if (!u || u.day !== day || typeof u.m !== 'object') u = { day: day, m: {}, runs: [] };
+  var run = String(s.run_id || '');
+  if (run && u.runs.indexOf(run) >= 0) return;
+  if (run) u.runs = u.runs.concat(run).slice(-30);
+  var model = function (name) {
+    name = shorten_(String(name), 60);
+    u.m[name] = u.m[name] || { n: 0 };
+    return u.m[name];
+  };
+  Object.keys(s.requests).slice(0, 20).forEach(function (name) { model(name).n += Number(s.requests[name]) || 0; });
+  (Array.isArray(s.models_out) ? s.models_out : []).slice(0, 20).forEach(function (name) {
+    var m = model(name);
+    m.out = true;
+    m.at = new Date(at).toISOString();
+  });
+  props.setProperty('USAGE', JSON.stringify(u));
+}
+
+/** Today's usage for the page: {day, renew (when the quotas reset), m: {model: {n, out, at}}}. */
+function usage_() {
+  var today = pacificDay_(now_());
+  var u = parseJson_(props_().getProperty('USAGE'));
+  var m = u && u.day === today && u.m && typeof u.m === 'object' ? u.m : {};
+  return { day: today, renew: pacificMidnightAfter_(today).toISOString(), m: m };
+}
+
+/** The live file the runs write ("بيانات البث/live.json"), made on first use when create is true. */
+function liveFile_(create) {
+  var f = fileFromProp_('LIVE_FILE_ID');
+  if (f || !create) return f;
+  var root = folderFromProp_('FOLDER_ROOT');
+  if (!root) return null;
+  var dir = findOrCreateFolder_(root, CONFIG.LIVE_FOLDER);
+  f = liveFiles_(dir, CONFIG.LIVE_FILE)[0] || dir.createFile(CONFIG.LIVE_FILE, '{}', 'application/json');
+  props_().setProperty('LIVE_FILE_ID', f.getId());
+  return f;
+}
+
+/** What the run about to start is: the live file says so until the run itself writes. */
+function resetLive_(job, at) {
+  try {
+    var f = liveFile_(true);
+    if (!f) return '';
+    f.setContent(JSON.stringify({ v: 1, seq: 0, phase: 'queued', file: job.fileId, book: job.title,
+      dispatched: at, round: job.humanRound ? (job.judgeRound ? 'judge' : job.prepareRound ? 'prepare' : 'review') : '' }));
+    return f.getId();
+  } catch (err) {
+    Logger.log('live file: ' + err);
+    return '';
+  }
+}
+
+function readLive_() {
+  var f = fileFromProp_('LIVE_FILE_ID');
+  if (!f) return null;
+  var v = parseJson_(f.getBlob().getDataAsString('UTF-8'));
+  return v && typeof v === 'object' && !Array.isArray(v) ? v : null;
+}
+
+/**
+ * The helper's live files (live-<tool>.json, written by its workers on every page they
+ * start or finish, and brought to Drive by Drive for desktop): {tool: data}. Their ids
+ * are remembered, so each is one read.
+ */
+function helperLive_() {
+  var out = {};
+  if (!props_().getProperty('HELPER_INSTALL_ID')) return out;
+  var props = props_();
+  var ids = parseJson_(props.getProperty('HELPER_LIVE_IDS')) || {};
+  var seen = Date.parse(props.getProperty('HELPER_LIVE_LOOKED') || '');
+  var found = false;
+  Object.keys(ids).forEach(function (tool) {
+    try {
+      var f = DriveApp.getFileById(ids[tool]);
+      if (f.isTrashed()) return;
+      var v = parseJson_(f.getBlob().getDataAsString('UTF-8'));
+      if (v && typeof v === 'object') { out[tool] = v; found = true; }
+    } catch (err) { /* gone: looked up again below */ }
+  });
+  // New files (a tool used for the first time), at most once a minute.
+  if (!isFinite(seen) || now_().getTime() - seen > 60 * 1000 || (!found && Object.keys(ids).length)) {
+    var dir = folderFromProp_('HELPER_FOLDER');
+    var next = {};
+    if (dir) {
+      var it = dir.getFiles();
+      var n = 0;
+      while (it.hasNext() && n++ < 200) {
+        var f = it.next();
+        var m = CONFIG.HELPER_LIVE_RE.exec(f.getName());
+        if (!m || f.isTrashed()) continue;
+        if (!next[m[1]] || f.getLastUpdated().getTime() > next[m[1]].t) next[m[1]] = { id: f.getId(), t: f.getLastUpdated().getTime(), f: f };
+      }
+    }
+    var keep = {};
+    Object.keys(next).forEach(function (tool) {
+      keep[tool] = next[tool].id;
+      if (!out[tool] || ids[tool] !== next[tool].id) {
+        var v = parseJson_(next[tool].f.getBlob().getDataAsString('UTF-8'));
+        if (v && typeof v === 'object') out[tool] = v;
+      }
+    });
+    props.setProperties({ HELPER_LIVE_IDS: JSON.stringify(keep), HELPER_LIVE_LOOKED: now_().toISOString() });
+  }
+  return out;
+}
+
+/**
+ * The GitHub run of the job and its steps, for the time the live file says nothing (the run
+ * setting up, saving its results, or one started without a live file): {id, status, steps:
+ * [{n, s, c, at}]}, or null. Asked at most every RUN_STEPS_MS.
+ */
+function runSteps_(job) {
+  var props = props_();
+  var old = parseJson_(props.getProperty('RUN_STEPS'));
+  if (old && old.d === job.dispatchedAt && now_().getTime() - Date.parse(old.at) < CONFIG.RUN_STEPS_MS) return old.run;
+  var cfg = config_();
+  var run = null;
+  var r = gh_(cfg, 'get', '/repos/' + cfg.repo + '/actions/workflows/' + CONFIG.WORKFLOW + '/runs?per_page=5');
+  var data = r.code === 200 ? parseJson_(ghText_(r)) : null;
+  var since = Date.parse(job.dispatchedAt) - CONFIG.RUN_SKEW_MS;
+  var pick = null;
+  ((data && data.workflow_runs) || []).forEach(function (x) {
+    if (x && Date.parse(x.created_at) >= since && (!pick || Date.parse(x.created_at) < Date.parse(pick.created_at))) pick = x;
+  });
+  if (pick) {
+    run = { id: pick.id, n: pick.run_number, status: String(pick.status || ''), steps: [] };
+    var j = gh_(cfg, 'get', '/repos/' + cfg.repo + '/actions/runs/' + pick.id + '/jobs');
+    var jd = j.code === 200 ? parseJson_(ghText_(j)) : null;
+    var first = jd && Array.isArray(jd.jobs) ? jd.jobs[0] : null;
+    run.steps = (first && Array.isArray(first.steps) ? first.steps : []).slice(0, 30).map(function (s) {
+      return { n: shorten_(String(s.name || ''), 60), s: String(s.status || ''), c: String(s.conclusion || ''),
+        at: String(s.started_at || '') };
+    });
+  }
+  props.setProperty('RUN_STEPS', JSON.stringify({ d: job.dispatchedAt, at: now_().toISOString(), run: run }));
+  return run;
+}
+
+/**
+ * For the page, every few seconds while it is open: the live file, the journal lines after
+ * `after`, today's free usage, the user's models' live files (with `helper`), and `due` when
+ * the run has saved its results and no check has taken them in yet (the page then asks for
+ * one: checkNow). json: {after, helper}.
+ */
+function getLive(json) {
+  try {
+    var q = parseJson_(json) || {};
+    var now = now_();
+    var props = props_();
+    var out = { ok: true, now: now.toISOString(), lastTick: props.getProperty('LAST_TICK') || '',
+      journal: journalAfter_(q.after), usage: usage_() };
+    var live = readLive_();
+    var a = activeJob_(loadJobs_());
+    var going = !!(a && a.stage === 'running' && !a.pausedDay);
+    if (live) {
+      // The events the page has already (same run): left out.
+      if (q.run && String(live.run || '') === String(q.run) && Array.isArray(live.events)) {
+        live.events = live.events.filter(function (e) { return e && Number(e.i) > (Number(q.ev) || 0); });
+      }
+      out.live = live;
+    }
+    if (a) out.job = { fileId: a.fileId, title: a.title, stage: a.stage, paused: !!a.pausedDay, since: a.dispatchedAt || '' };
+    var mine = !!(live && a && live.file === a.fileId && String(live.dispatched || '') === String(a.dispatchedAt || ''));
+    out.due = going && mine && live.phase === 'saved';
+    var quiet = !mine || !isFinite(Date.parse(live.at)) || now.getTime() - Date.parse(live.at) > CONFIG.LIVE_QUIET_MS ||
+      live.phase === 'queued' || live.phase === 'saved';
+    if (going && quiet && props.getProperty('GITHUB_TOKEN')) out.run = runSteps_(a);
+    if (q.helper) out.helper = helperLive_();
+    return JSON.stringify(out);
+  } catch (err) {
+    Logger.log('getLive failed: ' + (err && err.stack ? err.stack : err));
+    return JSON.stringify({ ok: false, error: String(err && err.message ? err.message : err) });
+  }
+}
+
+/**
+ * "افحص الآن": one check, and what it did in the user's words (the journal lines it
+ * added), or what the books are waiting for when it changed nothing.
+ */
+function checkNow() {
+  var before = Number(props_().getProperty('JOURNAL_N')) || 0;
+  var result = tick();
+  return JSON.stringify({ ok: true, busy: result === 'busy', journal: journalAfter_(before), line: nowLine_(loadJobs_()) });
+}
+
+/** What the books are doing or waiting for, in one Arabic line. */
+function nowLine_(jobs) {
+  var a = activeJob_(jobs);
+  if (a && a.stage === 'queued') return '«' + a.title + '» ينتظر أن يقبل GitHub بدء تشغيله.';
+  if (a && a.pausedDay) {
+    return '«' + a.title + '» متوقف حتى يتجدد رصيد النماذج المجانية نحو ' +
+      Utilities.formatDate(pacificMidnightAfter_(a.pausedDay), scriptTz_(), 'HH:mm') + ' بتوقيتك' +
+      (a.pauseWhy ? ' (' + a.pauseWhy + ')' : '') + '.';
+  }
+  if (a) return 'يعمل الآن تشغيل «' + a.title + '» على GitHub.';
+  var parked = Object.keys(jobs).map(function (id) { return jobs[id]; }).filter(function (j) { return j && isParked_(j); });
+  if (parked.length) return '«' + parked[0].title + '» ' + (parked[0].stage === 'helper' ? 'مع نماذجك على جهازك.' : 'ينتظر تجدد رصيد القارئ الثاني.');
+  return 'لا شيء يُحوَّل الآن.';
+}
+
+/**
+ * "شغّل الآن" on the page: the book waiting for its quota's new day, or parked for the
+ * helper's models or a reader, starts a run now. The run finds out what the free models
+ * still have, and hands the user's models what they can do. Returns {ok, started} or
+ * {ok: false, error}.
+ */
+function runNow(fileId) {
+  fileId = String(fileId || '');
+  if (!FILE_ID_RE.test(fileId)) return JSON.stringify({ ok: false, error: 'bad id' });
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(30000)) return JSON.stringify({ ok: false, busy: true, error: 'يوجد فحص يعمل الآن، أعد المحاولة بعد دقيقة.' });
+  try {
+    var cfg = config_();
+    if (!cfg.token) return JSON.stringify({ ok: false, error: 'رمز GitHub غير موجود.' });
+    var ctx = { cfg: cfg, folders: getFolders_(), jobs: loadJobs_(), dispatched: 0 };
+    var job = ctx.jobs[fileId];
+    if (!job) return JSON.stringify({ ok: false, error: 'لم أجد هذا الكتاب بين الكتب الجارية.' });
+    var going = null;
+    Object.keys(ctx.jobs).forEach(function (id) {
+      var j = ctx.jobs[id];
+      if (j && j.stage === 'running' && !j.pausedDay) going = j;
+    });
+    if (going && going.fileId === fileId) return JSON.stringify({ ok: false, error: 'يعمل الآن.' });
+    if (going) return JSON.stringify({ ok: false, error: 'يعمل الآن تشغيل «' + going.title + '»؛ اضغط بعد أن ينتهي.' });
+    // One book holds the slot at a time (a parked book runs when none does).
+    var holder = activeJob_(ctx.jobs);
+    if (holder && holder.fileId !== fileId) {
+      return JSON.stringify({ ok: false, error: '«' + holder.title + '» يشغل الدور الآن؛ شغّله هو، أو انتظر حتى ينتهي.' });
+    }
+    if (!(job.stage === 'queued' || waitsForDay_(job) || isParked_(job))) {
+      return JSON.stringify({ ok: false, error: 'هذا الكتاب لا ينتظر شيئاً الآن.' });
+    }
+    // A run asked for by the user is no daily pause of the book's own (MAX_PAUSES).
+    job.forced = true;
+    if (isParked_(job)) {
+      job.stage = 'queued';
+      job.pendingCount = false;
+    }
+    saveJobs_(ctx.jobs);
+    var r = dispatch_(ctx, job, false, 'طلبتَ التشغيل الآن');
+    return JSON.stringify({ ok: true, started: r === 'dispatched', error: r === 'dispatched' ? '' : 'تعذّر بدء التشغيل على GitHub، وسأحاول مرة أخرى في الفحص القادم.' });
+  } catch (err) {
+    Logger.log('runNow failed: ' + (err && err.stack ? err.stack : err));
+    return JSON.stringify({ ok: false, error: String(err && err.message ? err.message : err) });
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/** The folder a file is in: its id, 'gone' (deleted or in the trash) or '' (unknown). */
+function whereIs_(id) {
+  try {
+    var f = DriveApp.getFileById(id);
+    if (f.isTrashed()) return 'gone';
+    var it = f.getParents();
+    return it.hasNext() ? it.next().getId() : '';
+  } catch (err) {
+    return /not found|no item with the given id/i.test(String(err && err.message ? err.message : err)) ? 'gone' : '';
+  }
+}
+
+/**
+ * Books the user moved out of «5- مشكلة» (back to «1- جديد» to try again, or anywhere else),
+ * or deleted: not a problem any more. Their job goes (a book in «1- جديد» starts afresh in
+ * its turn), and so does the note that explained the problem.
+ */
+function reviveProblems_(ctx) {
+  var changed = false;
+  Object.keys(ctx.jobs).forEach(function (id) {
+    var j = ctx.jobs[id];
+    if (!j || j.stage !== 'problem') return;
+    var where = whereIs_(id);
+    if (!where || where === ctx.folders.problem.getId()) return;
+    // The note giveUp_ wrote beside it (found by its name: finished jobs keep no file ids).
+    try {
+      liveFiles_(ctx.folders.problem, j.title + PROBLEM_NOTE).forEach(function (f) { f.setTrashed(true); });
+    } catch (err) {
+      Logger.log('problem note of ' + id + ': ' + err);
+    }
+    delete ctx.jobs[id];
+    changed = true;
+    if (where === ctx.folders.inbox.getId()) {
+      journal_('revive', 'أعدتَه من «' + CONFIG.FOLDERS.problem + '» إلى «' + CONFIG.FOLDERS.inbox + '»: يُحوَّل من جديد في دوره.', j.title);
+    } else if (where !== 'gone') {
+      journal_('revive', 'نقلتَه من «' + CONFIG.FOLDERS.problem + '»، فلم يعد في قائمة المشكلات.', j.title);
+    }
+  });
+  if (changed) saveJobs_(ctx.jobs);
+}
+
+// ============================================================================
 // Drive
 // ============================================================================
 
@@ -2589,7 +3094,8 @@ function pruneJobs_(jobs) {
       'judgeDay', 'judgeRounds', 'judgeMailed', 'rvDonePrev', 'downloadFails',
       'helperAt', 'helperMovedAt', 'helperFinished', 'helperPages', 'helperDoneSeen', 'helperOff', 'goneSeen',
       'freeLeft', 'freeDay',
-      'readerDay', 'readerWaits', 'readerMailed']
+      'readerDay', 'readerWaits', 'readerMailed',
+      'stages', 'pauseWhy', 'timeDay', 'timeRuns', 'forced']
       .forEach(function (k) { delete j[k]; });
     if (j.lastError) j.lastError = shorten_(j.lastError, 120);
   });
