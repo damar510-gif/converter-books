@@ -1,0 +1,25 @@
+{
+ "state": "done",
+ "pages_total": 2,
+ "pages_done": 2,
+ "pages_helper": [],
+ "pages_unsure": [],
+ "pages_missing": [],
+ "pages_waiting": [],
+ "pages_retry": [],
+ "pages_human": [],
+ "helper_checked": 0,
+ "review_items": 0,
+ "review_applied": 0,
+ "review_kept": 0,
+ "review_conflicts_new": 0,
+ "review_seen": "",
+ "stages": {
+  "done": 2
+ },
+ "book": "عينة الطابور",
+ "epub": "queue-sample.epub",
+ "updated_at": "2026-10-23T23:17:44Z",
+ "run_id": 40037562512,
+ "run_number": 69
+}
