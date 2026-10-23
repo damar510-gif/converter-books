@@ -165,6 +165,20 @@ Test 'transcription: with the free quota out, two models give the two readings, 
   Same (Read-PageFile $dir 3 'final').a_sha (Text-Sha $RIGHT) 'on the first reading of Grok'
 }
 
+Test 'boxes: each model gives only its box''s step: the first reading, the second, or settling' {
+  # The status page's boxes since 2026-10-23: read1 and read2 apart (and transcribe for an older helper).
+  Write-Utf8 (Join-Path $Folder 'requests.json') (@{ v = 1; requests = @(); books = @(@{ id = 'book1'; title = 'كتاب الاختبار' })
+      boxes = @{ transcribe = @($GEMINI, $GROK); read1 = @($GEMINI); read2 = @($GROK); settle = @(); review = @() } } | ConvertTo-Json -Depth 5)
+  $dir = Make-Book 'book1' @(5, 6) @(5, 6) $false @{ 6 = $WRONG }
+  $script:Answer = { param($tool, $model, $kind, $task) @{ text = $RIGHT } }
+  Same "$((Work 'agy').kind)" 'readA' 'Gemini gives the first reading of page 5'
+  Same (Read-PageFile $dir 5 'ha').model $GEMINI 'first reading of page 5'
+  Same (Work 'agy') '' 'and no second reading (page 6 has its first from the free models)'
+  Same (Work 'grok').kind 'readB' 'Grok gives second readings'
+  Same (Work 'grok').kind 'readB' 'of both pages'
+  Same (Work 'grok') '' 'and does not settle: nobody is in the settling box'
+}
+
 Test 'boxes: the reading box only reads, the settling box only settles' {
   Set-Boxes @($GROK) @() @($GEMINI)
   $dir = Make-Book 'book1' @(4) @() $false @{ 4 = $WRONG }

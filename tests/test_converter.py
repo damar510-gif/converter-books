@@ -247,6 +247,23 @@ class Pipeline(PipelineBase):
         self.assertEqual(self.records()[30]["check"]["state"], "reconciled")
         self.assertNotIn("كاقية", md)
 
+    def test_second_reading_error_is_retried_not_kept_single(self):
+        # Run 61 (2026-10-23): Gemma's 500s left pages with one reading, delivered as done.
+        code, st, md, fake = self.run_book({
+            "gemini-3.5-flash-lite": lambda p, n: answer(TRUE),
+            "gemini-3.1-flash-lite": lambda p, n: (_ for _ in ()).throw(Exception("500 INTERNAL")),
+        }, pages="30")
+        self.assertEqual(code, 2)
+        self.assertEqual(st["pages_retry"], [30])
+        self.assertIn("وجود قوانين", md)
+        code, st, md, fake = self.run_book({
+            "gemini-3.5-flash-lite": lambda p, n: answer(TRUE),
+            "gemini-3.1-flash-lite": lambda p, n: answer(TRUE),
+        }, pages="30")
+        self.assertEqual(code, 0)
+        rec = self.records()[30]
+        self.assertEqual((rec["b"]["model"], rec["check"]["state"]), ("gemini-3.1-flash-lite", "agreed"))
+
     def test_quota_only_for_second_model_does_not_bring_in_gemma(self):
         def gone(p, n):
             raise Exception("429 RESOURCE_EXHAUSTED GenerateRequestsPerDayPerProjectPerModel-FreeTier")
@@ -622,6 +639,21 @@ class FreeBoxes(PipelineBase):
         }, pages="28-33", extra=("--boxes", "read1=gemini-3.5-flash-lite;read2=gemini-3.1-flash-lite;settle="))
         self.assertEqual([m for m, _ in fake.calls].count("gemini-3.5-flash-lite"), c.DAY_CHECKS)
         self.assertEqual(st["models_out"], ["gemini-3.5-flash-lite"])
+
+    def test_the_models_of_a_box_share_its_pages_with_no_order(self):
+        code, st, md, fake = self.run_book({
+            "gemini-3.5-flash-lite": lambda p, n: answer(TRUE if "النسخة (أ)" in p else WRONG),
+            "gemini-3.1-flash-lite": lambda p, n: answer(TRUE),
+        }, pages="28-33", extra=("--boxes", "read1=gemini-3.5-flash-lite,gemini-3.1-flash-lite;"
+                                            "read2=gemini-3.5-flash-lite,gemini-3.1-flash-lite;"
+                                            "settle=gemini-3.5-flash-lite,gemini-3.1-flash-lite"))
+        self.assertEqual(code, 0, st)
+        firsts = [r["a"]["model"] for r in self.records().values()]
+        self.assertEqual(set(firsts), {"gemini-3.5-flash-lite", "gemini-3.1-flash-lite"}, firsts)
+        for r in self.records().values():
+            self.assertNotEqual(r["a"]["model"], r["b"]["model"])
+        settlers = {r["check"]["model"] for r in self.records().values() if r["check"].get("model")}
+        self.assertEqual(settlers, {"gemini-3.5-flash-lite", "gemini-3.1-flash-lite"})
 
     def test_a_model_sent_back_to_work_works_again(self):
         pool = c.ModelPool("gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemma-4-26b-a4b-it", 10)

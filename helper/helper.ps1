@@ -6,7 +6,7 @@
 # places through the folders «كتب», «مراجعة» and «أحكام» (docs/helper-boxes-plan.md).
 # Windows PowerShell 5.1: no ?? or ?: operators.
 
-$HelperVersion = '2026-10-23.1'
+$HelperVersion = '2026-10-23.2'
 $BooksName = 'كتب'
 $ReviewsName = 'مراجعة'
 $VerdictsName = 'أحكام'
@@ -339,7 +339,7 @@ $RefusalPattern = '(?i)(copyright|can.?t (help|assist|transcribe|reproduce|provi
 $Claims = Join-Path $Local 'claims'
 
 function Get-Boxes($reqs) {
-  $out = @{ transcribe = @(); settle = @(); review = @(); times = @{}; reviews = $null; gone = @() }
+  $out = @{ transcribe = @(); read1 = @(); read2 = @(); settle = @(); review = @(); times = @{}; reviews = $null; gone = @() }
   # Books the user deleted before they were finished: their folders are left alone.
   if ($reqs -and $reqs.gone) { $out.gone = @(@($reqs.gone) | Where-Object { $_ } | ForEach-Object { [string]$_ }) }
   # The books open for review, as the script lists them ($null from an older script: every folder).
@@ -347,9 +347,13 @@ function Get-Boxes($reqs) {
   if ($reqs -and $reqs.boxes) {
     # An older script has no settling box: its reading models settle too.
     $out.settleSet = @($reqs.boxes.PSObject.Properties.Name) -contains 'settle'
-    foreach ($k in 'transcribe', 'settle', 'review') {
+    foreach ($k in 'transcribe', 'read1', 'read2', 'settle', 'review') {
       $out[$k] = @(@($reqs.boxes.$k) | Where-Object { $_ -and ([string]$_) -match $ChipPattern } | ForEach-Object { [string]$_ })
     }
+    # The first and the second reading have their own boxes on the status page (2026-10-23);
+    # an older script has one reading box, whose models give both.
+    if (-not (@($reqs.boxes.PSObject.Properties.Name) -contains 'read1')) { $out.read1 = $out.transcribe; $out.read2 = $out.transcribe }
+    $out.transcribe = @(@($out.read1) + @($out.read2) | Select-Object -Unique)
     # When each model may work, set on the page: {start, stop} ('' = now / never).
     if ($reqs.boxes.times) {
       foreach ($p in $reqs.boxes.times.PSObject.Properties) {
@@ -659,19 +663,20 @@ function Get-PageFiles($book, [int]$page) {
   return $s
 }
 
-# The next transcription job for this model: settle a page, then give second readings,
-# then first readings (only when the free model ran out and another model can give the
-# second). The two readings of a page always come from two different models.
-# The models whose turn a page is: the settling box once it has both readings, else the
-# reading box (an older script has no settling box: its reading models settle too).
+# The next transcription job for this model, in the boxes it is in: settle a page, give a
+# second reading, give a first reading (of a page the run left to the computer's models).
+# The two readings of a page always come from two different models.
+# The models whose turn a page is: the settling box once it has both readings, the second
+# reading's box once it has the first, else the first reading's (an older script has no
+# settling box: its reading models settle too).
 function Stage-Box($boxes, $s) {
   if ($s.first -and $s.hb) { if ($boxes.settleSet) { return @($boxes.settle) } else { return @($boxes.transcribe) } }
-  return @($boxes.transcribe)
+  if ($s.first) { return @($boxes.read2) }
+  return @($boxes.read1)
 }
 
-function Find-TranscribeJob([string]$chip, $books, [int]$readyCount, $kinds = @('settle', 'readB', 'readA')) {
+function Find-TranscribeJob([string]$chip, $books, $kinds = @('settle', 'readB', 'readA')) {
   foreach ($kind in $kinds) {
-    if ($kind -eq 'readA' -and $readyCount -lt 2) { continue }
     foreach ($book in $books) {
       $refused = Get-Refused $book.id
       foreach ($p in $book.need) {
@@ -1131,14 +1136,16 @@ function Find-BoxJob([string]$tool, $boxes, $found, [int]$turn) {
   for ($i = 0; $i -lt $mine.Count; $i++) {
     $chip = $mine[($turn + $i) % $mine.Count]
     if (-not (Chip-Ready $states[$chip]) -or (Chip-Window $boxes $chip)) { continue }
-    # The reading box's models read; the settling box's models settle (an older script has
-    # no settling box: then the reading models settle too).
+    # Each box's models do its step only: settling, the second reading, the first reading (an
+    # older script has no settling box: then the reading models settle too). A page is
+    # finished before a new one is begun.
     $kinds = @()
-    if ($boxes.transcribe -contains $chip) { $kinds += @('readB', 'readA'); if (-not $boxes.settleSet) { $kinds = @('settle') + $kinds } }
-    if ($boxes.settle -contains $chip) { $kinds = @('settle') + $kinds }
+    if ($boxes.settle -contains $chip -or (-not $boxes.settleSet -and $boxes.transcribe -contains $chip)) { $kinds += 'settle' }
+    if ($boxes.read2 -contains $chip) { $kinds += 'readB' }
+    if ($boxes.read1 -contains $chip) { $kinds += 'readA' }
     if ($kinds.Count) {
       if ($null -eq $books) { $books = @(Get-TranscribeBooks $boxes) }
-      $job = Find-TranscribeJob $chip $books (@(Ready-Chips $boxes.transcribe $found $states $boxes).Count) $kinds
+      $job = Find-TranscribeJob $chip $books $kinds
       if ($job) { return $job }
     }
     if ($boxes.review -contains $chip) {

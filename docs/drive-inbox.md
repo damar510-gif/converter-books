@@ -33,10 +33,10 @@ The answers the user gives on the status page (see "Results" below) are kept in
 | `result_dir` | `drive-<fileId>`. |
 | `title` | Book title (the file name without its extension). |
 | `review` | Optional. The Drive ID of the book's answers file, so the run applies the user's answers; with `:only` appended (or `:only` alone) the run only applies the answers and rebuilds the book from saved pages, with no reading or settling request. |
-| `helper` | Optional. The book's folder for the helper on the user's computer (`بيانات المساعد/كتب/<fileId>`), with `:transcribe` (the models in the user's boxes read and settle), `:read` (they only read), `:settle` (they only settle; the free models read every page) or `:import` (their work so far is used, the free model does the rest). See docs/helper-boxes-plan.md. Until 2026-10-23 the workflow dropped `:read` and `:settle`, so the models in the settling box never got a page. |
+| `helper` | Optional. The book's folder for the helper on the user's computer (`بيانات المساعد/كتب/<fileId>`), with what the user's models do in the run: the boxes of the board they are in, `:read1`, `:read2`, `:settle` joined with `+` (older scripts: `:transcribe`, `:read`, `:settle`), or `:import` (their work so far is used, the free models do the rest). The free models and the user's share a step both can take: the free models take the later half of those pages, the user's the earlier half; a step only one side can take is that side's. In a free models' review round (`:only`): the book's review folder `بيانات المساعد/مراجعة/<fileId>` with `:review` (see "The free models' review" below). See docs/helper-boxes-plan.md. |
 | `judge` | Optional. The Drive ID of `بيانات المساعد/أحكام/<fileId>.json`, the helper models' verdicts on the unsure places. The run adds them to `review/judge-answers.json` and applies them like the user's answers (the user's own answer wins). |
 | `live` | Optional. The Drive ID of `تحويل الكتب/بيانات البث/live.json`, the live view's file (see "Live view" below), with `:<Drive ID>` of `بيانات البث/control.json`, the status page's requests to the run (`{"v": 1, "retry": {model: when}}`: «أعد المحاولة الآن» on a free model; the run reads it every 10 seconds and puts a model asked for after its dispatch back to work). With it, the run writes what it does there every two seconds or so, and with the free models alone it starts no page work after its Drive token would run out (state `paused` + `waiting_for: "time"`). |
-| `models` | Sent with every run since 2026-10-23: the free models' boxes as the status page shows them (the user's, Script Property `FREE_BOXES`, or the converter's own until the user changes them), `read1=a,b;read2=c;settle=d,e`, and `;out=f,g`: the models a run found out of quota on the current Pacific day (Script Property `USAGE`), which the run does not ask again. Only the models of a box give its work, first to last (the next one when the one before has no quota left): `read1` the first reading, `read2` the second (never the model that gave the page's first), `settle` the settling, where Flash-Lite and Gemma models wait while the helper's models settle. An empty box means nobody does that step, and no model works outside the boxes (Gemma reads a refused page only from a box). One model may be in several boxes. Without the input (an older script) the converter keeps its own roles (the two Lite readers read, each first in its own reading and the other after it; the Flash models settle, then the Lite readers; Gemma for refused pages). The workflow passes it on only when it matches that form (`BOXES_RE`). |
+| `models` | Sent with every run since 2026-10-23: the free models in the board's boxes (Script Property `MODEL_BOXES`, which holds the user's models too; before the user changes the board, what the two older boards held, or the converter's own), `read1=a,b;read2=c;settle=d,e;review=f`, and `;out=g,h`: the models a run found out of quota on the current Pacific day (Script Property `USAGE`), which the run does not ask again. Only the models of a box do its step, all of them side by side (each page goes to one that has no request in flight, in turn; no order between them): `read1` the first reading, `read2` the second (never the model that gave the page's first), `settle` the settling, `review` the unsure places of delivered books (freereview.py). An empty box means nobody does that step, and no model works outside the boxes (Gemma reads a refused page only from a box). One model may be in several boxes. Without the input (an older script) the converter keeps its own roles (the two Lite readers read, each first in its own reading and the other after it; the Flash models settle, then the Lite readers; Gemma for refused pages). The workflow passes it on only when it matches that form (`BOXES_RE`). |
 
 Only one conversion runs at a time. The workflow also declares
 `concurrency: convert`, so a second dispatch waits.
@@ -140,6 +140,25 @@ as `boxes`.
 still open, and `review_applied` / `review_kept` the corrections and confirmations this
 run applied. `review_conflicts_new` counts answers saved after the previous run that
 could not be applied because their page changed; their places come back as new ones.
+
+## The free models' review
+
+With free models in the board's review box, the script starts a review round (`:only`, no
+conversion) for a delivered book with open places (`freeReviewNext_`): one their review has not
+seen, after the review box changed, after the book was converted again (`convertedAt`), or the
+next Pacific day when places were left for lack of quota. The run's step "Free models review the
+unsure places" (freereview.py) takes the places and images from the results branch
+(`review/items.json`), the verdicts of every model from the book's review folder in Drive
+(`j-<chip>-pNNNN.json`, the free models' as the chip `free|<model>`, the user's models' from
+their helper), and asks each free model in the box for the places it should judge, by the
+helper's own rules (a place nobody judged; a risky correction, a line or more than six words,
+only one model gave; nothing once models disagree). Its verdicts go to the folder, so the user's
+models see them; the verdicts that become answers (all agree, two models for a risky one) join
+`review/judge-answers.json`, and the round applies them (the user's own answer wins). The run
+writes what it did as `free_review: {models, asked, answers, left}` in status.json; the script
+keeps it on the book's review (`rv.fr`) and starts the next round only when something changed.
+A round that applied nothing keeps the book as it was, without a mail; one that failed leaves the
+user's own review untouched.
 
 ## Live view
 

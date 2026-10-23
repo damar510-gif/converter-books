@@ -6,6 +6,7 @@ Run from the repository root:  python -m unittest discover -s tests
 """
 import json
 import os
+import tempfile
 import sys
 import unittest
 
@@ -129,13 +130,16 @@ class HelperPipeline(PipelineBase):
         self.assertEqual(self.drive.files["p0030.jpg"]["modifiedTime"], sent["p0030.jpg"]["modifiedTime"])
 
     def test_pages_no_free_model_can_settle_go_to_the_settling_box_at_once_with_their_readings(self):
-        # Run 51 (2026-10-23): every page read twice, Flash out for the day, Lite barred from
-        # settling while the user's models settle. The run took all 494 pages, spent its hour
-        # asking the Flash models, and sent no reading: the user's models had nothing to do.
-        boxes = ("--boxes", "read1=gemini-3.5-flash-lite;read2=gemini-3.1-flash-lite;"
-                            "settle=gemini-3.8-flash,gemini-3.5-flash-lite")
+        # Run 51 (2026-10-23): every page read twice, Flash out for the day, and no other free
+        # settler. The run took all 494 pages, spent its hour asking the Flash models, and sent
+        # no reading: the user's models had nothing to do.
+        boxes = ("--boxes", "read1=gemini-3.5-flash-lite;read2=gemini-3.1-flash-lite;settle=gemini-3.8-flash")
+        gone = Exception("429 RESOURCE_EXHAUSTED GenerateRequestsPerDayPerProjectPerModel-FreeTier")
+
+        def out(p, n):
+            raise gone
         free = {"gemini-3.5-flash-lite": lambda p, n: answer(WRONG),
-                "gemini-3.1-flash-lite": lambda p, n: answer(TRUE)}
+                "gemini-3.1-flash-lite": lambda p, n: answer(TRUE), "gemini-3.8-flash": out}
         code, st, md, fake = self.run_helper(free, mode="settle", extra=boxes + ("--extra-models", ""))
         self.assertEqual(st["pages_helper"], [30, 31])
         # The next run: Flash is known to be out today; nothing is asked, and the pages and
@@ -184,20 +188,44 @@ class HelperPipeline(PipelineBase):
         for p in (30, 31):
             self.assertEqual(self.drive.json(f"p{p:04d}.b.json")["model"], "gemini-3.1-flash-lite")
 
+    def test_the_helpers_roles_come_from_the_boxes(self):
+        def roles(mode):
+            b = helperbox.HelperBox.open(f"{FOLDER}:{mode}", "token", self.tmp)
+            return (b.transcribe, b.reads1, b.reads2, b.settles)
+        self.assertEqual(roles("read1+read2+settle"), (True, True, True, True))
+        self.assertEqual(roles("transcribe"), (True, True, True, True))
+        self.assertEqual(roles("read2+settle"), (True, False, True, True))
+        self.assertEqual(roles("read"), (True, True, True, False))
+        self.assertEqual(roles("settle"), (True, False, False, True))
+        self.assertEqual(roles("import"), (False, False, False, False))
+
+    def test_free_and_own_settlers_share_the_pages_both_can_settle(self):
+        # Lite in the free settling box settles alongside the user's settling models (no one
+        # steps aside): the pages read twice are shared by halves.
+        free = {"gemini-3.5-flash-lite": lambda p, n: answer(TRUE if "النسخة (أ)" in p else WRONG),
+                "gemini-3.1-flash-lite": lambda p, n: answer(TRUE)}
+        boxes = ("--boxes", "read1=gemini-3.5-flash-lite;read2=gemini-3.1-flash-lite;settle=gemini-3.5-flash-lite")
+        self.run_helper(free, mode="settle", extra=boxes)
+        code, st, md, fake = self.run_helper(free, mode="read1+read2+settle", pages="30-33", extra=boxes)
+        self.assertIn(31, [p for p, r in self.records().items() if (r.get("check") or {}).get("model") == "gemini-3.5-flash-lite"])
+        self.assertTrue(st["pages_helper"], st)
+
     def test_the_free_share_holds_only_pages_the_free_models_can_move_now(self):
         pool = c.ModelPool("gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemma-4-26b-a4b-it", 10)
         pool.set_boxes({"read1": ["gemini-3.5-flash-lite"], "read2": ["gemini-3.1-flash-lite"],
-                        "settle": ["gemini-3.8-flash", "gemini-3.5-flash-lite"]})
+                        "settle": ["gemini-3.8-flash"]})
         a = {"model": "gemini-3.5-flash-lite", "text": TRUE, "status": "ok"}
         b = {"model": "gemini-3.1-flash-lite", "text": WRONG, "status": "ok"}
         recs = {1: None, 2: {"page": 2, "status": "ok", "a": dict(a)},
                 3: {"page": 3, "status": "ok", "a": dict(a), "b": dict(b)}}
         can = lambda lite: (lambda r: c.free_can(pool, r, lite))
         self.assertEqual(c.free_share(recs, half=False, can=can(False)), [3, 2, 1])
+        # Shared by halves only where the user's models can take the page too (here: settle).
+        dev = lambda r: bool(r) and (r.get("b") or {}).get("status") == "ok"
+        self.assertEqual(c.free_share(recs, can=can(False), dev=dev), [2, 1])
         pool.set_out(["gemini-3.8-flash"])
-        # Flash out, Lite may not settle (the user's models do): page 3 is theirs at once.
+        # The only free settler is out: page 3 is the user's models' at once.
         self.assertEqual(c.free_share(recs, half=False, can=can(False)), [2, 1])
-        self.assertEqual(c.free_share(recs, half=False, can=can(True)), [3, 2, 1])
         pool.set_out(["gemini-3.1-flash-lite"])
         self.assertEqual(c.free_share(recs, half=False, can=can(False)), [1])
 
@@ -520,18 +548,25 @@ class WorkflowModes(unittest.TestCase):
     got a page)."""
 
     def test_every_mode_of_the_script_reaches_the_converter(self):
+        import itertools
         import re
         with open(os.path.join(ROOT, ".github", "workflows", "convert.yml"), encoding="utf-8") as f:
             yml = f.read()
         with open(os.path.join(ROOT, "apps-script", "Code.gs"), encoding="utf-8") as f:
             gs = f.read()
-        pattern = re.search(r'\[\[ "\$HELPER" =~ (\S+) \]\]', yml).group(1)
+        pattern = next(p for p in re.findall(r'\[\[ "\$HELPER" =~ (\S+) \]\]', yml) if "import" in p)
         body = gs[gs.index("function helperInput_("):]
         body = body[:body.index("\n}\n")]
-        modes = set(re.findall(r"'(:[a-z]+)'", body))
-        self.assertEqual(modes, {":import", ":transcribe", ":read", ":settle"})
+        # What the user's models do: any of the three boxes, joined with "+" in this order.
+        self.assertIn("['read1', 'read2', 'settle']", body)
+        self.assertIn("join('+')", body)
+        self.assertIn("':import'", body)
+        parts = ("read1", "read2", "settle")
+        modes = [":import"] + [":" + "+".join(c) for n in (1, 2, 3) for c in itertools.combinations(parts, n)]
         for mode in modes:
             self.assertRegex("1AbCdEfGhIjKlMnOp" + mode, pattern)
-            folder, _, m = ("x" + mode).partition(":")
-            self.assertIn(m, ("transcribe", "read", "settle", "import"))
+            box = helperbox.HelperBox.open("1AbCdEfGhIjKlMnOp" + mode, "token", tempfile.mkdtemp())
+            self.assertEqual((box.reads1, box.reads2, box.settles),
+                             tuple(p in mode for p in parts), mode)
         self.assertNotRegex("1AbCdEfGhIjKlMnOp:other", pattern)
+        self.assertNotRegex("1AbCdEfGhIjKlMnOp:review", pattern, "the free review is its own step")

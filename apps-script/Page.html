@@ -311,6 +311,11 @@
   .box { flex: 1 1 0; min-width: 0; min-height: 150px; border: 1px dashed var(--line); border-radius: 4px; padding: 12px;
     background: var(--field-2); transition: background-color .15s, border-color .15s; }
   .box.is-on { flex-grow: 1.4; border-style: solid; border-color: var(--line); background: var(--panel-2); }
+  /* «المتاحة»: a narrow column, folded under one button once the box has a model. */
+  .box.is-avail { flex: 0 1 30%; min-height: 0; padding: 8px; }
+  .box.is-avail .btn { width: 100%; justify-content: center; margin-bottom: 6px; }
+  .box.is-avail .mchip { padding: 3px 8px; font-size: 12.5px; }
+  .box.is-avail .grp-n { margin-bottom: 4px; }
   .box.is-over { border-color: var(--gold); background: rgba(201,165,92,.12); }
   /* A phone: one box above the other (the working one first), each as tall as what it holds. */
   @media (max-width: 640px) { .box, .box.is-on { flex: none; min-height: 0; } }
@@ -1318,7 +1323,7 @@
       { id: 'now', name: 'الآن', ic: 'book', n: p && p.total ? pct(p.done, p.total) + '%' : '' },
       { id: 'queue', name: 'في الانتظار', short: 'الانتظار', ic: 'inbox', n: s.queued + (s.parked || []).length || '' },
       { id: 'reviews', name: 'مراجعة المشكوك فيه', short: 'المراجعة', ic: 'pen', n: n || '', hold: n > 0, off: !(s.reviews || []).length },
-      { id: 'boxes', name: 'نماذجك على الجهاز', short: 'نماذجك', ic: 'cpu', n: w || '', off: !h || !h.seen },
+      { id: 'boxes', name: 'النماذج', ic: 'cpu', n: w || '', off: !s.boxes },
       { id: 'recent-card', name: 'آخر الكتب', ic: 'archive', n: s.recent.length || '' },
       { id: 'helper', name: 'المساعد على جهازك', short: 'المساعد', ic: 'monitor', dot: h && h.seen ? (h.connected ? 'ok' : 'bad') : '', off: !h },
       // What the free models do now (the live view), under the helper as the user asked.
@@ -1454,11 +1459,12 @@
   // Where renderLive() draws under «الآن» (made again by each render()).
   var LIVE_EL = { now: null, nowFor: null };
 
-  var KINDS = { a: 'القراءة الأولى', b: 'القراءة الثانية', settle: 'الحسم' };
+  var KINDS = { a: 'القراءة الأولى', b: 'القراءة الثانية', settle: 'الحسم', review: 'مراجعة المشكوك فيه' };
   var ROLES = { read1: 'القارئ الأول', read2: 'القارئ الثاني', settle: 'يحسم الخلاف بين القراءتين',
-    rescue: 'للصفحات التي يرفضها Gemini' };
+    review: 'يراجع المشكوك فيه', rescue: 'للصفحات التي يرفضها Gemini' };
   var PHASES = { queued: 'ينتظر أن يبدأ على GitHub', setup: 'يجهّز جهاز GitHub ويثبّت الأدوات', start: 'يستعد ويقرأ ما أُنجز',
     apply: 'يطبّق الإجابات ويبني الكتاب', free: 'النماذج المجانية تقرأ وتحسم من آخر الكتاب',
+    review: 'النماذج المجانية تراجع المشكوك فيه',
     read: 'يقرأ الصفحات: قراءتان لكل صفحة من نموذجين', helper: 'يتبادل الصفحات مع نماذجك على جهازك',
     check: 'يقارن القراءتين ويحسم الخلاف على صورة الصفحة', build: 'يبني ملف الكتاب', end: 'انتهى العمل، ويحفظ النتائج',
     saved: 'حُفظت النتائج' };
@@ -1539,6 +1545,7 @@
       case 'out': return ['bad', 'نفد رصيده لهذا اليوم' + (e.n ? ' (حده ' + e.n + ' طلباً)' : '') + '.'];
       case 'missing': return ['quiet', 'غير متاح لحسابك، فتُرك.'];
       case 'back': return ['ok', 'عاد إلى العمل بطلبك.'];
+      case 'judged': return ['ok', 'راجع مواضع ' + p + took + (e.n !== undefined ? ' (حكم على ' + e.n + ')' : '') + '.'];
       case 'settled': return ['ok', 'حسم ' + p + took + (e.n ? ' (' + count(e.n, 'موضع خلاف واحد', 'موضعا خلاف', 'مواضع خلاف', 'موضع خلاف') + ')' : '') +
         (e.x === 'helper' ? '، على جهازك' : '') + '.'];
       case 'unsure': return e.k === 'page' ? ['hold', p + ': بقيت مشكوكاً فيها، وتنتظر المراجعة.'] : ['hold', 'حسم ' + p + took + '، وبقي فيها شك.'];
@@ -1777,184 +1784,9 @@
     return /flash-lite/.test(id) ? 500 : /gemma/.test(id) ? 14400 : /flash/.test(id) ? 20 : 0;
   }
 
-  // ------------------------------------------------------------------------
-  // The free models' boxes: who gives the first reading, who the second, who settles. A
-  // model goes from a box's «المتاحة» to its «يعمل هنا» with a tap or a drag; the first in a
-  // box works, the next one when it has no quota left. One model may be in several boxes;
-  // every box keeps one at least. The next run works with them (setFreeBoxes).
-  // ------------------------------------------------------------------------
-  var FREE = null;
-  var FREE_SAVING = 0;
-  var FREE_DRAG = false;
-  var FREE_ID = /^(gemini|gemma)-[a-z0-9.-]{1,60}$/;
-  var FREE_SECTIONS = [
-    { key: 'read1', title: 'القراءة الأولى',
-      note: 'تقرأ كل صفحة أول مرة. يعمل الأول، وإذا نفد رصيده عمل الذي بعده.' },
-    { key: 'read2', title: 'القراءة الثانية',
-      note: 'قراءة ثانية مستقلة لكل صفحة. لا يقرأ نموذج واحد الصفحة مرتين: إن كان قرأها أولاً قرأها الذي بعده هنا.' },
-    { key: 'settle', title: 'الحسم',
-      note: 'تحسم الخلاف بين القراءتين على صورة الصفحة، الأول فالأول. إن كانت نماذجك على الجهاز في مربع «الحسم» حسمت هي قبل Flash-Lite وGemma.' }
-  ];
-
-  function freeEmpty(b) { return !b.read1.length && !b.read2.length && !b.settle.length; }
-
-  function copyFree(b) {
-    return { read1: (b.read1 || []).slice(), read2: (b.read2 || []).slice(), settle: (b.settle || []).slice() };
-  }
-
-  // The boxes as shown (a change being saved shows at once), or null from an older script.
-  function freeInfoNow() {
-    var f = LAST && LAST.free;
-    if (!f || !f.boxes) return null;
-    if (!FREE_SAVING || !FREE) FREE = copyFree(f.boxes);
-    return { boxes: FREE, models: f.models || [], custom: !!f.custom };
-  }
-
-  function freeSection(sec, info, rows, cur) {
-    var on = info.boxes[sec.key];
-    var wrap = el('div', 'bx');
-    var head = el('div', 'bx-h');
-    head.appendChild(el('h3', '', sec.title));
-    head.appendChild(st('run', count(on.length, 'نموذج واحد', 'نموذجان', 'نماذج', 'نموذجاً')));
-    wrap.appendChild(head);
-    wrap.appendChild(el('div', 'sub', sec.note));
-    var pair = el('div', 'pair');
-    // Right to left: «المتاحة» is on the right.
-    var offBox = freeBox(sec.key, -1, 'box', 'grid', 'المتاحة', 'المس النموذج أو اسحبه إلى «يعمل هنا»');
-    var onBox = freeBox(sec.key, on.length, 'box is-on', 'play', 'يعمل هنا', 'الأول فالأول');
-    if (!on.length) onBox.appendChild(el('div', 'box-e', 'لا نموذج هنا: لا يعمل أحد في «' + sec.title + '».'));
-    var chips = el('div', 'mchips');
-    var left = info.models.filter(function (id) { return on.indexOf(id) < 0; });
-    left.forEach(function (id) { chips.appendChild(freeChip(sec.key, id)); });
-    offBox.appendChild(left.length ? chips : el('div', 'box-e', 'كل النماذج هنا.'));
-    var byId = {};
-    rows.forEach(function (r) { byId[r.id] = r; });
-    on.forEach(function (id, i) {
-      var r = byId[id] || { id: id, m: null, u: null };
-      onBox.appendChild(freeCard(sec, id, i, on.length, r, cur));
-    });
-    pair.appendChild(offBox);
-    pair.appendChild(onBox);
-    wrap.appendChild(pair);
-    return wrap;
-  }
-
-  // A box of a section: at -1 takes a dropped model out of it, else puts it at that place.
-  function freeBox(key, at, cls, ic, head, hint) {
-    var d = el('div', cls);
-    var hd = el('div', 'box-h');
-    hd.appendChild(icon(ic));
-    hd.appendChild(el('span', '', head));
-    if (hint) hd.appendChild(el('small', '', hint));
-    d.appendChild(hd);
-    freeDropOn(d, key, at, cls);
-    return d;
-  }
-
-  function freeDropOn(d, key, at, cls) {
-    d.addEventListener('dragover', function (e) { e.preventDefault(); d.className = cls + ' is-over'; });
-    d.addEventListener('dragleave', function () { d.className = cls; });
-    d.addEventListener('drop', function (e) {
-      e.preventDefault();
-      if (e.stopPropagation) e.stopPropagation();
-      d.className = cls;
-      FREE_DRAG = false;
-      var x = null;
-      try { x = JSON.parse(e.dataTransfer.getData('text/plain')); } catch (err) { /* not a model */ }
-      if (x && x.id) placeFree(key, String(x.id), at);
-    });
-  }
-
-  function freeDraggable(node, id) {
-    draggable(node, id);
-    // The page is drawn again every few seconds while a run goes: not under a drag.
-    node.addEventListener('dragstart', function () { FREE_DRAG = true; });
-    node.addEventListener('dragend', function () { FREE_DRAG = false; renderFree(); });
-  }
-
-  // A model not in this box: a tap puts it at the end.
-  function freeChip(key, id) {
-    var b = el('button', 'mchip');
-    b.type = 'button';
-    b.title = 'ضعه هنا' + (freeLimit(id) ? ' (' + freeLimit(id) + ' طلب في اليوم)' : '');
-    b.appendChild(icon('plus'));
-    b.appendChild(el('span', '', modelName(id))).dir = 'auto';
-    b.addEventListener('click', function () { placeFree(key, id, FREE[key].length); });
-    freeDraggable(b, id);
-    return b;
-  }
-
-  // A model in a box: its live card, its place, a button to move it up and one to take it out.
-  function freeCard(sec, id, i, n, r, cur) {
-    var acts = el('div', 'mrow-a');
-    if (i > 0) {
-      var up = button('btn-sm btn-quiet', 'قدّمه', function () { placeFree(sec.key, id, i - 1); }, 'up');
-      up.title = 'يعمل قبل الذي فوقه';
-      acts.appendChild(up);
-    }
-    var out = button('btn-sm btn-quiet', 'أخرجه', function () { placeFree(sec.key, id, -1); }, 'x');
-    out.title = 'لا يعمل في «' + sec.title + '» بعد الآن';
-    acts.appendChild(out);
-    var d = freeRow(r, cur, { num: n > 1 ? i + 1 : 0, acts: acts, inBox: true });
-    freeDraggable(d, id);
-    // A model dropped on a card goes before it.
-    freeDropOn(d, sec.key, i, d.className);
-    return d;
-  }
-
-  function placeFree(key, id, at) {
-    if (!FREE || !FREE_ID.test(id)) return;
-    var title = FREE_SECTIONS.filter(function (x) { return x.key === key; })[0].title;
-    var next = copyFree(FREE);
-    var list = next[key];
-    var was = list.indexOf(id);
-    if (at < 0) {
-      if (was < 0) return;
-      list.splice(was, 1);
-    } else {
-      if (was >= 0) {
-        list.splice(was, 1);
-        if (was < at) at--;
-      }
-      list.splice(Math.min(at, list.length), 0, id);
-    }
-    if (JSON.stringify(next) === JSON.stringify(FREE)) return renderFree();
-    saveFree(next, at < 0 ? 'لن يعمل «' + modelName(id) + '» في «' + title + '» من التشغيل القادم' +
-        (list.length ? '.' : '، ولا نموذج فيه الآن: لا يعمل أحد في هذه المرحلة.')
-      : was < 0 ? 'يعمل «' + modelName(id) + '» في «' + title + '» من التشغيل القادم.'
-      : 'تغيّر الترتيب في «' + title + '»، ويعمل به التشغيل القادم.');
-  }
-
-  // next: the boxes to save, or null for the converter's own choice.
-  function saveFree(next, done) {
-    var prev = FREE;
-    if (next) FREE = next;
-    FREE_SAVING++;
-    renderFree();
-    setMsg('جارٍ الحفظ…');
-    var undo = function (why) {
-      FREE_SAVING--;
-      FREE = prev;
-      setMsg('تعذّر الحفظ: ' + why);
-      renderFree();
-    };
-    google.script.run
-      .withSuccessHandler(function (text) {
-        var r = parse(text);
-        if (!r.ok) return undo(r.error || '');
-        FREE_SAVING--;
-        // The page's copy of the status follows, so drawing the boxes again keeps the change.
-        if (LAST && r.free) LAST.free = r.free;
-        if (!FREE_SAVING) FREE = null;
-        setMsg(done);
-        renderFree();
-      })
-      .withFailureHandler(function (err) { undo(errText(err)); })
-      .setFreeBoxes(JSON.stringify(next || { reset: true }));
-  }
-
+  // What the free models do in the run going (the live view), event by event. Each model's
+  // own card is on the board («النماذج»).
   function renderFree() {
-    if (FREE_DRAG) return;
     var box = document.getElementById('free');
     var keep = box.feedScroll || 0;
     box.textContent = '';
@@ -1963,12 +1795,12 @@
     badge.appendChild(el('span', 'dot'));
     badge.appendChild(el('span', '', cur ? 'مباشر · ' + ago(liveAt(lv)) : liveGoing() ? 'التشغيل يبدأ' : 'لا يعمل الآن'));
     box.appendChild(cardHead('radio', 'النماذج المجانية', badge));
-    var info = freeInfoNow();
-    box.appendChild(el('div', 'sub', (info ? 'نماذج Gemini وGemma المجانية بمفتاحك، تعمل على GitHub. لا يعمل منها إلا ما في «يعمل هنا»: ' +
-      'المس النموذج أو اسحبه إليه، ورتّبها بـ«قدّمه»، وأخرجه بـ«أخرجه». المربع الفارغ: لا يعمل أحد في تلك المرحلة. يعمل الترتيب الجديد من التشغيل القادم.'
-      : 'نماذج Gemini المجانية بمفتاحك، تعمل على GitHub: القارئان (Flash-Lite) يقرآن كل صفحة مرتين، ' +
-      'ونماذج Flash تحسم الخلاف بينهما، وGemma للصفحات التي يرفضها Gemini.') +
+    box.appendChild(el('div', 'sub', 'نماذج Gemini وGemma المجانية بمفتاحك تعمل على GitHub، وتضعها في المربعات من «النماذج».' +
       (LIVE.usage ? ' تتجدد حصصها كل يوم نحو ' + when(LIVE.usage.renew, true) + ' بتوقيتك.' : '')));
+    var b = LAST && LAST.boxes;
+    if (b && !['read1', 'read2', 'settle', 'review'].some(function (k) { return (b[k] || []).some(isFree); })) {
+      box.appendChild(note('hold', 'النماذج المجانية موقوفة: لا نموذج مجاني في «تعمل الآن»، فلا يبدأ لها تشغيل.'));
+    }
     if (cur) {
       var ph = el('div', 'phase');
       ph.appendChild(icon('radio'));
@@ -1976,29 +1808,11 @@
       ph.appendChild(el('small', '', (lv.run_n ? 'التشغيل رقم ' + lv.run_n + ' · ' : '') + (lv.started ? 'بدأ ' + when(lv.started, true) : '')));
       box.appendChild(ph);
     } else if (liveGoing()) {
-      box.appendChild(note('hold', LIVE.ghRun ? 'التشغيل على GitHub: ' + stepNow(LIVE.ghRun) + '. تظهر النماذج هنا حين يبدأ التحويل.'
+      box.appendChild(note('hold', LIVE.ghRun ? 'التشغيل على GitHub: ' + stepNow(LIVE.ghRun) + '. تظهر الأخبار هنا حين يبدأ التحويل.'
         : 'ينتظر أن يبدأ التشغيل على GitHub.'));
     } else if (lv && lv.end && lv.book) {
       box.appendChild(note(lv.end.state === 'done' ? 'ok' : 'hold', 'آخر تشغيل («' + lv.book + '») انتهى ' + when(lv.at) + ': ' +
         (ENDS[lv.end.state === 'paused' && lv.end.waiting_for ? lv.end.waiting_for : lv.end.state] || lv.end.state) + '.'));
-    }
-    var rows = freeRows();
-    if (info) {
-      if (freeEmpty(info.boxes)) box.appendChild(note('hold', 'النماذج المجانية موقوفة: لا نموذج في «يعمل هنا»، فلا يبدأ لها تشغيل.'));
-      FREE_SECTIONS.forEach(function (sec) { box.appendChild(freeSection(sec, info, rows, cur)); });
-      if (info.custom) {
-        var reset = button('btn-sm btn-quiet', 'ارجع إلى الترتيب الافتراضي', function () {
-          saveFree(null, 'رجعت المربعات إلى الترتيب الافتراضي، ويعمل به التشغيل القادم.');
-        }, 'refresh');
-        reset.title = 'Flash-Lite 3.5 و3.1 يقرآن (كل واحد يكمل ما لا يقدر عليه الآخر)، وFlash يحسم ثم Flash-Lite.';
-        box.appendChild(el('div', 'hero-acts')).appendChild(reset);
-      }
-    } else if (rows.length) {
-      var grid = el('div', 'mrows');
-      rows.forEach(function (r) { grid.appendChild(freeRow(r, cur, { role: true })); });
-      box.appendChild(grid);
-    } else {
-      box.appendChild(el('div', 'sub', 'لم يعمل أي نموذج مجاني اليوم بعد.'));
     }
     if (LIVE.events.length) {
       var h3 = el('div', 'h3');
@@ -2008,6 +1822,8 @@
       var list = box.appendChild(feed(LIVE.events, 80, false));
       list.addEventListener('scroll', function () { box.feedScroll = list.scrollTop; });
       if (keep) list.scrollTop = keep;
+    } else if (!cur) {
+      box.appendChild(el('div', 'sub', 'لم يعمل أي نموذج مجاني بعد.'));
     }
   }
 
@@ -2015,6 +1831,8 @@
     renderBadge();
     renderNowLive();
     renderFree();
+    // The free models' cards on the board follow the run (not under a drag or while typing).
+    if (LAST && LAST.ok && !BOX_DRAG && !typing()) renderBoxes(LAST);
     if (LAST && LAST.ok) renderFigs(LAST);
   }
 
@@ -2754,95 +2572,108 @@
   }
 
   // ------------------------------------------------------------------------
-  // The boxes: the models on the user's computer go to work when moved from the
-  // right box of a section to its left box (dragged on a computer, or tapped), and
-  // stop when moved back.
+  // The board «النماذج» (the user's design, 2026-10-23): four boxes, the first reading, the
+  // second, settling, and the review of the unsure places. Any model, free (it works in the
+  // runs on GitHub) or the user's own (on their computer), goes in any box with a tap or a
+  // drag; only the models in «تعمل الآن» work, side by side, sharing the box's pages. An
+  // empty box: nobody does that step.
   // ------------------------------------------------------------------------
   var BOXES = null;
   var BOXES_SAVING = 0;
+  var BOX_DRAG = false;
   var TIMES_OPEN = {};
+  var AVAIL_OPEN = {};
   var DRAFT = {};
   var SECTIONS = [
-    { key: 'transcribe', title: 'القراءة',
-      note: 'نماذج هذا المربع تقرأ الصفحات فقط، من أول الكتاب، والنماذج المجانية تقرأ من آخره. كل صفحة تقرؤها قراءتان من نموذجين مختلفين.',
-      empty: 'فارغ: النماذج المجانية تقرأ كل الصفحات.' },
-    { key: 'settle', title: 'الحسم',
-      note: 'نماذج هذا المربع تحسم الخلاف بين القراءتين فقط، بعد نماذج Flash المجانية، ولا تقرأ. هو أنفع مكان لنماذجك القوية.',
-      empty: 'فارغ: النماذج المجانية تحسم (Flash ثم Lite).' },
+    { key: 'read1', title: 'القراءة الأولى', note: 'تقرأ كل صفحة أول مرة.' },
+    { key: 'read2', title: 'القراءة الثانية', note: 'قراءة ثانية مستقلة لكل صفحة. لا يقرأ نموذج واحد الصفحة مرتين.' },
+    { key: 'settle', title: 'الحسم', note: 'تحسم الخلاف بين القراءتين على صورة الصفحة.' },
     { key: 'review', title: 'مراجعة المشكوك فيه',
-      note: 'نماذجك تحكم على مواضع الشك. التصحيح الكبير لا يُطبَّق إلا إذا اتفق عليه نموذجان، وإجابتك تغلب دائماً.',
-      empty: 'فارغ: المواضع تبقى لك.' }
+      note: 'تحكم على مواضع الشك في الكتب المسلّمة. التصحيح الكبير لا يُطبَّق إلا إذا اتفق عليه نموذجان، وإجابتك تغلب دائماً.' }
   ];
   var CHIP_STATES = { working: ['run', 'يعمل'], idle: ['wait', 'ينتظر عملاً'], exhausted: ['hold', 'يرتاح'], failing: ['bad', 'يتعثّر'] };
+
+  function isFree(id) { return /^(gemini|gemma)-/.test(String(id)); }
 
   function modelOf(models, id) {
     for (var i = 0; i < models.length; i++) if (models[i].id === id) return models[i];
     return null;
   }
 
+  function copyBoxes(b) {
+    return { read1: (b.read1 || []).slice(), read2: (b.read2 || []).slice(), settle: (b.settle || []).slice(),
+      review: (b.review || []).slice(), times: JSON.parse(JSON.stringify(b.times || {})) };
+  }
+
   function renderBoxes(s) {
     var box = document.getElementById('boxes');
     box.textContent = '';
-    var h = s && s.helper;
-    box.hidden = !h || !h.seen;
+    box.hidden = !s || !s.boxes;
     if (box.hidden) return;
     // While a change is being saved, the page keeps showing it.
-    if (!BOXES_SAVING || !BOXES) {
-      var b = h.boxes || {};
-      BOXES = { transcribe: (b.transcribe || []).slice(), settle: (b.settle || []).slice(), review: (b.review || []).slice(),
-        times: JSON.parse(JSON.stringify(b.times || {})) };
+    if (!BOXES_SAVING || !BOXES) BOXES = copyBoxes(s.boxes);
+    var h = s.helper && s.helper.seen ? s.helper : null;
+    box.appendChild(cardHead('cpu', 'النماذج', h ? st(h.connected ? 'ok' : 'bad', h.connected ? 'جهازك متصل' : 'جهازك غير متصل') : null));
+    box.appendChild(el('div', 'sub', 'لا يعمل إلا ما في «تعمل الآن». نماذج المربع الواحد تعمل معاً وتتقاسم صفحاته، والمربع الفارغ لا يعمل فيه أحد. ' +
+      'النماذج المجانية تعمل على GitHub، ونماذجك على جهازك.'));
+    if (h && !h.connected && SECTIONS.some(function (sec) { return BOXES[sec.key].some(function (id) { return !isFree(id); }); })) {
+      box.appendChild(note('hold', 'جهازك غير متصل الآن، فلا يعمل أي نموذج من نماذجك حتى تفتحه.'));
     }
-    box.appendChild(cardHead('cpu', 'نماذجك على الجهاز', st(h.connected ? 'ok' : 'bad', h.connected ? 'جهازك متصل' : 'جهازك غير متصل')));
-    box.appendChild(el('div', 'sub', 'نماذج اشتراكاتك تعمل حين يكون عندك فائض: انقل النموذج إلى «تعمل الآن» فيبدأ، وأوقفه متى شئت.'));
-    if (!h.connected) {
-      box.appendChild(note('hold', 'جهازك غير متصل الآن، فلا يعمل أي نموذج حتى تفتحه.' +
-        (BOXES.transcribe.length || BOXES.settle.length ? ' إن طال الغياب أكمل النموذج المجاني الكتب وحده.' : '')));
-    }
-    var models = h.models || [];
-    if (!models.length) {
-      box.appendChild(note('hold', 'لم يجد المساعد بعد أي برنامج نماذج على جهازك.'));
-      return;
-    }
-    SECTIONS.forEach(function (sec) { box.appendChild(boxSection(sec, models, h)); });
+    var rows = freeRows(), cur = liveCurrent();
+    SECTIONS.forEach(function (sec) { box.appendChild(boxSection(sec, s.boxes.free || [], h ? h.models || [] : [], h, rows, cur)); });
   }
 
-  function boxSection(sec, models, h) {
+  function boxSection(sec, free, mine, h, rows, cur) {
     var wrap = el('div', 'bx');
     var on = BOXES[sec.key];
     var head = el('div', 'bx-h');
     head.appendChild(el('h3', '', sec.title));
-    head.appendChild(on.length ? st('run', count(on.length, 'نموذج يعمل', 'نموذجان يعملان', 'نماذج تعمل', 'نموذجاً يعمل')) : st('wait', 'لا نموذج'));
+    head.appendChild(on.length ? st('run', count(on.length, 'نموذج واحد', 'نموذجان', 'نماذج', 'نموذجاً')) : st('wait', 'لا أحد يعمل هنا'));
     wrap.appendChild(head);
     wrap.appendChild(el('div', 'sub', sec.note));
     var pair = el('div', 'pair');
-    // Right to left: the first box is on the right.
-    var offBox = dropBox(sec.key, false, 'grid', 'المتاحة', 'المس النموذج أو اسحبه إلى «تعمل الآن»');
+    // Right to left: «المتاحة» is on the right, small, and folded once the box has a model.
+    var offBox = dropBox(sec.key, false, 'grid', 'المتاحة', '', 'box is-avail');
     var onBox = dropBox(sec.key, true, 'play', 'تعمل الآن', '');
-    // The models waiting in the right box, in rows under the name of their program.
-    var groups = [];
-    models.forEach(function (m) {
+    var groups = [{ tool: 'مجانية (على GitHub)', list: [] }];
+    free.forEach(function (id) { if (on.indexOf(id) < 0) groups[0].list.push({ id: id, label: modelName(id) }); });
+    mine.forEach(function (m) {
       if (on.indexOf(m.id) >= 0) return;
       var g = null;
-      for (var i = 0; i < groups.length; i++) if (groups[i].tool === m.tool) g = groups[i];
+      for (var i = 1; i < groups.length; i++) if (groups[i].tool === m.tool) g = groups[i];
       if (!g) groups.push(g = { tool: m.tool, list: [] });
       g.list.push(m);
     });
-    groups.forEach(function (g) {
-      var group = el('div', 'grp');
-      if (g.tool) group.appendChild(el('div', 'grp-n', g.tool));
-      var row = el('div', 'mchips');
-      g.list.forEach(function (m) { row.appendChild(chip(sec.key, m)); });
-      group.appendChild(row);
-      offBox.appendChild(group);
-    });
-    if (!groups.length) offBox.appendChild(el('div', 'box-e', 'كل نماذجك في «تعمل الآن».'));
+    groups = groups.filter(function (g) { return g.list.length; });
+    var n = groups.reduce(function (x, g) { return x + g.list.length; }, 0);
+    var open = AVAIL_OPEN[sec.key] !== undefined ? AVAIL_OPEN[sec.key] : !on.length;
+    if (n) {
+      var t = button('btn-sm btn-quiet', open ? 'إخفاء' : 'أضف نموذجاً (' + n + ')', function () {
+        AVAIL_OPEN[sec.key] = !open;
+        renderBoxes(LAST);
+      }, open ? 'up' : 'plus');
+      offBox.appendChild(t);
+    } else {
+      offBox.appendChild(el('div', 'box-e', 'كل النماذج هنا.'));
+    }
+    if (n && open) {
+      groups.forEach(function (g) {
+        var group = el('div', 'grp');
+        group.appendChild(el('div', 'grp-n', g.tool));
+        var row = el('div', 'mchips');
+        g.list.forEach(function (m) { row.appendChild(chip(sec.key, m)); });
+        group.appendChild(row);
+        offBox.appendChild(group);
+      });
+    }
     on.forEach(function (id) {
-      onBox.appendChild(modelCard(sec.key, modelOf(models, id) || { id: id, label: id, tool: '', gone: true }, h));
+      onBox.appendChild(isFree(id) ? freeCard(sec, id, rows, cur)
+        : modelCard(sec.key, modelOf(mine, id) || { id: id, label: id.split('|').pop(), tool: '', gone: !!h }, h || {}));
     });
     if (!on.length) {
       var e = el('div', 'box-e');
       e.appendChild(icon('next'));
-      e.appendChild(el('span', '', sec.empty));
+      e.appendChild(el('span', '', 'لا أحد يعمل في «' + sec.title + '». ضع هنا نموذجاً من «المتاحة».'));
       onBox.appendChild(e);
     }
     pair.appendChild(offBox);
@@ -2854,16 +2685,18 @@
   function draggable(node, id) {
     node.draggable = true;
     node.addEventListener('dragstart', function (e) {
+      BOX_DRAG = true;
       e.dataTransfer.setData('text/plain', JSON.stringify({ id: id }));
       e.dataTransfer.effectAllowed = 'move';
     });
+    node.addEventListener('dragend', function () { BOX_DRAG = false; });
   }
 
-  // A model waiting in the right box: a tap starts it.
+  // A model in «المتاحة»: a tap puts it to work in this box.
   function chip(sec, m) {
     var b = el('button', 'mchip' + (m.warn ? ' is-warn' : ''));
     b.type = 'button';
-    b.title = 'شغّل ' + m.label;
+    b.title = 'شغّله هنا' + (isFree(m.id) && freeLimit(m.id) ? ' (' + freeLimit(m.id) + ' طلب في اليوم)' : '');
     b.appendChild(icon('plus'));
     // Latin names keep their own direction inside the Arabic page.
     b.appendChild(el('span', '', m.label)).dir = 'auto';
@@ -2871,6 +2704,18 @@
     b.addEventListener('click', function () { moveChip(sec, m.id, true); });
     draggable(b, m.id);
     return b;
+  }
+
+  // A free model at work in a box: its state in the run, today's requests, a button to take it out.
+  function freeCard(sec, id, rows, cur) {
+    var r = rows.filter(function (x) { return x.id === id; })[0] || { id: id, m: null, u: null };
+    var acts = el('div', 'mrow-a');
+    var out = button('btn-sm btn-quiet', 'أخرجه', function () { moveChip(sec.key, id, false); }, 'x');
+    out.title = 'لا يعمل في «' + sec.title + '» بعد الآن';
+    acts.appendChild(out);
+    var d = freeRow(r, cur, { acts: acts, inBox: true });
+    draggable(d, id);
+    return d;
   }
 
   // A model's own live news from the helper's worker (live-<tool>.json), when newer than its
@@ -2924,7 +2769,7 @@
     name.appendChild(el('b', '', m.label)).dir = 'auto';
     if (m.tool) name.appendChild(el('span', '', m.tool));
     top.appendChild(name);
-    var stop = button('btn-sm btn-quiet', 'أوقف', function () { moveChip(sec, m.id, false); }, 'stop');
+    var stop = button('btn-sm btn-quiet', 'أخرجه', function () { moveChip(sec, m.id, false); }, 'x');
     stop.title = 'يكمل ما بين يديه ثم يتوقف';
     top.appendChild(stop);
     d.appendChild(top);
@@ -2966,8 +2811,8 @@
     return b;
   }
 
-  function dropBox(sec, isOn, ic, head, hint) {
-    var base = 'box' + (isOn ? ' is-on' : '');
+  function dropBox(sec, isOn, ic, head, hint, cls) {
+    var base = cls || 'box' + (isOn ? ' is-on' : '');
     var d = el('div', base);
     var hd = el('div', 'box-h');
     hd.appendChild(icon(ic));
@@ -2979,6 +2824,7 @@
     d.addEventListener('drop', function (e) {
       e.preventDefault();
       d.className = base;
+      BOX_DRAG = false;
       var x = null;
       try { x = JSON.parse(e.dataTransfer.getData('text/plain')); } catch (err) { /* not a model */ }
       if (x && x.id) moveChip(sec, String(x.id), isOn);
@@ -3068,17 +2914,16 @@
     saveBoxes(next, key === 'start' ? (iso ? 'يبدأ ' + when(iso) + '.' : 'يبدأ الآن.') : (iso ? 'يتوقف ' + when(iso) + '.' : 'لا يتوقف.'));
   }
 
-  function copyBoxes(b) {
-    return { transcribe: b.transcribe.slice(), settle: (b.settle || []).slice(), review: b.review.slice(),
-      times: JSON.parse(JSON.stringify(b.times || {})) };
-  }
-
   function moveChip(sec, id, toOn) {
     var next = copyBoxes(BOXES);
     next[sec] = next[sec].filter(function (x) { return x !== id; });
     if (toOn) next[sec].push(id);
     if (JSON.stringify(next) === JSON.stringify(BOXES)) return;
-    saveBoxes(next, toOn ? 'يبدأ خلال دقيقة أو دقيقتين إن كان جهازك مفتوحاً.' : 'يكمل ما بين يديه ثم يتوقف.');
+    var title = SECTIONS.filter(function (x) { return x.key === sec; })[0].title;
+    var name = isFree(id) ? modelName(id) : String(id).split('|').pop();
+    saveBoxes(next, toOn ? (isFree(id) ? 'يعمل «' + name + '» في «' + title + '» من التشغيل القادم.'
+      : 'يبدأ «' + name + '» في «' + title + '» خلال دقيقة أو دقيقتين إن كان جهازك مفتوحاً.')
+      : 'لن يعمل «' + name + '» في «' + title + '» بعد ما بين يديه' + (next[sec].length ? '.' : '، ولا أحد يعمل فيه الآن.'));
   }
 
   function saveBoxes(next, done) {
@@ -3099,11 +2944,13 @@
         if (!r.ok) return undo(r.error || '');
         BOXES_SAVING--;
         // The page's copy of the status follows, so drawing the boxes again keeps the change.
-        if (LAST && LAST.helper) LAST.helper.boxes = copyBoxes(next);
+        if (LAST && r.boxes) LAST.boxes = r.boxes;
+        if (!BOXES_SAVING) BOXES = null;
         setMsg(done);
+        renderBoxes(LAST);
       })
       .withFailureHandler(function (err) { undo(errText(err)); })
-      .setHelperBoxes(JSON.stringify(next));
+      .setBoxes(JSON.stringify(next));
   }
 
   // ------------------------------------------------------------------------

@@ -24,8 +24,9 @@ or key there, and the helper never calls a Google or GitHub API.
 | `مراجعة/<fileId>/` | Apps Script (copy of `drive-<fileId>/review/` in the results branch) | `items.json` and the place images; the helper adds `j-<model>-pNNNN.json` (each model's verdicts). Apps Script also writes `answered.json` (`{v, at, ids}`, each check when it changes): the places the user answered (saved, sent or not) that no run carried yet; the models skip them. The other way round, the review screen hides the places in `أحكام/<fileId>.json` that no run carried yet. |
 | `أحكام/<fileId>.json` | helper | The models' verdicts as answers (the user's answer form), kept and added to; `done` when no model in the box has anything left to judge. |
 
-`requests.json` also carries `boxes: {transcribe: [ids], review: [ids]}` (ids are
-`<tool>|<model>`), and `helper-status.json` also carries `models` (every model of the tools
+`requests.json` also carries `boxes: {read1: [ids], read2: [ids], settle: [ids], review: [ids], times}` (ids are
+`<tool>|<model>`: the user's models in the status page's board, each giving only its box's step; `transcribe`, both
+reading boxes together, is for an older helper), and `helper-status.json` also carries `models` (every model of the tools
 found: `{id, label, tool, warn}`), `chips` (`{id: {state: working|idle|exhausted|failing, text, page, kind, since, done, last}}`
 for the models in the boxes: the page each is on, how many it finished and its last jobs) and `books` (`{fileId: {need, finished, book_at}}`, the helper's
 work on each book's pages). `reviews` in `requests.json` lists the books open for review (a book the
