@@ -146,6 +146,8 @@ var FREE_MODEL_RE = /^(gemini|gemma)-[a-z0-9.-]{1,60}$/;
 var FREE_KEYS = ['read1', 'read2', 'settle'];
 // The status page's boxes: the first reading, the second, settling, and the review of the unsure places.
 var BOX_KEYS = ['read1', 'read2', 'settle', 'review'];
+// The boxes whose models work on a book's pages (the review box works on its unsure places).
+var WORK_BOXES = ['read1', 'read2', 'settle'];
 // The converter's own choice until a run says it (free_default in status.json): each Lite
 // reader gives the readings the other cannot.
 var FREE_DEFAULT = {
@@ -647,8 +649,18 @@ function setBoxes(json) {
     boxes.times = cleanTimes_(r.times, chipsOf_(boxes.read1.concat(boxes.read2, boxes.settle, boxes.review)));
     var lock = LockService.getUserLock();
     if (!lock.tryLock(20000)) return JSON.stringify({ ok: false, error: 'مشغول، أعد المحاولة بعد دقيقة.' });
+    var moved = false;
     try {
+      var old = modelBoxes_();
       boxes.at = now_().toISOString();
+      // Whether the boxes where models work on books changed (the run going is told), and
+      // when a model last came into one (a book whose last run took the boxes before that
+      // runs again at once: boxesMissed_).
+      moved = WORK_BOXES.some(function (k) { return String(old[k]) !== String(boxes[k]); });
+      var added = WORK_BOXES.some(function (k) {
+        return boxes[k].some(function (id) { return old[k].indexOf(id) < 0; });
+      });
+      boxes.added = added ? boxes.at : old.added;
       props_().setProperty('MODEL_BOXES', JSON.stringify(boxes));
       // A model put in the review box starts within a minute: what it must not review
       // (a book deleted, or closed, since the last check) goes first.
@@ -658,7 +670,8 @@ function setBoxes(json) {
     } finally {
       lock.releaseLock();
     }
-    return JSON.stringify({ ok: true, boxes: boxesInfo_() });
+    var text = moved ? boxesNow_() : '';
+    return JSON.stringify({ ok: true, boxes: boxesInfo_(), text: text });
   } catch (err) {
     Logger.log('setBoxes failed: ' + (err && err.stack ? err.stack : err));
     return JSON.stringify({ ok: false, error: String(err && err.message ? err.message : err) });
@@ -748,6 +761,8 @@ function handleStatus_(ctx, job, s) {
   job.stages = cleanStages_(s.stages);
   noteUsage_(s);
   noteFreeModels_(s);
+  // When the boxes this run took during it were saved (live.py): boxesMissed_.
+  job.boxesSeen = typeof s.boxes_at === 'string' && isFinite(Date.parse(s.boxes_at)) ? s.boxes_at : '';
   var forced = !!job.forced;
   delete job.forced;
 
@@ -761,6 +776,12 @@ function handleStatus_(ctx, job, s) {
   var waiting = s.state === 'paused' ? String(s.waiting_for || '') : '';
   var state = waiting === 'judges' ? 'done' : waiting === 'helper' ? 'helper'
     : waiting === 'reader' ? 'readerWait' : waiting === 'time' ? 'time' : waiting === 'boxes' ? 'boxWait' : s.state;
+  // The user put a model in a box that this run did not take (it had ended, or could not hand
+  // the user's own models their pages): the book goes on at once with the boxes as they are.
+  if (/^(paused|readerWait|boxWait|time|helper)$/.test(state) && !job.refining && boxesMissed_(job) && anyoneWorks_(ctx)) {
+    saveJobs_(ctx.jobs);
+    return 'boxes changed, go on: ' + dispatch_(ctx, job, false, 'وضعتَ نموذجاً في المربعات');
+  }
   switch (state) {
     case 'done':
       // A conversion run (not a review round): the free models' review looks at its places again.
@@ -897,6 +918,8 @@ function resumeIfNewDay_(ctx, job) {
     if (!anyoneWorks_(ctx)) return 'paused (no model in the boxes)';
     return 'quota reset, resume: ' + dispatch_(ctx, job, false, 'تجدد رصيد النماذج المجانية');
   }
+  // A model the user put in a box since the run that paused may have quota left today.
+  if (boxesMissed_(job) && anyoneWorks_(ctx)) return 'boxes changed, resume: ' + dispatch_(ctx, job, false, 'وضعتَ نموذجاً في المربعات');
   // The helper's models read what the free model could not: no need to wait for tomorrow.
   if (helperDoneFor_(ctx, job)) return 'helper finished, resume: ' + dispatch_(ctx, job, false, 'أنهت نماذجك ما أُعطيت');
   return 'paused until after ' + job.pausedDay + ' (Pacific)';
@@ -1075,15 +1098,24 @@ function freeReviewNext_(ctx) {
   return startReviewRound_(ctx, pick, false);
 }
 
-/** Dispatches the oldest book waiting for a model in the boxes, once the boxes changed and someone can work; or returns ''. */
+/**
+ * Dispatches the oldest parked book a change of the boxes concerns (a model put in a box since
+ * its last run, or, for a book waiting for a model, any change) once someone can work; or ''.
+ */
 function boxNext_(ctx) {
   var sig = null;
   var pick = null;
   Object.keys(ctx.jobs).forEach(function (id) {
     var j = ctx.jobs[id];
-    if (!j || j.stage !== 'boxWait') return;
-    if (sig === null) sig = boxesSig_(ctx);
-    if (j.boxSig !== sig && (!pick || String(j.createdAt || '') < String(pick.createdAt || ''))) pick = j;
+    if (!j || !isParked_(j) || j.stage === 'judging') return;
+    // A model came into a box since its last run (a book parked for a reader or with the
+    // user's models too), or, for a book waiting for one, the boxes are not what they were.
+    var due = boxesMissed_(j);
+    if (!due && j.stage === 'boxWait') {
+      if (sig === null) sig = boxesSig_(ctx);
+      due = j.boxSig !== sig;
+    }
+    if (due && (!pick || String(j.createdAt || '') < String(pick.createdAt || ''))) pick = j;
   });
   if (!pick || !anyoneWorks_(ctx)) return '';
   pick.stage = 'queued';
@@ -2271,6 +2303,7 @@ function modelBoxes_() {
       .slice(0, CONFIG.BOX_MAX);
   });
   out.times = cleanTimes_(v.times, chipsOf_(out.read1.concat(out.read2, out.settle, out.review)));
+  out.added = saved && typeof v.added === 'string' && isFinite(Date.parse(v.added)) ? v.added : '';
   return out;
 }
 
@@ -2405,12 +2438,18 @@ function helperNext_(ctx) {
  */
 function helperInput_(ctx, job) {
   if (job.humanRound || job.refining || !props_().getProperty('HELPER_INSTALL_ID')) return '';
-  var work = extOf_(job.driveName || job.name) === 'pdf' && !job.helperOff && helperWork_(helperStatusOf_(ctx));
+  var work = helperWorkFor_(ctx, job);
   var f = bookFolder_(job.fileId, !!work);
   if (!f) return '';
   if (!work) return f.getId() + ':import';
   // What the user's models do in this run: the boxes they are in (first and second readings, settling).
   return f.getId() + ':' + ['read1', 'read2', 'settle'].filter(function (k) { return work[k]; }).join('+');
+}
+
+/** What the user's models do in a run of this book ({read1, read2, settle}), or false. */
+function helperWorkFor_(ctx, job) {
+  if (job.humanRound || job.refining || !props_().getProperty('HELPER_INSTALL_ID')) return false;
+  return extOf_(job.driveName || job.name) === 'pdf' && !job.helperOff && helperWork_(helperStatusOf_(ctx));
 }
 
 /** A folder in the helper's folder ("كتب", "مراجعة", "أحكام"), made when create is true. */
@@ -2852,14 +2891,34 @@ function freeList_(v, max) {
 
 /**
  * FREE_MODELS: the free models the account has, and the converter's own boxes, from the last
- * run that listed them ({ids, defaults: {read1, read2, settle}, at}).
+ * run that listed them ({ids, defaults: {read1, read2, settle}, at}), and the models a run found
+ * this key cannot use (gone: {id: when}; 404 "no longer available to new users", or no free
+ * quota at all), which the page no longer offers (2026-10-23: Gemini 2.5 Flash).
  */
 function noteFreeModels_(s) {
+  var known = parseJson_(props_().getProperty('FREE_MODELS')) || {};
+  var gone = goneModels_(known);
+  var missing = freeList_(s && s.models_missing, CONFIG.FREE_MAX_MODELS);
+  missing.forEach(function (id) { gone[id] = String(s.updated_at || now_().toISOString()); });
   var ids = freeList_(s && s.free_models, CONFIG.FREE_MAX_MODELS);
-  if (!ids.length) return;
-  var defaults = {};
-  FREE_KEYS.forEach(function (k) { defaults[k] = freeList_(s.free_default && s.free_default[k]); });
-  props_().setProperty('FREE_MODELS', JSON.stringify({ ids: ids, defaults: defaults, at: s.updated_at || '' }));
+  if (!ids.length && !missing.length) return;
+  var defaults = known.defaults || {};
+  if (ids.length) {
+    defaults = {};
+    FREE_KEYS.forEach(function (k) { defaults[k] = freeList_(s.free_default && s.free_default[k]); });
+  }
+  props_().setProperty('FREE_MODELS', JSON.stringify({ ids: ids.length ? ids : freeList_(known.ids, CONFIG.FREE_MAX_MODELS),
+    defaults: defaults, at: ids.length ? s.updated_at || '' : known.at || '', gone: gone }));
+}
+
+/** The free models a run found this key cannot use ({id: when}, FREE_MODELS.gone). */
+function goneModels_(known) {
+  var gone = {};
+  var v = known && known.gone;
+  if (v && typeof v === 'object' && !Array.isArray(v)) {
+    Object.keys(v).forEach(function (id) { if (FREE_MODEL_RE.test(id)) gone[id] = String(v[id]); });
+  }
+  return gone;
 }
 
 /** The account's own name for a default name ("gemini-3-flash" is "gemini-3-flash-preview"). */
@@ -2906,8 +2965,10 @@ function freeInfo_() {
 /** The free models the page offers: the account's (from the runs), then any other in a box. */
 function freeCatalog_(b) {
   var known = parseJson_(props_().getProperty('FREE_MODELS')) || {};
+  var gone = goneModels_(known);
   var ids = freeList_(known.ids, CONFIG.FREE_MAX_MODELS);
-  var models = (ids.length ? ids : FREE_DEFAULT_MODELS).slice();
+  // A model this key cannot use is not offered; one already in a box stays there, to take out.
+  var models = (ids.length ? ids : FREE_DEFAULT_MODELS).filter(function (id) { return !gone[id]; });
   BOX_KEYS.forEach(function (k) { freeOf_(b[k]).forEach(function (id) { if (models.indexOf(id) < 0) models.push(id); }); });
   return models;
 }
@@ -3219,11 +3280,7 @@ function retryFree(id) {
     clearOut_(id);
     var cfg = config_();
     var ctx = { cfg: cfg, folders: getFolders_(), jobs: loadJobs_(), dispatched: 0 };
-    var going = null;
-    Object.keys(ctx.jobs).forEach(function (k) {
-      var j = ctx.jobs[k];
-      if (j && j.stage === 'running' && !j.pausedDay) going = j;
-    });
+    var going = goingRun_(ctx.jobs);
     if (going && going.humanRound) {
       return JSON.stringify({ ok: true, text: 'يعمل الآن تشغيل مراجعة لا يسأل النماذج؛ يعمل «' + name + '» في التشغيل التالي.' });
     }
@@ -3274,17 +3331,105 @@ function clearOut_(id) {
   props.setProperty('USAGE', JSON.stringify(u));
 }
 
-/** Tells the run going that this model works again (the requests file: {v, retry: {model: when}}). */
-function tellRun_(id, at) {
+/** Changes the requests file the run going reads every few seconds (live.py): edit(data). */
+function editControl_(edit) {
   var f = liveControl_();
   if (!f) return;
   var data = parseJson_(f.getBlob().getDataAsString('UTF-8'));
-  var retry = data && data.retry && typeof data.retry === 'object' && !Array.isArray(data.retry) ? data.retry : {};
-  retry[id] = at;
-  var keys = Object.keys(retry).sort(function (a, b) { return String(retry[b]).localeCompare(String(retry[a])); });
-  var kept = {};
-  keys.slice(0, 40).forEach(function (k) { kept[k] = retry[k]; });
-  f.setContent(JSON.stringify({ v: 1, retry: kept }));
+  if (!data || typeof data !== 'object' || Array.isArray(data)) data = {};
+  edit(data);
+  data.v = 1;
+  f.setContent(JSON.stringify(data));
+}
+
+/** Tells the run going that this model works again (the requests file: {v, retry: {model: when}}). */
+function tellRun_(id, at) {
+  editControl_(function (data) {
+    var retry = data.retry && typeof data.retry === 'object' && !Array.isArray(data.retry) ? data.retry : {};
+    retry[id] = at;
+    var keys = Object.keys(retry).sort(function (a, b) { return String(retry[b]).localeCompare(String(retry[a])); });
+    var kept = {};
+    keys.slice(0, 40).forEach(function (k) { kept[k] = retry[k]; });
+    data.retry = kept;
+  });
+}
+
+/**
+ * Tells the run going the boxes as they are now (the requests file, {boxes, helper, boxes_at}):
+ * within seconds it gives its pages to the free models now in them, and none to one taken out.
+ * When what the user's own models do is no longer what the run was given, it starts no new
+ * page and the next run hands them their pages (boxesMissed_).
+ */
+function tellBoxes_(ctx, job) {
+  var b = modelBoxes_();
+  var work = helperWorkFor_(ctx, job) || {};
+  editControl_(function (data) {
+    data.boxes = {};
+    data.helper = {};
+    WORK_BOXES.forEach(function (k) {
+      data.boxes[k] = freeOf_(b[k]);
+      data.helper[k] = !!work[k];
+    });
+    // Later than the boxes' last change: the run reports it once it took them (boxesMissed_).
+    data.boxes_at = now_().toISOString();
+  });
+}
+
+/** The conversion or review run going on GitHub (dispatched and not paused), or null. */
+function goingRun_(jobs) {
+  var going = null;
+  Object.keys(jobs).forEach(function (k) {
+    var j = jobs[k];
+    if (j && j.stage === 'running' && !j.pausedDay) going = j;
+  });
+  return going;
+}
+
+/**
+ * The boxes where models work on books changed (setBoxes): the run going takes them within
+ * seconds; with none going, a book waiting for a model runs now (boxesMissed_, boxNext_), else
+ * the next new book. Returns what happened, for the page ('' when nothing).
+ */
+function boxesNow_() {
+  var lock = LockService.getScriptLock();
+  var locked = lock.tryLock(10000);
+  try {
+    var ctx = { cfg: config_(), jobs: loadJobs_(), dispatched: 0 };
+    var going = goingRun_(ctx.jobs);
+    if (going) {
+      if (going.humanRound) return '';
+      tellBoxes_(ctx, going);
+      return 'يأخذها التشغيل الجاري خلال ثوانٍ.';
+    }
+    // Without the lock a check is running: it starts what can start with the boxes as they are.
+    if (!locked || !ctx.cfg.token) return '';
+    ctx.folders = getFolders_();
+    var holder = activeJob_(ctx.jobs);
+    if (holder) {
+      if (waitsForDay_(holder)) resumeIfNewDay_(ctx, holder);
+    } else if (!reviewRound_(ctx.jobs)) {
+      if (!boxNext_(ctx)) startNext_(ctx);
+    }
+    return ctx.dispatched ? 'بدأ تشغيل بها الآن.' : '';
+  } catch (err) {
+    Logger.log('boxesNow_ failed: ' + (err && err.stack ? err.stack : err));
+    return '';
+  } finally {
+    if (locked) lock.releaseLock();
+  }
+}
+
+/**
+ * The user put a model in a box where models work on books after this book's last run took
+ * the boxes (it had ended, or could not hand the user's own models their pages): the book runs
+ * again at once, not on a new day or when a model is out of a box (2026-10-23: "why not give
+ * it pages at once?").
+ */
+function boxesMissed_(job) {
+  var added = modelBoxes_().added;
+  var took = String(job.dispatchedAt || '');
+  if (String(job.boxesSeen || '') > took) took = String(job.boxesSeen);
+  return !!added && added > took;
 }
 
 /**

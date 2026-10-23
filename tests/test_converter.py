@@ -14,6 +14,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 
 import converter as c  # noqa: E402
+import live  # noqa: E402
 import crosscheck  # noqa: E402
 
 PDF = os.path.join(ROOT, "تراث الانسانية 3-1-246.pdf")
@@ -679,6 +680,100 @@ class FreeBoxes(PipelineBase):
         self.assertEqual(c.free_catalog(have), [
             "gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-3.8-flash", "gemini-3-flash-preview",
             "gemini-2.5-flash", "gemini-3.1-pro-preview", "gemma-4-31b-it", "gemma-4-26b-a4b-it"])
+
+    # The user changes the boxes during a run (2026-10-23: "why not give it pages at once?").
+
+    def changing(self, boxes, helper=None, on=1):
+        """A run whose first reader's call number `on` is when the user changes the boxes on
+        the status page (the requests file, read there and then)."""
+        lv = live.Live(None)
+        lv.control = Requests()
+        self._open_live = c.live.open_live
+        c.live.open_live = lambda *a, **k: lv
+        self.addCleanup(setattr, c.live, "open_live", self._open_live)
+
+        def change(n):
+            if n == on:
+                lv.control.data = {"boxes": boxes, "boxes_at": "2026-10-23T20:00:00.000Z"}
+                if helper is not None:
+                    lv.control.data["helper"] = helper
+                lv.check_control()
+        return change
+
+    def test_a_model_put_in_a_box_during_the_run_takes_pages_in_it(self):
+        # The second box is empty at the start; while page 31 is read, a Lite model comes
+        # into it and into the settling box: page 31 gets its second reading as usual, and
+        # page 30, passed over before, gets its own in the same run.
+        change = self.changing({"read1": ["gemma-4-31b-it"], "read2": ["gemini-3.1-flash-lite"],
+                                "settle": ["gemini-3.1-flash-lite"]}, on=2)
+        code, st, md, fake = self.run_book({
+            "gemma-4-31b-it": lambda p, n: (change(n), answer(WRONG))[1],
+            "gemini-3.1-flash-lite": lambda p, n: answer(TRUE),
+        }, extra=("--boxes", "read1=gemma-4-31b-it;read2=;settle=", "--workers", "1"))
+        self.assertEqual(code, 0, st)
+        for r in self.records().values():
+            self.assertEqual((r["a"]["model"], r["b"]["model"]), ("gemma-4-31b-it", "gemini-3.1-flash-lite"))
+            self.assertEqual((r["check"]["state"], r["check"]["model"]), ("reconciled", "gemini-3.1-flash-lite"))
+        self.assertEqual(st["boxes_at"], "2026-10-23T20:00:00.000Z")
+        self.assertNotIn("كاقية", md)
+
+    def test_a_model_taken_out_of_its_box_takes_no_new_page(self):
+        change = self.changing({"read1": ["gemini-3.5-flash-lite"], "read2": ["gemini-3.1-flash-lite"],
+                                "settle": []})
+        code, st, md, fake = self.run_book({
+            "gemma-4-31b-it": lambda p, n: (change(n), answer(TRUE))[1],
+            "gemini-3.5-flash-lite": lambda p, n: answer(TRUE),
+            "gemini-3.1-flash-lite": lambda p, n: answer(TRUE),
+        }, extra=("--boxes", "read1=gemma-4-31b-it;read2=gemini-3.1-flash-lite;settle=", "--workers", "1"))
+        self.assertEqual(code, 0, st)
+        self.assertEqual([m for m, k in fake.calls if k == "read"].count("gemma-4-31b-it"), 1)
+        self.assertEqual(self.records()[31]["a"]["model"], "gemini-3.5-flash-lite")
+
+    def test_a_request_waiting_for_a_model_taken_out_goes_to_the_others(self):
+        pool = c.ModelPool("gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemma-4-26b-a4b-it", 10)
+        pool.set_boxes({"read1": ["gemma-4-31b-it"], "read2": ["gemini-3.1-flash-lite"], "settle": []})
+        self.assertTrue(c.boxes_changed(pool, [], c.helper_modes(None),
+                                        {"read1": ["gemini-3.5-flash-lite"], "read2": ["gemini-3.1-flash-lite"]}, None))
+        with live.doing(30, "a"):
+            self.assertRaises(c.Moved, pool.read, b"png", "prompt", "gemma-4-31b-it")
+        self.assertEqual(pool.reading("a"), ["gemini-3.5-flash-lite"])
+        self.assertEqual(pool.box_gen, 2)
+
+    def test_a_change_of_the_users_own_models_leaves_the_pages_to_the_next_run(self):
+        # This run was given no work for the user's models: one put in the second box now
+        # gets its pages from the next run, which the Drive inbox starts at once.
+        change = self.changing({"read1": ["gemma-4-31b-it"], "read2": ["gemini-3.1-flash-lite"], "settle": []},
+                               helper={"read1": False, "read2": True, "settle": False})
+        code, st, md, fake = self.run_book({
+            "gemma-4-31b-it": lambda p, n: (change(n), answer(TRUE))[1],
+            "gemini-3.1-flash-lite": lambda p, n: answer(TRUE),
+        }, extra=("--boxes", "read1=gemma-4-31b-it;read2=gemini-3.1-flash-lite;settle=", "--workers", "1"))
+        self.assertEqual((code, st["state"]), (7, "paused"), st)
+        self.assertEqual(st["waiting_for"], "time")
+        self.assertNotIn("boxes_at", st, "the run did not take these boxes")
+        self.assertEqual([m for m, k in fake.calls if k == "read"], ["gemma-4-31b-it"])
+
+
+    def test_a_model_this_key_cannot_use_is_said_so(self):
+        gone = Exception("404 NOT_FOUND. This model models/gemini-2.5-flash is no longer available to new users.")
+        code, st, md, fake = self.run_book({
+            "gemini-2.5-flash": lambda p, n: (_ for _ in ()).throw(gone),
+            "gemma-4-31b-it": lambda p, n: answer(TRUE),
+            "gemini-3.1-flash-lite": lambda p, n: answer(TRUE),
+        }, extra=("--boxes", "read1=gemini-2.5-flash,gemma-4-31b-it;read2=gemini-3.1-flash-lite;settle="))
+        self.assertEqual(code, 0, st)
+        self.assertEqual(st["models_missing"], ["gemini-2.5-flash"])
+        self.assertEqual({r["a"]["model"] for r in self.records().values()}, {"gemma-4-31b-it"})
+
+
+class Requests:
+    """The status page's requests file during a run (live.py), as the test writes it."""
+
+    def __init__(self):
+        self.data = {}
+
+    def read(self):
+        return self.data
 
 
 def asked_models(fake):

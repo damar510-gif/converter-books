@@ -121,6 +121,19 @@ class TimeUp(QuotaExhausted):
         self.model = model
 
 
+class Moved(QuotaExhausted):
+    """The user took the model out of this step's box on the status page while its request
+    waited for its turn: the page goes to the models now in the box (main's next pass)."""
+
+    def __init__(self, model):
+        Exception.__init__(self, f"{model} is no longer in this box")
+        self.model = model
+
+
+# The box of each kind of request (live.now_doing): first and second readings, settling.
+KIND_BOX = {"a": "read1", "b": "read2", "settle": "settle"}
+
+
 class RateLimiter:
     """Spaces request starts so we stay under the per-minute limit."""
 
@@ -306,6 +319,12 @@ class ModelPool:
         # an empty box means nobody does that step, and Gemma reads a refused page only from a
         # box (the user's decision, 2026-10-23: "I decide who works").
         self.strict = False
+        # Bumped each time the boxes are set: main goes over the pages again when the user
+        # changed them during a pass (boxes_changed).
+        self.box_gen = 0
+        # The user's own models' boxes changed during the run: it starts no more page work
+        # (past), and the Drive inbox starts the next run with them at once.
+        self.halted = False
         # The free models this account has, for the status page's boxes (free_catalog).
         self.catalog = []
         self.rpm = rpm
@@ -375,9 +394,9 @@ class ModelPool:
         return bool(model) and model not in self.exhausted
 
     def past(self, kind):
-        """No more page work of this kind ("read" or "settle") in this run (stops)."""
+        """No more page work of this kind ("read" or "settle") in this run (stops, halted)."""
         stop = self.stops.get(kind)
-        if stop and time.time() > stop:
+        if self.halted or (stop and time.time() > stop):
             self.time_up = True
             return True
         return False
@@ -390,10 +409,13 @@ class ModelPool:
         reading, only they the second, only they settle, each first to last (the next one
         when the one before has no quota left). An empty box: nobody does that step. Without
         a second reading, its box is empty."""
-        self.strict = True
-        self.boxes = {k: list(dict.fromkeys(m for m in (boxes.get(k) or []) if m)) for k in BOX_KEYS}
+        new = {k: list(dict.fromkeys(m for m in (boxes.get(k) or []) if m)) for k in BOX_KEYS}
         if not self.second:
-            self.boxes["read2"] = []
+            new["read2"] = []
+        with self.lock:
+            self.strict = True
+            self.boxes = new
+            self.box_gen += 1
 
     def readers(self, first=None):
         """The two Lite readers; first: the one to try first."""
@@ -511,6 +533,8 @@ class ModelPool:
         h = self.live.begin(model, page, kind)
         with self._turn(model):
             self.live.done(h, False)
+            if self.strict and kind in KIND_BOX and model not in self.boxes.get(KIND_BOX[kind], ()):
+                raise Moved(model)
             return self._read(png, prompt, model, attempts, page, kind)
 
     def _read(self, png, prompt, model, attempts, page, kind):
@@ -1247,6 +1271,36 @@ def parse_boxes(text, keys=BOX_KEYS):
         if key.strip() in keys:
             out[key.strip()] = [n for n in dict.fromkeys(x.strip() for x in names.split(",")) if n]
     return out
+
+
+def helper_modes(box):
+    """Which steps the user's own models take in this run (the helper input it was given)."""
+    return {"read1": bool(box and box.reads1), "read2": bool(box and box.reads2), "settle": bool(box and box.settles)}
+
+
+def boxes_changed(pool, have, modes, free, helper):
+    """The user changed the boxes on the status page during the run (live.py, 2026-10-23: "why
+    not give it pages at once?"): the free models now in them work within seconds, each in its
+    box, and one taken out takes no new page (main goes over the pages left again, box_gen).
+    When the user's own models' part changed, this run cannot hand them their pages (the helper
+    input is fixed at the dispatch): it starts no new page work, and the Drive inbox starts the
+    next run with the boxes as they are, at once (boxes_at in status.json says which boxes this
+    run took). modes: helper_modes of this run. Returns True when the run took the boxes."""
+    if helper is not None and helper != modes:
+        if not pool.halted:
+            pool.halted = True
+            print("The boxes of the user's own models changed: no new page work in this run, the next one takes them")
+            pool.live.note("", "restart", kind="page")
+        return False
+    new = {k: match_models(have, v) if have else v for k, v in free.items() if k in BOX_KEYS}
+    if any(pool.boxes.get(k, []) != v for k, v in new.items()):
+        pool.set_boxes({**pool.boxes, **new})
+        for k, v in new.items():
+            for m in v:
+                pool.live.role(m, k)
+        print("Boxes changed during the run: " + "; ".join(f"{k}={','.join(v) or '-'}" for k, v in pool.boxes.items()))
+        pool.live.note("", "boxes", kind="page")
+    return True
 
 
 FOOTNOTE_DEF = re.compile(r"^\[\^([^\]\s]+)\]:\s*(.*)$")
@@ -2142,6 +2196,11 @@ def generate_epub_from_pdf(filepath, output_path, args):
     if pool and dual and args.helper and not args.review_only:
         box = helperbox.HelperBox.open(args.helper, os.environ.get("DRIVE_TOKEN", ""), cache_dir)
     transcribe = bool(box and box.transcribe)
+    if pool and pool.strict and not args.review_only:
+        # A model the user puts in a box during the run works there within seconds; one taken
+        # out takes no new page (boxes_changed).
+        modes = helper_modes(box)
+        lv.watch(pool.revive, lambda free, helper: boxes_changed(pool, have, modes, free, helper))
 
     def take_helper_files(recs):
         """recs: {page: record or None}; the helper's latest files merged in and saved.
@@ -2230,13 +2289,30 @@ def generate_epub_from_pdf(filepath, output_path, args):
         # out, and the Drive inbox starts the next run at once (state "time").
         pool.stops = run_stops(os.environ.get("DRIVE_TOKEN", ""))
         lv.set_stops(**pool.stops)
-    if pool and not args.review_only and not transcribe:
-        lv.set_phase("read", pages=sum(1 for i in selected if (i + 1) not in pins
-                                       and page_state(load_record(cache_dir, i + 1, args.rescue_model))
-                                       in ("unread", "read1")))
+
+    def read_pass():
+        """Stage 1: two readings of every page (a page read already, or that nobody can read
+        now, is passed over at once)."""
+        if pool and not args.review_only and not transcribe:
+            lv.set_phase("read", pages=sum(1 for i in selected if (i + 1) not in pins
+                                           and page_state(load_record(cache_dir, i + 1, args.rescue_model))
+                                           in ("unread", "read1")))
+        with ThreadPoolExecutor(max_workers=args.workers) as tp:
+            return [rec or {"page": i + 1, "status": "pending"} for i, rec in zip(selected, tp.map(work, selected))]
+
+    def boxes_moved(since, kind):
+        """The user changed the boxes since the pass began (boxes_changed), and this run can
+        still do this kind of page work ("read", "settle"): it goes over the pages again."""
+        return bool(pool) and not args.review_only and not transcribe and pool.box_gen != since \
+            and not pool.past(kind)
+
     # Stage 1: two readings of every page. Stage 2: compare them and settle differences.
-    with ThreadPoolExecutor(max_workers=args.workers) as tp:
-        records = [rec or {"page": i + 1, "status": "pending"} for i, rec in zip(selected, tp.map(work, selected))]
+    gen = pool.box_gen if pool else 0
+    records = read_pass()
+    # The boxes changed during the pass: the pages it left go to the models now in them.
+    while boxes_moved(gen, "read"):
+        gen = pool.box_gen
+        records = read_pass()
     # The user's answers go first: the pages they touch are pinned before any check.
     applied = review.overlay(records, answers, CHECK_VERSION, (human or {}).get("answers_seen", ""))
     for r in records:
@@ -2257,6 +2333,14 @@ def generate_epub_from_pdf(filepath, output_path, args):
         lv.set_phase("check", pages=sum(1 for r in records if page_state(r) in ("read2", "read1")))
         helper_wait = check_pages(pool, filepath, records, cache_dir, dual, args.workers,
                                   transcribe and box.reads2, transcribe and box.settles)
+        # The boxes changed while the pages were checked: the pages left go through both
+        # stages again with the models now in them.
+        while boxes_moved(gen, "settle"):
+            gen = pool.box_gen
+            if not pool.past("read"):
+                records = read_pass()
+            lv.set_phase("check", pages=sum(1 for r in records if page_state(r) in ("read2", "read1")))
+            helper_wait = check_pages(pool, filepath, records, cache_dir, dual, args.workers)
     free_left = False
     if transcribe:
         # Every page left goes back to the helper's models; the free models take their share
@@ -2295,15 +2379,20 @@ def generate_epub_from_pdf(filepath, output_path, args):
         if summary["state"] == "paused" and free_left:
             # Pages not read yet only because the run's time was up: the next run reads them.
             summary["state"] = "helper"
-    if summary["state"] == "paused" and pool and (pool.time_up or pool.revived) and pool.any_left():
+    if summary["state"] == "paused" and pool and (pool.time_up or pool.revived or pool.box_gen != gen) \
+            and pool.any_left():
         # Stopped before the Drive token ran out, with quota left (or the user sent a model back
-        # to work during the run): the next run goes on at once.
+        # to work, or changed the boxes, during the run): the next run goes on at once.
         summary["state"] = "time"
     if summary["state"] == "paused" and pool and pool.strict and not args.review_only \
             and nobody_for(pool, box, records, dual):
         # No model in any box (free or on the user's computer) can take the waiting pages'
         # next step: the book waits for the user to put one there, not for a new day.
         summary["state"] = "boxes"
+    if lv.boxes_at:
+        # The boxes this run took during it (Live.watch): a change it did not take makes the
+        # Drive inbox start the next run at once.
+        summary["boxes_at"] = lv.boxes_at
     summary["stages"] = dict(collections.Counter("helper" if r["page"] in helper_wait else page_state(r)
                                                  for r in records))
     md = assemble(records, review_pages)
@@ -2337,8 +2426,11 @@ def generate_epub_from_pdf(filepath, output_path, args):
         summary["models_out"] = sorted(pool.exhausted - pool.missing)
         # The free models this account has, for the status page's boxes; what the boxes are
         # until the user changes them (the readers, then the settlers); and the boxes used.
+        # Models this key cannot use (404, or no free quota): the status page stops offering them.
+        if pool.missing:
+            summary["models_missing"] = sorted(pool.missing)
         if pool.catalog:
-            summary["free_models"] = pool.catalog
+            summary["free_models"] = [m for m in pool.catalog if m not in pool.missing]
             # Each Lite reader gives the readings the other cannot (as without boxes).
             readers = [m for m in (pool.model, pool.second) if m]
             summary["free_default"] = {"read1": readers, "read2": readers[::-1] if pool.second else [],
