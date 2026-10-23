@@ -37,6 +37,7 @@ The answers the user gives on the status page (see "Results" below) are kept in
 | `judge` | Optional. The Drive ID of `بيانات المساعد/أحكام/<fileId>.json`, the helper models' verdicts on the unsure places. The run adds them to `review/judge-answers.json` and applies them like the user's answers (the user's own answer wins). |
 | `live` | Optional. The Drive ID of `تحويل الكتب/بيانات البث/live.json`, the live view's file (see "Live view" below), with `:<Drive ID>` of `بيانات البث/control.json`, the status page's requests to the run, read every 10 seconds: `"retry": {model: when}` («أعد المحاولة الآن» on a free model: one asked for after the dispatch works again), and, when the user changes the boxes during the run, `"boxes": {"read1": [...], "read2": [...], "settle": [...]}` (the free models now in them), `"helper": {"read1": bool, "read2": bool, "settle": bool}` (what the user's own models would do in a run started now) and `"boxes_at"` (when it was written). A run takes boxes written after its dispatch at once: the free models now in a box get its pages (it goes over the pages it passed over again), and one taken out gets no new page, not even one already waiting for its turn. When `helper` is not what the run was given, it cannot hand the user's models their pages: it starts no new page work and ends (`waiting_for: "time"` when quota is left), and the next run takes the boxes. A run writes `boxes_at` in status.json when it took them. The script starts the book again at once when a model came into a box after the run's dispatch and after the `boxes_at` it reported (the run had ended, or could not take them); with no run going, putting a model in a box starts the book waiting for one (paused for the day, parked for a reader, for the boxes or with the user's models) at once, else the next new book. With it, the run writes what it does there every two seconds or so, and with the free models alone it starts no page work after its Drive token would run out (state `paused` + `waiting_for: "time"`). |
 | `models` | Sent with every run since 2026-10-23: the free models in the board's boxes (Script Property `MODEL_BOXES`, which holds the user's models too; before the user changes the board, what the two older boards held, or the converter's own), `read1=a,b;read2=c;settle=d,e;review=f`, and `;out=g,h`: the models a run found out of quota on the current Pacific day (Script Property `USAGE`), which the run does not ask again. Only the models of a box do its step, all of them side by side (each page goes to one that has no request in flight, in turn; no order between them): `read1` the first reading, `read2` the second (never the model that gave the page's first), `settle` the settling, `review` the unsure places of delivered books (freereview.py). An empty box means nobody does that step, and no model works outside the boxes (Gemma reads a refused page only from a box). One model may be in several boxes. Without the input (an older script) the converter keeps its own roles (the two Lite readers read, each first in its own reading and the other after it; the Flash models settle, then the Lite readers; Gemma for refused pages). The workflow passes it on only when it matches that form (`BOXES_RE`). |
+| `queue` | Optional (since 2026-10-23). The other books of the run, the oldest unfinished books after this one (see "The run's books" below), as JSON `{"order": "<this book's place>", "books": [{"id", "name", "dir", "title", "review", "helper", "judge", "order"}]}`: each book's Drive file, its results folder, its answers file, its helper folder with what the user's models do (as `helper`), and its models' verdicts (as `judge`); `order` is when the book was put in Drive. `queue_prep.py` downloads them, restores their progress from the `progress` release and their review state from the results branch, and saves them after the run. A book given as `path` (a PDF in the repository) instead of `id` is for trial runs. |
 
 Only one conversion runs at a time. The workflow also declares
 `concurrency: convert`, so a second dispatch waits.
@@ -144,6 +145,36 @@ to take out).
 still open, and `review_applied` / `review_kept` the corrections and confirmations this
 run applied. `review_conflicts_new` counts answers saved after the previous run that
 could not be applied because their page changed; their places come back as new ones.
+
+## The run's books
+
+Since 2026-10-23 (the user's design: "separate the boxes so that nobody waits") a run carries the
+oldest unfinished books, up to `CONFIG.QUEUE_BOOKS` (4), oldest first (when each was put in Drive,
+`job.fileCreated`); the first is the run's own book (the single-book inputs), the others come in
+`queue`. A new book from «1- جديد» joins only when the first reading's box can work and the run's
+books have no page left to read first, or fewer than `CONFIG.READ_AHEAD` (60).
+
+In the converter each step has its own workers (`run_steps`): first readings, second readings, and
+the check with settling. Each worker takes the page that has waited longest for its step, the oldest
+book's first, and a page goes on to its next step at once: a page read twice is settled while the
+next pages are read, the second readers work on one book while the first readers read the next,
+and nobody waits for another box. Each book gets its own EPUB, `report.md`, `status.json` and review
+places in its results folder; the run's own facts (`requests`, `models_out`, `models_missing`,
+`free_models`, `boxes`, `boxes_at`) go only in the first book's status, so the script counts them
+once. A book the converter cannot open or finish gets `state: "failed"` with a `reason`, and the
+others go on.
+
+The script (`handleRun_`) then handles each book: one done is delivered (`deliverOrLater_`; one whose
+file the results do not have yet is tried again at the next check, stage `delivering`); one
+`incomplete` is delivered with its missing pages once its retries are spent; one failed twice in a
+row goes to «5- مشكلة» (a crash of the whole run counts for the first book only). The other books
+wait in the queue (stage `waiting`), and the oldest unfinished one holds the turn: the next run starts
+at once while the free models still have work (a book stopped for time, a retry, a book with pages
+to read first for a first reader that can), else it waits like a paused book (`pausedDay`, with
+`waitFor` "boxes" or "helper"): for a new Pacific day, for a model put in a box, for any change of the
+boxes, or for the user's models to finish a book's pages (`resumeIfNewDay_`).
+
+The helper takes the books in the same order (`order` in `book.json`), the oldest first.
 
 ## The free models' review
 

@@ -2093,6 +2093,8 @@ class Steps:
         self.queues = {k: [] for k in STEPS}
         self.queued = set()
         self.tried = set()
+        # The pages being worked on now, by step: never queued again meanwhile (rescan).
+        self.working = set()
         self.busy = 0
         self.error = None
         self.rescan = rescan or (lambda steps: False)
@@ -2100,7 +2102,7 @@ class Steps:
     def put(self, step, item):
         with self.cv:
             key = (step,) + tuple(item)
-            if key in self.queued or key in self.tried:
+            if key in self.queued or key in self.tried or key in self.working:
                 return False
             self.queued.add(key)
             heapq.heappush(self.queues[step], tuple(item))
@@ -2123,6 +2125,7 @@ class Steps:
                     item = heapq.heappop(self.queues[step])
                     self.queued.discard((step,) + item)
                     self.tried.add((step,) + item)
+                    self.working.add((step,) + item)
                     self.busy += 1
                     return item
                 if not self.busy and not any(self.queues.values()):
@@ -2130,8 +2133,9 @@ class Steps:
                     return None
                 self.cv.wait(1)
 
-    def done(self, error=None):
+    def done(self, step, item, error=None):
         with self.cv:
+            self.working.discard((step,) + tuple(item))
             self.busy -= 1
             if error and not self.error:
                 self.error = error
@@ -2167,11 +2171,12 @@ def run_steps(pool, books, workers):
                 b = books[item[0]]
                 with live.in_book(b.index):
                     nxt = b.do(step, item[1], pool, steps)
+                # Before this one counts as done, so the steps never end in between.
                 if nxt:
                     steps.put(nxt, item)
             except Exception as e:
                 error = e
-            steps.done(error)
+            steps.done(step, item, error)
 
     threads = [threading.Thread(target=worker, args=(step,), daemon=True) for step in STEPS for _ in range(workers)]
     for t in threads:

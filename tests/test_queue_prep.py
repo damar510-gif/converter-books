@@ -30,6 +30,17 @@ class QueueInput(unittest.TestCase):
         self.assertEqual((books[0]["review"], books[0]["helper"], books[0]["judge"]), (ID, ID + ":settle", ID))
         self.assertEqual((books[1]["dir"], books[1]["helper"]), ("drive-" + ID + "z", ID + ":read1+settle"))
         self.assertEqual(q.books_input({"queue": "not json"}), ([], ""))
+        # A book of the repository, for trial runs; nothing outside it.
+        here = os.path.join(ROOT, "tests", "fixtures", "queue-sample.pdf")
+        cwd = os.getcwd()
+        os.chdir(ROOT)
+        try:
+            books, _ = q.books_input({"queue": json.dumps({"books": [
+                {"path": "tests/fixtures/queue-sample.pdf", "dir": "test-queue"},
+                {"path": "/etc/passwd", "dir": "x"}, {"path": "../x.pdf", "dir": "y"}]})})
+        finally:
+            os.chdir(cwd)
+        self.assertEqual([(b["path"], b["dir"]) for b in books], [(here, "test-queue")])
         self.assertEqual(q.books_input({}), ([], ""))
 
 

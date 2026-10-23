@@ -507,7 +507,8 @@ function tick(env) {
   const result = env.ctx.tick();
   assert.ok(env.gh.dispatches.length - before <= 1, 'more than one dispatch in one check');
   assert.ok(env.requests.filter((r) => r.method === 'POST').length - posts <= 1, 'more than one dispatch request in one check');
-  const active = Object.values(jobs(env)).filter((j) => j.stage === 'queued' || j.stage === 'running');
+  // A book carried by another book's run (runLead) is part of that run, not a second one.
+  const active = Object.values(jobs(env)).filter((j) => (j.stage === 'queued' || j.stage === 'running') && !j.runLead);
   const going = active.filter((j) => !(j.pausedDay && !j.humanRound));
   assert.ok(going.length <= 1 && active.length <= 2, 'two active jobs');
   assert.strictEqual(env.lockHeld, false, 'lock released');
@@ -838,7 +839,7 @@ test('judges of an older version: a run waiting for them delivers the book; a bo
   assert.strictEqual(jobs(env)[b.id].stage, 'delivered');
 });
 
-test('reader wait: a book waiting only for one reader is parked, the next starts, both come back the next day oldest first', () => {
+test('reader wait: the next book runs at once with the waiting one; the queue waits for the reader, the oldest book holding the turn', () => {
   const env = readyEnv();
   const a = addBook(env, 'أول.pdf');
   tick(env);
@@ -846,39 +847,102 @@ test('reader wait: a book waiting only for one reader is parked, the next starts
   const b = addBook(env, 'ثان.pdf');
   minutes(env, 30);
   writeStatus(env, a.id, 'paused', { waiting_for: 'reader', readers_left: ['gemini-3.5-flash-lite'], epub: 'أول.epub',
-    pages_waiting: [3, 4] });
+    pages_waiting: [3, 4], stages: { done: 8, read1: 2 } });
   tick(env);
-  assert.strictEqual(jobs(env)[a.id].stage, 'readerWait');
-  assert.ok(names(env, 'working').indexOf('أول.pdf') >= 0, 'parked book stays in the working folder');
+  // The next book starts at once, and the waiting one goes with it: the oldest is the run's own.
   assert.strictEqual(env.gh.dispatches.length, 2, 'the next book started right away');
-  assert.strictEqual(lastDispatch(env).body.inputs.drive_file_id, b.id);
-  assert.strictEqual(env.mails.filter((m) => /ينتظر القارئ الثاني/.test(m.subject)).length, 1);
+  let d = lastDispatch(env).body.inputs;
+  assert.strictEqual(d.drive_file_id, a.id);
+  let q = JSON.parse(d.queue);
+  assert.deepStrictEqual(q.books.map((x) => [x.id, x.dir, x.title]), [[b.id, 'drive-' + b.id, 'ثان']]);
+  assert.ok(q.order && q.books[0].order > q.order, 'the books in the order they were put in Drive');
+  assert.strictEqual(jobs(env)[b.id].runLead, a.id);
+  assert.ok(names(env, 'working').indexOf('ثان.pdf') >= 0);
+  assert.ok(/ومعه «ثان»/.test(journal(env).pop().x));
 
-  // The next book waits for that reader too.
+  // Both wait for that reader: the oldest book holds the turn until the quota renews.
   minutes(env, 30);
-  writeStatus(env, b.id, 'paused', { waiting_for: 'reader', readers_left: ['gemini-3.5-flash-lite'], epub: 'ثان.epub',
-    pages_waiting: [7] });
+  writeStatus(env, a.id, 'paused', { waiting_for: 'reader', pages_waiting: [3, 4], stages: { done: 8, read1: 2 },
+    requests: { 'gemini-3.5-flash-lite': 40 }, models_out: ['gemini-3.1-flash-lite'] });
+  writeStatus(env, b.id, 'paused', { waiting_for: 'reader', pages_waiting: [7], stages: { done: 9, read1: 1 } });
   tick(env);
-  assert.strictEqual(jobs(env)[b.id].stage, 'readerWait');
+  assert.strictEqual(jobs(env)[a.id].stage, 'running');
+  assert.ok(jobs(env)[a.id].pausedDay, 'the queue waits for the new day: ' + JSON.stringify(jobs(env)[a.id]) + JSON.stringify(jobs(env)[b.id]));
+  assert.strictEqual(jobs(env)[b.id].stage, 'waiting');
+  assert.strictEqual(jobs(env)[b.id].runLead, undefined);
   minutes(env, 10);
   tick(env);
   assert.strictEqual(env.gh.dispatches.length, 2, 'not before the quota renews');
   const s = status(env);
-  assert.deepStrictEqual(s.parked.map((p) => [p.title, p.stage]).sort(), [['أول', 'readerWait'], ['ثان', 'readerWait']]);
-  assert.ok(!s.recent.some((j) => j.title === 'أول' || j.title === 'ثان'), 'parked books are not listed as ready');
+  assert.deepStrictEqual(s.parked.map((p) => [p.title, p.stage]), [['ثان', 'waiting']]);
+  assert.ok(!s.recent.some((j) => j.title === 'أول' || j.title === 'ثان'), 'waiting books are not listed as ready');
 
-  // A new Pacific day: the older book first, then the other in the check that delivers it.
+  // A new Pacific day: both again in one run; the first is done, the other goes on at once.
   env.clock += 24 * 3600000;
   tick(env);
   assert.strictEqual(env.gh.dispatches.length, 3);
-  assert.strictEqual(lastDispatch(env).body.inputs.drive_file_id, a.id);
+  d = lastDispatch(env).body.inputs;
+  assert.deepStrictEqual([d.drive_file_id, JSON.parse(d.queue).books.map((x) => x.id)], [a.id, [b.id]]);
   minutes(env, 15);
   writeStatus(env, a.id, 'done', { epub: 'أول.epub' });
   writeEpub(env, a.id, 'أول.epub');
+  writeStatus(env, b.id, 'paused', { waiting_for: 'time', stages: { done: 9, read2: 1 } });
   tick(env);
   assert.strictEqual(jobs(env)[a.id].stage, 'delivered');
   assert.strictEqual(env.gh.dispatches.length, 4);
-  assert.strictEqual(lastDispatch(env).body.inputs.drive_file_id, b.id);
+  d = lastDispatch(env).body.inputs;
+  assert.strictEqual(d.drive_file_id, b.id);
+  assert.strictEqual(d.queue, undefined, 'a run of one book');
+});
+
+test('a run of several books: each is delivered once done, a failed one does not stop the others, one whose EPUB is missing is converted again with the queue', () => {
+  const env = readyEnv();
+  const a = addBook(env, 'أ.pdf');
+  tick(env);
+  const b = addBook(env, 'ب.pdf');
+  const c = addBook(env, 'ج.pdf');
+  minutes(env, 30);
+  writeStatus(env, a.id, 'paused', { waiting_for: 'time', stages: { done: 4, unread: 300 } });
+  tick(env);
+  // a still has many pages to read first: only it (the first readers have work in it).
+  assert.strictEqual(lastDispatch(env).body.inputs.queue, undefined);
+  minutes(env, 30);
+  writeStatus(env, a.id, 'paused', { waiting_for: 'time', stages: { done: 4, read2: 6 } });
+  tick(env);
+  // Nothing left to read first in a: the next books join (from «1- جديد», oldest first).
+  let d = lastDispatch(env).body.inputs;
+  assert.deepStrictEqual(JSON.parse(d.queue).books.map((x) => x.id), [b.id]);
+  minutes(env, 30);
+  writeStatus(env, a.id, 'done', { epub: 'أ.epub' });   // its EPUB is not in the results: converted again
+  writeStatus(env, b.id, 'failed', { reason: 'not a PDF' });
+  tick(env);
+  assert.strictEqual(jobs(env)[a.id].failStreak, 1);
+  assert.strictEqual(jobs(env)[b.id].failStreak, 1);
+  assert.strictEqual(env.gh.dispatches.length, 4, 'one run for the queue, not one per book');
+  d = lastDispatch(env).body.inputs;
+  assert.deepStrictEqual([d.drive_file_id, JSON.parse(d.queue).books.map((x) => x.id)], [a.id, [b.id]]);
+  minutes(env, 30);
+  writeStatus(env, a.id, 'done', { epub: 'أ.epub' });
+  writeEpub(env, a.id, 'أ.epub');
+  writeStatus(env, b.id, 'paused', { waiting_for: 'time', stages: { done: 2, read2: 8 } });
+  tick(env);
+  assert.strictEqual(jobs(env)[a.id].stage, 'delivered');
+  assert.strictEqual(jobs(env)[b.id].failStreak, 0, 'a failure counts only in a row');
+  // b has nothing left to read first: c joins.
+  d = lastDispatch(env).body.inputs;
+  assert.deepStrictEqual([d.drive_file_id, JSON.parse(d.queue).books.map((x) => x.id)], [b.id, [c.id]]);
+  minutes(env, 30);
+  writeStatus(env, b.id, 'failed', { reason: 'not a PDF' });
+  writeStatus(env, c.id, 'paused', { waiting_for: 'time', stages: { done: 2, read2: 8 } });
+  tick(env);
+  minutes(env, 30);
+  writeStatus(env, b.id, 'failed', { reason: 'not a PDF' });
+  writeStatus(env, c.id, 'done', { epub: 'ج.epub' });
+  writeEpub(env, c.id, 'ج.epub');
+  tick(env);
+  assert.strictEqual(jobs(env)[b.id].stage, 'problem', 'given up after its second failure');
+  assert.strictEqual(jobs(env)[c.id].stage, 'delivered');
+  assert.deepStrictEqual(names(env, 'problem').filter((n) => /ب/.test(n)).length > 0, true);
 });
 
 test('reader wait: with both readers out the book keeps its turn; waiting for a reader for a month gives up', () => {
@@ -2267,7 +2331,7 @@ test('boxes: the board saves the models of each box; requests.json carries the u
   assert.deepStrictEqual(s.boxes.review, [GROK, 'gemma-4-31b-it']);
 });
 
-test('transcribe: with models in the box the run gets the book folder; the book waits for the helper without holding the slot', () => {
+test('transcribe: with models in the box the run gets the book folder; a book with the helper goes with the next book', () => {
   const env = boxesEnv({ transcribe: [GEMINI], review: [] });
   const a = addBook(env, 'أول.pdf');
   tick(env);
@@ -2281,37 +2345,42 @@ test('transcribe: with models in the box the run gets the book folder; the book 
   writeStatus(env, a.id, 'paused', { waiting_for: 'helper', epub: 'أول.epub', pages_helper: [1, 2, 3], pages_done: 7 });
   writeHelperStatus(env, { models: MODELS });
   tick(env);
-  assert.strictEqual(jobs(env)[a.id].stage, 'helper');
-  assert.ok(names(env, 'working').indexOf('أول.pdf') >= 0, 'parked book stays in the working folder');
+  // The next book starts at once, the book with the helper's models in the same run.
   assert.strictEqual(env.gh.dispatches.length, 2, 'the next book started right away');
-  assert.strictEqual(lastDispatch(env).body.inputs.drive_file_id, b.id);
+  const d = lastDispatch(env).body.inputs;
+  assert.strictEqual(d.drive_file_id, a.id);
+  const q = JSON.parse(d.queue);
+  assert.deepStrictEqual(q.books.map((x) => x.id), [b.id]);
+  assert.strictEqual(q.books[0].helper, bookFolderOf(env, b.id).id + ':read1+read2', 'each book with its own folder');
   assert.strictEqual(env.mails.length, 0, 'no mail for waiting on the helper');
-  const s = status(env);
-  assert.deepStrictEqual(s.working.map((w) => w.title), ['أول'], 'a current book, under «الآن»');
-  assert.deepStrictEqual(s.parked, []);
-  assert.ok(!s.recent.some((j) => j.title === 'أول'), 'a parked book is not listed as ready');
 
-  // The helper finished the three pages: seen twice, eight minutes apart, then the book runs again.
+  // Both books' pages left are with the helper's models: the queue waits for them.
   minutes(env, 30);
-  writeStatus(env, b.id, 'done', { epub: 'ثان.epub' });
-  writeEpub(env, b.id, 'ثان.epub');
-  const bookAt = new Date(env.clock - 20 * 60000).toISOString();
-  writeHelperStatus(env, { models: MODELS, books: { [a.id]: { need: 3, finished: 3, book_at: bookAt } } });
+  writeStatus(env, a.id, 'paused', { waiting_for: 'helper', pages_helper: [1, 2, 3], pages_done: 7 });
+  writeStatus(env, b.id, 'paused', { waiting_for: 'helper', pages_helper: [4], pages_done: 9 });
   tick(env);
-  assert.strictEqual(jobs(env)[b.id].stage, 'delivered');
+  assert.strictEqual(jobs(env)[a.id].waitFor, 'helper');
+  assert.strictEqual(env.gh.dispatches.length, 2);
+  // The helper finished b's page: seen twice, eight minutes apart, then the books run again.
+  const bookAt = new Date(env.clock - 20 * 60000).toISOString();
+  writeHelperStatus(env, { models: MODELS, books: { [b.id]: { need: 1, finished: 1, book_at: bookAt } } });
+  minutes(env, 1);
+  tick(env);
   assert.strictEqual(env.gh.dispatches.length, 2, 'not on the first sight');
   minutes(env, 10);
-  writeHelperStatus(env, { models: MODELS, books: { [a.id]: { need: 3, finished: 3, book_at: bookAt } } });
+  writeHelperStatus(env, { models: MODELS, books: { [b.id]: { need: 1, finished: 1, book_at: bookAt } } });
   tick(env);
   assert.strictEqual(env.gh.dispatches.length, 3);
   assert.strictEqual(lastDispatch(env).body.inputs.drive_file_id, a.id);
-  assert.strictEqual(lastDispatch(env).body.inputs.helper, folderA.id + ':read1+read2');
 
   minutes(env, 10);
   writeStatus(env, a.id, 'done', { epub: 'أول.epub' });
   writeEpub(env, a.id, 'أول.epub');
+  writeStatus(env, b.id, 'done', { epub: 'ثان.epub' });
+  writeEpub(env, b.id, 'ثان.epub');
   tick(env);
   assert.strictEqual(jobs(env)[a.id].stage, 'delivered');
+  assert.strictEqual(jobs(env)[b.id].stage, 'delivered');
   assert.strictEqual(bookFolderOf(env, a.id), undefined, 'the exchange folder is removed once the book is delivered');
 });
 
@@ -2864,13 +2933,14 @@ test('live: a run that stopped for time with quota left goes on at once; a day h
   assert.ok(/يكمل ما بقي/.test(lines[lines.length - 1].x), lines[lines.length - 1].x);
   assert.strictEqual(status(env).usage.m['gemini-3.5-flash-lite'].n, 300);
   assert.strictEqual(env.mails.length, 0, 'no "سيكمل غداً" mail');
-  for (let i = 0; i < 12; i++) {
-    minutes(env, 52);
+  const max = env.ctx.CONFIG.MAX_TIME_RUNS;
+  for (let i = 0; i < max; i++) {
+    minutes(env, 15);
     writeStatus(env, f.id, 'paused', { waiting_for: 'time' });
     tick(env);
   }
   j = jobs(env)[f.id];
-  assert.strictEqual(env.gh.dispatches.length, 13);
+  assert.strictEqual(env.gh.dispatches.length, max + 1);
   assert.strictEqual(j.pausedDay, '2026-10-23', 'after MAX_TIME_RUNS the book waits for the next day');
 });
 
@@ -3497,6 +3567,51 @@ test('a free model the key cannot use is offered no more; one in a box stays the
   assert.ok(status(env).boxes.free.indexOf('gemma-4-26b-a4b-it') >= 0);
 });
 
+test('the page: the other books of the run under «الآن» with their pages, the queue in the waiting list', () => {
+  const env = readyEnv({ start: '2026-10-23T07:03:00Z' });
+  const a = addBook(env, 'أول.pdf');
+  tick(env);
+  minutes(env, 30);
+  writeStatus(env, a.id, 'paused', { waiting_for: 'time', stages: { done: 400, read2: 100 }, pages_total: 500 });
+  const b = addBook(env, 'ثان.pdf', { ageMin: 12 });
+  const c = addBook(env, 'ثالث.pdf');
+  tick(env);
+  const d = lastDispatch(env).body.inputs;
+  assert.deepStrictEqual(JSON.parse(d.queue).books.map((x) => x.id), [b.id]);
+  // The live file of a run of two books.
+  minutes(env, 5);
+  const file = env.drive.DriveApp.getFileById(liveId(lastDispatch(env)));
+  const t = Math.floor(env.clock / 1000);
+  const dispatched = JSON.parse(file.content.toString('utf8')).dispatched;
+  file.setContent(JSON.stringify({ v: 1, seq: 3, file: a.id, book: 'أول', dispatched, at: iso(env.clock - 1000),
+    started: iso(env.clock - 60000), phase: 'read', info: {},
+    pages: { total: 520, done: 400, unsure: 0, read2: 101, read1: 1, unread: 18, failed: 0, helper: 0, now: [3] },
+    books: [{ file: '', book: 'أول', pages: { total: 500, done: 400, unsure: 0, read2: 100, read1: 0, unread: 0, failed: 0, helper: 0, now: [] } },
+      { file: '', book: 'ثان', pages: { total: 20, done: 0, unsure: 0, read2: 1, read1: 1, unread: 18, failed: 0, helper: 0, now: [3] } }],
+    models: { 'gemini-3.5-flash-lite': { role: 'read1', queued: 0, ok: 2, err: 0, rl: 0, out: false, out_at: '', missing: false, limit: 500,
+      rest: '', busy: [[3, 'a', t - 20, 1]], last: [] } },
+    events: [{ i: 1, t: t - 30, m: 'gemini-3.5-flash-lite', p: 2, k: 'a', r: 'ok', s: 50, b: 1 }] }));
+  const pg = liveSandbox(env);
+  pg.sandbox.gotLive(JSON.parse(env.ctx.getLive('{}')));
+  const now = pg.byId.now.textContent;
+  assert.ok(/«أول»/.test(now) && /ومعه في هذا التشغيل/.test(now) && /«ثان»/.test(now) && /الآن: ص 3/.test(now), now);
+  assert.ok(/400 *من 500 صفحة أُنجزت/.test(now), 'the first book\'s own pages: ' + now);
+  const free = pg.byId.boxes.textContent + pg.byId.free.textContent;
+  assert.ok(/ص 3 من «ثان»/.test(free) && /قرأ ص 2 من «ثان»/.test(free), free);
+  // c waits in «1- جديد»: it joins when the first readers need it.
+  assert.ok(names(env, 'inbox').indexOf('ثالث.pdf') >= 0);
+  // The run is over; b waits in the queue while a holds the turn.
+  minutes(env, 40);
+  writeStatus(env, a.id, 'paused', { quota_day: '2026-10-23', stages: { done: 450, read2: 50 }, models_out: LITES });
+  writeStatus(env, b.id, 'paused', { quota_day: '2026-10-23', stages: { read2: 2, unread: 18 } });
+  tick(env);
+  const s = status(env);
+  assert.deepStrictEqual(s.parked.map((p) => [p.title, p.stage]), [['ثان', 'waiting']]);
+  const page = pageSandbox(env, s);
+  assert.ok(/«ثان»[\s\S]*في الطابور/.test(page.byId.queue.textContent), page.byId.queue.textContent);
+  assert.strictEqual(c.id && jobs(env)[c.id], undefined, 'not taken before it is needed');
+});
+
 test('the fake GitHub saw only known endpoints', () => {
   // Re-run a full happy path and make sure every request matched a route.
   const env = readyEnv();
@@ -3513,7 +3628,8 @@ test('the fake GitHub saw only known endpoints', () => {
 // ---------------------------------------------------------------------------
 
 let failed = 0;
-for (const t of tests) {
+// ONLY=<part of a test name> runs those tests alone.
+for (const t of tests.filter((x) => !process.env.ONLY || x.name.indexOf(process.env.ONLY) >= 0)) {
   try {
     t.fn();
     console.log('PASS  ' + t.name);

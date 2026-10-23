@@ -51,7 +51,20 @@ def books_input(inputs):
     lead_order = str(data.get("order") or "") if isinstance(data, dict) else ""
     out = []
     for b in (data.get("books") if isinstance(data, dict) else None) or []:
-        if not isinstance(b, dict) or not ID.match(str(b.get("id") or "")):
+        if not isinstance(b, dict):
+            continue
+        path = str(b.get("path") or "")
+        if path and not b.get("id"):
+            # A book in the repository (trial runs): a PDF under the workspace.
+            real = os.path.realpath(path)
+            if real.startswith(os.path.realpath(".") + os.sep) and real.lower().endswith(".pdf") and os.path.isfile(real):
+                folder = str(b.get("dir") or "")
+                if RESULT_DIR.match(folder):
+                    out.append({"id": "", "path": real, "name": os.path.basename(real), "dir": folder,
+                                "title": str(b.get("title") or os.path.basename(real)[:-4])[:200],
+                                "review": "", "helper": "", "judge": "", "order": ""})
+            continue
+        if not ID.match(str(b.get("id") or "")):
             continue
         name = os.path.basename(str(b.get("name") or "book.pdf")).translate({ord(c): None for c in "\r\n*?[]\\"})
         if not name.lower().endswith(".pdf"):
@@ -149,7 +162,9 @@ def prepare(lead_hash=""):
         din, dout = os.path.join(ROOT, f"in-{i}"), os.path.join(ROOT, f"out-{i}")
         os.makedirs(din, exist_ok=True)
         pdf = os.path.join(din, b["name"])
-        if not drive_get(b["id"], token, pdf):
+        if b.get("path"):
+            shutil.copy(b["path"], pdf)
+        elif not drive_get(b["id"], token, pdf):
             print(f"::warning::Could not download «{b['title']}» from Google Drive; it waits for the next run.")
             continue
         book_hash = sha16(pdf)

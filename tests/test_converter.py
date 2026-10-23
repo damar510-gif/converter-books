@@ -859,6 +859,20 @@ class Queue(PipelineBase):
             self.assertEqual(json.load(f)["state"], "done")
 
 
+class StepQueues(unittest.TestCase):
+    def test_oldest_book_first_and_a_page_at_work_is_never_queued_twice(self):
+        steps = c.Steps()
+        steps.put("b", (1, 1))
+        steps.put("b", (0, 9))
+        self.assertEqual(steps.take("b"), (0, 9), "the oldest book's page first")
+        steps.put("a", (0, 5))
+        item = steps.take("a")
+        steps.tried.clear()   # what a change of the boxes does (rescan)
+        self.assertFalse(steps.put("a", (0, 5)), "being read now: not queued again")
+        steps.done("a", item)
+        self.assertTrue(steps.put("a", (0, 5)))
+
+
 class Requests:
     """The status page's requests file during a run (live.py), as the test writes it."""
 

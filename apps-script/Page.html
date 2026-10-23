@@ -1203,12 +1203,14 @@
       li.appendChild(ic);
       var b = el('div', 'rw-b');
       b.appendChild(el('div', 'rw-t', '«' + p.title + '»'));
-      b.appendChild(el('div', 'rw-m', p.stage === 'readerWait' ? 'ينتظر تجدد رصيد القارئ الثاني، ثم يكمل قبل غيره.'
+      b.appendChild(el('div', 'rw-m', p.stage === 'waiting' ? 'في الطابور: يُقرأ مع الكتب التي قبله، وكل مرحلة تأخذ أقدم صفحة تنتظرها.'
+        : p.stage === 'readerWait' ? 'ينتظر تجدد رصيد القارئ الثاني، ثم يكمل قبل غيره.'
         : p.stage === 'boxWait' ? 'لا نموذج في المربعات يكمل صفحاته. ضع نموذجاً في «يعمل هنا» (هنا أو في «نماذجك على الجهاز») فيكمل.'
         : 'يُسلَّم في الفحص القادم.'));
       li.appendChild(b);
       var acts = el('div', 'rw-a');
-      acts.appendChild(st('hold', p.stage === 'readerWait' ? 'ينتظر القارئ الثاني' : p.stage === 'boxWait' ? 'ينتظر نموذجاً' : 'يُسلَّم قريباً'));
+      acts.appendChild(st('hold', p.stage === 'waiting' ? 'في الطابور' : p.stage === 'readerWait' ? 'ينتظر القارئ الثاني'
+        : p.stage === 'boxWait' ? 'ينتظر نموذجاً' : 'يُسلَّم قريباً'));
       if (p.canRun) runNowButton(p.fileId, acts);
       li.appendChild(acts);
       list.appendChild(li);
@@ -1530,8 +1532,14 @@
   function liveGoing() { return !!(LIVE.job && LIVE.job.stage === 'running' && !LIVE.job.paused) || (LAST && LAST.active && LAST.active.stage === 'queued'); }
 
   // One event of the run, in words: [kind, text].
+  // « من «كتاب»» for a page of a run of several books (live.py's books).
+  function bookOf(i) {
+    var books = LIVE.data && LIVE.data.books;
+    return i !== undefined && i !== null && books && books.length > 1 && books[i] ? ' من «' + books[i].book + '»' : '';
+  }
+
   function eventView(e) {
-    var p = e.p ? 'ص ' + e.p : '';
+    var p = e.p ? 'ص ' + e.p + bookOf(e.b) : '';
     var kind = KINDS[e.k] || '';
     var took = e.s !== undefined ? ' في ' + secs(e.s) : '';
     switch (e.r) {
@@ -1643,7 +1651,9 @@
     var a = LIVE_EL.nowFor, lv = LIVE.data;
     if (a) {
       var cur = liveCurrent() && LIVE.job.fileId === a.fileId;
-      var pages = cur && lv.pages && lv.pages.total ? lv.pages : null;
+      // A run of several books: the first is this one (live.py's books, in the run's order).
+      var runBooks = cur && lv.books && lv.books.length > 1 ? lv.books : null;
+      var pages = runBooks ? runBooks[0].pages : cur && lv.pages && lv.pages.total ? lv.pages : null;
       if (pages) box.appendChild(stageBar(pages, pages.total));
       else if (a.stages && a.pagesTotal) box.appendChild(stageBar(a.stages, a.pagesTotal));
       else if (a.pagesTotal) box.appendChild(progress(activePages(LAST, a)));
@@ -1651,7 +1661,7 @@
         var ph = el('div', 'phase');
         ph.appendChild(icon('radio'));
         ph.appendChild(el('b', '', PHASES[lv.phase] || lv.phase));
-        if (lv.pages && lv.pages.now && lv.pages.now.length) ph.appendChild(el('span', '', '· الآن: ص ' + lv.pages.now.join('، ')));
+        if (pages && pages.now && pages.now.length) ph.appendChild(el('span', '', '· الآن: ص ' + pages.now.join('، ')));
         var stop = lv.stops && Date.parse(lv.stops.settle || lv.stops.read || '');
         ph.appendChild(el('small', '', (lv.run_n ? 'التشغيل رقم ' + lv.run_n + ' · ' : '') + 'آخر خبر ' + ago(liveAt(lv)) +
           (stop ? ' · لا يبدأ عملاً جديداً بعد ' + when(new Date(stop).toISOString(), true) : '')));
@@ -1663,6 +1673,21 @@
         steps.appendChild(el('b', '', LIVE.ghRun ? 'على GitHub: ' + stepNow(LIVE.ghRun) : 'ينتظر أن يبدأ التشغيل على GitHub'));
         box.appendChild(steps);
       }
+    }
+    // The other books of the run, each with its pages (live, or as their last run left them).
+    var others = a ? (runBooks ? runBooks.slice(1).map(function (b) { return { title: b.book, pages: b.pages }; })
+      : (a.books || []).map(function (b) { return { title: b.title, pages: b.stages ? b.stages : null, total: b.pagesTotal }; })) : [];
+    if (others.length) {
+      var oh = el('div', 'h3');
+      oh.appendChild(icon('book'));
+      oh.appendChild(el('span', '', 'ومعه في هذا التشغيل'));
+      box.appendChild(oh);
+      others.forEach(function (o) {
+        box.appendChild(el('div', 'hero-lines', '«' + o.title + '»' + (o.pages && o.pages.now && o.pages.now.length
+          ? ' · الآن: ص ' + o.pages.now.join('، ') : '')));
+        var total = o.pages ? (o.pages.total || o.total) : 0;
+        if (o.pages && total) box.appendChild(stageBar(o.pages, total));
+      });
     }
     // What the script did lately («آخر ما حدث»).
     if (LIVE.journal.length) {
@@ -1732,7 +1757,7 @@
       d.appendChild(x);
     };
     busy.forEach(function (b) {
-      line('الآن:', (b[0] ? 'ص ' + b[0] + ' ' : '') + '(' + (KINDS[b[1]] || 'طلب') + ')' + (b[2] ? '، أُرسل ' + ago(b[2] * 1000) : ''));
+      line('الآن:', (b[0] ? 'ص ' + b[0] + bookOf(b[3]) + ' ' : '') + '(' + (KINDS[b[1]] || 'طلب') + ')' + (b[2] ? '، أُرسل ' + ago(b[2] * 1000) : ''));
     });
     if (cur && m.queued) line('في الانتظار:', count(m.queued, 'طلب واحد', 'طلبان', 'طلبات', 'طلباً') + ' (يُرسل كل طلب بعد جواب الذي قبله)');
     var used = (u.n || 0) + (cur ? (m.ok || 0) : 0);
