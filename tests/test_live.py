@@ -390,3 +390,47 @@ def asked_pages(fake):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class DailyLimitChecks(unittest.TestCase):
+    """A 429 naming the daily limit is believed only on the third, each after a wait (2026-10-23:
+    one stopped both readers after 8 and 3 requests while Google counted 10 and 5 of 500)."""
+
+    def pool(self, answers):
+        calls = []
+
+        def generate_content(model, contents, config):
+            calls.append(model)
+            r = answers.pop(0)
+            if isinstance(r, Exception):
+                raise r
+            return answer(TRUE)
+        self._client, self._sleep = c.genai.Client, c.time.sleep
+        os.environ["GEMINI_API_KEY"] = "test"
+        c.genai.Client = lambda **kw: type("C", (), {"models": type("M", (), {"generate_content": staticmethod(generate_content)})})()
+        self.slept = []
+        c.time.sleep = lambda s: self.slept.append(s)
+        self.addCleanup(self.restore)
+        return c.ModelPool("m", "", "", 6000), calls
+
+    def restore(self):
+        c.genai.Client, c.time.sleep = self._client, self._sleep
+
+    DAY = Exception("429 RESOURCE_EXHAUSTED. {'quotaId': 'GenerateRequestsPerDayPerProjectPerModel-FreeTier', "
+                    "'quotaValue': '500'} Please retry in 20s.")
+
+    def test_one_429_naming_the_day_is_checked_again_and_the_model_goes_on(self):
+        pool, calls = self.pool([self.DAY, "ok"])
+        text, _ = pool.read(None, "x", "gemini-9-flash-lite")
+        self.assertEqual(text, TRUE.strip())
+        self.assertNotIn("gemini-9-flash-lite", pool.exhausted)
+        self.assertEqual([s >= c.DAY_CHECK_SECONDS for s in self.slept if s >= 1], [True])
+        self.assertEqual(pool.quota_day, "")
+
+    def test_the_third_in_a_row_is_the_daily_limit(self):
+        pool, calls = self.pool([self.DAY, self.DAY, self.DAY])
+        with self.assertRaises(c.QuotaExhausted):
+            pool.read(None, "x", "gemini-9-flash-lite")
+        self.assertIn("gemini-9-flash-lite", pool.exhausted)
+        self.assertEqual(len(calls), 3)
+        self.assertEqual(len([s for s in self.slept if s >= c.DAY_CHECK_SECONDS]), 2)

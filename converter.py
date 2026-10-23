@@ -97,6 +97,17 @@ class QuotaExhausted(Exception):
         self.model = model
 
 
+# A 429 naming the daily limit is believed on the third time, each a minute after the last.
+DAY_CHECKS = 3
+DAY_CHECK_SECONDS = 60
+
+
+def quota_ids(msg):
+    """The quotas a 429 names ("PerMinute", "PerDay"…), short, for the live view."""
+    ids = re.findall(r"quotaId['\"]?\s*:\s*['\"]?([A-Za-z-]+)", msg)
+    return ",".join(dict.fromkeys(ids))[:100]
+
+
 class TimeUp(QuotaExhausted):
     """This run starts no more page work (ModelPool.stops): its Drive token, which the live
     view needs, is about to run out. The page waits for the next run, like a used-up quota."""
@@ -290,6 +301,27 @@ class ModelPool:
         # seconds; none when empty); time_up: one was refused for it.
         self.stops = {}
         self.time_up = False
+        # A 429 that reads like the daily limit, per model: (how many, in which round). Believed
+        # only on the DAY_CHECKS-th, each in a later round (a round = one wait of at least
+        # DAY_CHECK_SECONDS): on 2026-10-23 a per-minute 429 stopped both readers for the day
+        # after 8 and 3 requests, while Google counted 10 and 5 of 500.
+        self.day_hits = {}
+        self.day_round = {}
+
+    def day_limit(self, model, seen):
+        """Counts a 429 naming the daily limit, for a request sent in round `seen`; True on the
+        DAY_CHECKS-th. Several threads' 429s in one round count once."""
+        with self.lock:
+            n, last = self.day_hits.get(model, (0, -1))
+            if seen != last:
+                n, last = n + 1, seen
+                self.day_hits[model] = (n, last)
+            return n >= DAY_CHECKS
+
+    def day_waited(self, model, seen):
+        """A thread waited after a 429 of round `seen`: the next requests are a new round."""
+        with self.lock:
+            self.day_round[model] = max(self.day_round.get(model, 0), seen + 1)
 
     def available(self, model):
         return bool(model) and model not in self.exhausted
@@ -374,13 +406,19 @@ class ModelPool:
         last = None
         page, kind = live.now_doing()
         stop = ("settle" if kind == "settle" else "read") if kind in ("a", "b", "settle") else None
-        for attempt in range(attempts):
+        attempt = 0
+        while attempt < attempts:
             if model in self.exhausted:
                 raise QuotaExhausted(model)
             if stop and self.past(stop):
                 raise TimeUp(model)
+            attempt += 1
+            seen = self.day_round.get(model, 0)
             try:
-                return self._call(model, png, prompt)
+                got = self._call(model, png, prompt)
+                with self.lock:
+                    self.day_hits.pop(model, None)
+                return got
             except Exception as e:
                 last = e
                 msg = str(e)
@@ -395,16 +433,26 @@ class ModelPool:
                         print(f"  {model}: no free quota on this key, skipped")
                         self.live.note(model, "missing", page, kind)
                         raise QuotaExhausted(model) from e
-                    if "perday" in low.replace(" ", "") or "per day" in low or "daily" in low:
-                        with self.lock:
-                            self.exhausted.add(model)
-                            self.quota_day = self.quota_day or pacific_day()
-                        print(f"  {model}: daily quota used up")
-                        self.live.note(model, "out", page, kind, n=live.quota_limit(msg))
-                        raise QuotaExhausted(model) from e
                     m = re.search(r"retry(?:Delay)?['\"]?\s*[:=]?\s*['\"]?(\d+)", msg, re.I)
                     wait = int(m.group(1)) + 2 if m else 65
-                    self.live.note(model, "rest", page, kind, secs=wait)
+                    if "perday" in low.replace(" ", "") or "per day" in low or "daily" in low:
+                        if self.day_limit(model, seen):
+                            with self.lock:
+                                self.exhausted.add(model)
+                                self.quota_day = self.quota_day or pacific_day()
+                            print(f"  {model}: daily quota used up: {msg[:300]}")
+                            self.live.note(model, "out", page, kind, n=live.quota_limit(msg), extra=quota_ids(msg))
+                            raise QuotaExhausted(model) from e
+                        # Not believed yet: wait and ask again (no attempt used up).
+                        attempt -= 1
+                        wait = max(wait, DAY_CHECK_SECONDS)
+                        print(f"  {model}: 429 naming the daily limit, checking again in {wait}s: {msg[:300]}")
+                        self.live.note(model, "rest", page, kind, secs=wait, extra="check-day " + quota_ids(msg))
+                        time.sleep(wait)
+                        self.day_waited(model, seen)
+                        continue
+                    else:
+                        self.live.note(model, "rest", page, kind, secs=wait, extra=quota_ids(msg))
                 elif "400" in msg and model not in self.no_tuning and (
                         "thinking" in low or "media_resolution" in low or "safety" in low):
                     print(f"  {model} rejected tuning options, retrying without them: {msg[:200]}")
