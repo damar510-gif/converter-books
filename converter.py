@@ -100,6 +100,9 @@ class QuotaExhausted(Exception):
 # A 429 naming the daily limit is believed on the third time, each a minute after the last.
 DAY_CHECKS = 3
 DAY_CHECK_SECONDS = 60
+# A 429 asking for a longer wait than this is the daily limit too, whatever quota it names: on
+# 2026-10-23 one said "retry in" about 19 hours and the run slept on it until it was cancelled.
+LONG_WAIT_SECONDS = 5 * 60
 
 
 def quota_ids(msg):
@@ -444,7 +447,8 @@ class ModelPool:
                         raise QuotaExhausted(model) from e
                     m = re.search(r"retry(?:Delay)?['\"]?\s*[:=]?\s*['\"]?(\d+)", msg, re.I)
                     wait = int(m.group(1)) + 2 if m else 65
-                    if "perday" in low.replace(" ", "") or "per day" in low or "daily" in low:
+                    if "perday" in low.replace(" ", "") or "per day" in low or "daily" in low \
+                            or wait > LONG_WAIT_SECONDS:
                         if self.day_limit(model, seen):
                             with self.lock:
                                 self.exhausted.add(model)
@@ -454,7 +458,7 @@ class ModelPool:
                             raise QuotaExhausted(model) from e
                         # Not believed yet: wait and ask again (no attempt used up).
                         attempt -= 1
-                        wait = max(wait, DAY_CHECK_SECONDS)
+                        wait = DAY_CHECK_SECONDS if wait > LONG_WAIT_SECONDS else max(wait, DAY_CHECK_SECONDS)
                         print(f"  {model}: 429 naming the daily limit, checking again in {wait}s: {msg[:300]}")
                         self.live.note(model, "rest", page, kind, secs=wait, extra="check-day " + quota_ids(msg))
                         time.sleep(wait)
