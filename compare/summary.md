@@ -1,11 +1,11 @@
 | model | page | match % | chars | missing lines | seconds | tokens | config | finish/error |
 |---|---|---|---|---|---|---|---|---|
-| gemini-3.5-flash-lite | 11 |  | 2751 | 0 | 20.6 | 1407/864/ | minimal-thinking | FinishReason.STOP  |
-| gemini-3.5-flash-lite | 32 |  | 2271 | 0 | 33.5 | 1407/898/ | minimal-thinking | FinishReason.STOP  |
-| gemini-3.5-flash-lite | 60 |  | 2621 | 0 | 17.5 | 1407/960/ | minimal-thinking | FinishReason.STOP  |
-| gemini-3.5-flash-lite | 100 |  | 3096 | 0 | 18.9 | 1407/1084/ | minimal-thinking | FinishReason.STOP  |
-| gemini-3.5-flash-lite | 139 |  | 2799 | 0 | 23.4 | 1407/1022/ | minimal-thinking | FinishReason.STOP  |
-| gemini-3.5-flash-lite | 245 |  | 2019 | 0 | 19.0 | 1407/752/ | minimal-thinking | FinishReason.STOP  |
+| gemini-3.5-flash-lite | 1 |  | 0 | 0 | 0 | // | plain |  all configs rejected |
+| gemini-3.5-flash-lite | 2 |  | 0 | 0 | 0 | // | plain |  all configs rejected |
+| gemma-4-26b-a4b-it | 1 |  | 1930 | 0 | 79.7 | 592/606/ | minimal-thinking | FinishReason.STOP  |
+| gemma-4-26b-a4b-it | 2 |  | 1488 | 0 | 50.0 | 592/614/ | minimal-thinking | FinishReason.STOP  |
+| gemma-4-31b-it | 1 |  | 1926 | 0 | 30.6 | 592/600/ | minimal-thinking | FinishReason.STOP  |
+| gemma-4-31b-it | 2 |  | 1424 | 0 | 109.6 | 592/569/2570 | plain | FinishReason.STOP  |
 
 | model | pages | average match % |
 |---|---|---|
