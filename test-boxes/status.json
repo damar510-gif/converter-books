@@ -1,30 +1,38 @@
 {
-  "state": "done",
-  "pages_total": 3,
-  "pages_done": 3,
+  "state": "paused",
+  "pages_total": 12,
+  "pages_done": 9,
   "pages_helper": [],
   "pages_unsure": [
-    152
+    161,
+    164,
+    166,
+    167
   ],
   "pages_missing": [],
-  "pages_waiting": [],
+  "pages_waiting": [
+    160,
+    162,
+    165
+  ],
   "pages_retry": [],
   "pages_human": [],
   "helper_checked": 0,
-  "review_items": 3,
+  "review_items": 57,
   "review_applied": 0,
   "review_kept": 0,
   "review_conflicts_new": 0,
   "review_seen": "",
   "stages": {
-    "done": 2,
-    "unsure": 1
+    "read1": 3,
+    "unsure": 4,
+    "done": 5
   },
   "requests": {
-    "gemma-4-31b-it": 5,
-    "gemini-3.1-flash-lite": 2,
-    "gemma-4-26b-a4b-it": 5,
-    "gemini-3.5-flash-lite": 1
+    "gemma-4-31b-it": 25,
+    "gemini-3.1-flash-lite": 6,
+    "gemini-3.5-flash-lite": 8,
+    "gemma-4-26b-a4b-it": 10
   },
   "models_out": [],
   "free_models": [
@@ -76,7 +84,8 @@
   },
   "book": "تراث الانسانية 3-1-246",
   "epub": "تراث الانسانية 3-1-246.epub",
-  "updated_at": "2026-10-24T15:54:50Z",
-  "run_id": 40105787292,
-  "run_number": 92
+  "updated_at": "2026-10-24T18:28:39Z",
+  "quota_day": "2026-10-24",
+  "run_id": 40113662360,
+  "run_number": 95
 }
