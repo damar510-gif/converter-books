@@ -533,7 +533,10 @@ class FreeBoxes(PipelineBase):
         self.assertEqual(code, 3, st)
         self.assertEqual(st["state"], "paused")
         self.assertNotIn("waiting_for", st, "no first reader is left: the next book could not start either")
-        self.assertNotIn("gemini-3.1-flash-lite", {m for m, k in fake.calls if k == "read"})
+        # The second box gave its own reading of each page (2026-10-24), never the first box's.
+        recs = self.records().values()
+        self.assertEqual({(r["a"]["model"], c.box_of(r["a"], "a")) for r in recs}, {("gemini-3.1-flash-lite", "read2")})
+        self.assertFalse(any("b" in r for r in recs))
         self.assertEqual(st["pages_waiting"], [30, 31])
 
     def test_the_second_box_out_parks_the_book_while_the_first_reads_on(self):
@@ -728,7 +731,9 @@ class FreeBoxes(PipelineBase):
         }, extra=("--boxes", "read1=gemma-4-31b-it;read2=gemini-3.1-flash-lite;settle=", "--workers", "1"))
         self.assertEqual(code, 0, st)
         self.assertEqual([m for m, k in fake.calls if k == "read"].count("gemma-4-31b-it"), 1)
-        self.assertEqual(self.records()[31]["a"]["model"], "gemini-3.5-flash-lite")
+        # Page 31: the second box read it first (from the end of the book), the new first box after.
+        r = self.records()[31]
+        self.assertEqual({r["a"]["model"], r["b"]["model"]}, {"gemini-3.5-flash-lite", "gemini-3.1-flash-lite"})
 
     def test_a_request_waiting_for_a_model_taken_out_goes_to_the_others(self):
         pool = c.ModelPool("gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemma-4-26b-a4b-it", 10)
@@ -752,7 +757,10 @@ class FreeBoxes(PipelineBase):
         self.assertEqual((code, st["state"]), (7, "paused"), st)
         self.assertEqual(st["waiting_for"], "time")
         self.assertNotIn("boxes_at", st, "the run did not take these boxes")
-        self.assertEqual([m for m, k in fake.calls if k == "read"], ["gemma-4-31b-it"])
+        # No page begun after the change (the second box may have been reading one meanwhile).
+        reads = [m for m, k in fake.calls if k == "read"]
+        self.assertEqual(reads.count("gemma-4-31b-it"), 1)
+        self.assertLessEqual(reads.count("gemini-3.1-flash-lite"), 1)
 
 
     def test_a_model_this_key_cannot_use_is_said_so(self):
@@ -799,8 +807,8 @@ class Queue(PipelineBase):
         }, extra=("--boxes", "read1=gemma-4-31b-it;read2=gemini-3.1-flash-lite;settle=", "--workers", "1",
                   "--queue", manifest))
         self.assertEqual(code, 0, st)
-        # One first reader takes the oldest pages first: the first book's, then the other's.
-        self.assertEqual(seen, [0, 0, 1, 1])
+        # The first reader read each page of both books once.
+        self.assertEqual(sorted(seen), [0, 0, 1, 1])
         with open(os.path.join(out, "status.json"), encoding="utf-8") as f:
             other = json.load(f)
         self.assertEqual((other["state"], other["pages_done"], other["book"]), ("done", 2, "كتاب آخر"))
@@ -858,6 +866,31 @@ class Queue(PipelineBase):
         with open(os.path.join(out, "status.json"), encoding="utf-8") as f:
             self.assertEqual(json.load(f)["state"], "done")
 
+    def test_the_second_reading_box_does_not_wait_for_the_first(self):
+        # The user's question (2026-10-24): the first box's model was failing, and the second
+        # box's two models had nothing to do. Now each box reads the pages it has not read.
+        second_read = threading.Event()
+
+        def first(p, n):
+            if p.startswith("أنت تنسخ"):
+                self.assertTrue(second_read.wait(20), "the second box waited for the first")
+            return answer(TRUE)
+
+        def second(p, n):
+            second_read.set()
+            return answer(TRUE)
+        code, st, md, fake = self.run_book({
+            "gemma-4-31b-it": first,
+            "gemini-3.1-flash-lite": second,
+        }, extra=("--boxes", "read1=gemma-4-31b-it;read2=gemini-3.1-flash-lite;settle=", "--workers", "1"))
+        self.assertEqual(code, 0, st)
+        recs = self.records()
+        for r in recs.values():
+            # One reading from each box, whichever came first.
+            self.assertEqual({c.box_of(r["a"], "a"), c.box_of(r["b"], "b")}, {"read1", "read2"}, r)
+            self.assertEqual({r["a"]["model"], r["b"]["model"]}, {"gemma-4-31b-it", "gemini-3.1-flash-lite"})
+        self.assertEqual(recs[31]["a"]["box"], "read2", "the second box began at the end of the book")
+
 
 class StepQueues(unittest.TestCase):
     def test_oldest_book_first_and_a_page_at_work_is_never_queued_twice(self):
@@ -871,6 +904,17 @@ class StepQueues(unittest.TestCase):
         self.assertFalse(steps.put("a", (0, 5)), "being read now: not queued again")
         steps.done("a", item)
         self.assertTrue(steps.put("a", (0, 5)))
+
+    def test_the_second_box_takes_unread_pages_from_the_end_and_a_page_read_once_moves_up(self):
+        steps = c.Steps()
+        for p in (1, 2, 3):
+            steps.put("b", (0, p), back=True)
+        steps.put("b", (1, 7))   # read once already: waits for its second reading
+        self.assertEqual(steps.take("b"), (1, 7))
+        self.assertEqual(steps.take("b"), (0, 3), "unread pages last page first")
+        self.assertTrue(steps.put("b", (0, 1)), "page 1 was read once meanwhile: it moves up")
+        self.assertFalse(steps.put("b", (0, 1), back=True))
+        self.assertEqual([steps.take("b"), steps.take("b")], [(0, 1), (0, 2)])
 
 
 class Requests:
