@@ -151,8 +151,9 @@ could not be applied because their page changed; their places come back as new o
 Since 2026-10-23 (the user's design: "separate the boxes so that nobody waits") a run carries the
 oldest unfinished books, up to `CONFIG.QUEUE_BOOKS` (4), oldest first (when each was put in Drive,
 `job.fileCreated`); the first is the run's own book (the single-book inputs), the others come in
-`queue`. A new book from «1- جديد» joins only when the first reading's box can work and the run's
-books have no page left to read first, or fewer than `CONFIG.READ_AHEAD` (60).
+`queue`. A book from «1- جديد» joins while the run has room (it may have pages for any box: one
+back from «5- مشكلة» keeps its readings); past that only when the first reading's box can work and
+the run's books have no page left to read first, or fewer than `CONFIG.READ_AHEAD` (60).
 
 In the converter each step has its own workers (`run_steps`): first readings, second readings, and
 the check with settling. Each worker takes the page that has waited longest for its step, the oldest

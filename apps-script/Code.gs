@@ -953,8 +953,8 @@ function hasRead1Work_(job) {
  * The books of the run the lead's dispatch starts, oldest first (the first is the run's own):
  * the oldest unfinished books, up to CONFIG.QUEUE_BOOKS; and, when the first reading's box can
  * work but those books have no page left to read first (or only a few: READ_AHEAD), the next
- * book that has, from «1- جديد» if need be (it goes to «2- قيد التحويل» with its own job), so
- * the first readers never idle while a book waits.
+ * book that has. Books in «1- جديد» join while the run has room (they go to «2- قيد التحويل»
+ * with their own job), so no box idles while a book waits.
  */
 function runWindow_(ctx, lead) {
   if (lead.humanRound || lead.refining || extOf_(lead.driveName || lead.name) !== 'pdf') return [lead];
@@ -973,10 +973,14 @@ function runWindow_(ctx, lead) {
     var next = books.filter(function (j) { return run.indexOf(j) < 0 && hasRead1Work_(j); })[0];
     if (next) run.push(next);
   }
-  if (reads && ctx.folders && ahead()) {
+  // A book in «1- جديد» may have pages for the other boxes too (one back from «5- مشكلة» keeps
+  // its readings), and each box takes the oldest book's pages first: the run takes it while it
+  // has room, and past that only for the first readers.
+  var room = function () { return run.length < CONFIG.QUEUE_BOOKS || (reads && ahead()); };
+  if (ctx.folders && room()) {
     var files = [];
     try { files = scanInbox_(ctx.folders.inbox).ready; } catch (err) { Logger.log('inbox: ' + err); }
-    for (var i = 0; i < files.length && ahead(); i++) {
+    for (var i = 0; i < files.length && room(); i++) {
       var f = files[i];
       var ext = SUPPORTED_EXT[extOf_(f.getName())] ? extOf_(f.getName()) : MIME_EXT[f.getMimeType()] || 'pdf';
       if (ext !== 'pdf' || ctx.jobs[f.getId()]) continue;
