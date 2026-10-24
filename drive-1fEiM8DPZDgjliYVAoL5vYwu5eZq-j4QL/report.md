@@ -6,15 +6,14 @@
 - فارغة/صور: 1
 - قُرئت ولم تُراجع بعد: 444
 - طلبات gemma-4-31b-it في هذا التشغيل: 24
-- طلبات gemma-4-26b-a4b-it في هذا التشغيل: 53
-- طلبات gemini-3.1-flash-lite في هذا التشغيل: 151
-- طلبات gemini-3.5-flash-lite في هذا التشغيل: 161
+- طلبات gemma-4-26b-a4b-it في هذا التشغيل: 42
+- طلبات gemini-3.1-flash-lite في هذا التشغيل: 118
+- طلبات gemini-3.5-flash-lite في هذا التشغيل: 91
 - نماذج مجانية جديدة أُضيفت تلقائياً: gemini-3.5-flash، gemini-3.1-pro-preview
 - القراءة الأولى (من صفحة الحالة): gemma-4-31b-it، gemma-4-26b-a4b-it، gemini-3.5-flash، gemini-3.7-flash، gemini-3.8-flash، gemini-3.6-flash
 - القراءة الثانية (من صفحة الحالة): gemini-3.1-flash-lite، gemini-3.5-flash-lite
 - الحسم (من صفحة الحالة): 
 - مواضع تنتظر مراجعتك: 113
-- المساعد: could not list the helper folder (Drive 401: token expired)
 
 **بقيت 444 صفحة تعمل عليها نماذجك على الجهاز من أول الكتاب، والنماذج المجانية من آخره.** يكمل الكتاب حين تنتهي.
 
