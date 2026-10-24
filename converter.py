@@ -69,6 +69,8 @@ SPREAD_HINT = "- هذه الصورة فيها صفحتان من الكتاب م�
 # PyMuPDF is not thread safe, even with one document per thread: every PDF call
 # goes through this lock, while the slow API requests still run in parallel.
 PDF_LOCK = threading.RLock()
+# A page's record is saved by one reading at a time (the two reading boxes may read it at once).
+RECORD_LOCK = threading.Lock()
 
 
 def pdf_locked(fn):
@@ -870,6 +872,8 @@ def read_page(pool, doc, index, cache_dir, total, dual, step=None):
                "text": reading["text"] if reading else "", "a": reading, **handed_back}
         if error:
             rec["error"] = error
+        if step:
+            return save_first(pool, cache_dir, rec, step, dual, total)
     if dual and need_b and rec["status"] == "ok":
         # The second reading comes from a different model, so its mistakes fall elsewhere.
         # Gemma may give it only when Gemini refused this page (and, with the status page's
@@ -890,6 +894,35 @@ def read_page(pool, doc, index, cache_dir, total, dual, step=None):
                 rec["b"]["error"] = error
     rec.pop("check", None)
     save_record(cache_dir, rec)
+    pool.live.page(page_no, page_state(rec))
+    second = (rec.get("b") or {}).get("model", "-") if dual else "off"
+    print(f"  page {page_no}/{total}: {rec['status']} ({(rec.get('a') or {}).get('model', '-')} + {second})")
+    return rec
+
+
+def save_first(pool, cache_dir, rec, step, dual, total):
+    """Saves a page's first reading by the step's box. The other box may have read the page
+    meanwhile (the two read a page at once if they come to it together): then this reading
+    is its second, unless both came from one model (a model in both boxes)."""
+    page_no = rec["page"]
+    with RECORD_LOCK:
+        now = load_record(cache_dir, page_no, pool.rescue if pool else "")
+        if now and now.get("status") == "ok":
+            reading = rec["a"]
+            if dual and rec["status"] == "ok" and reading["model"] != now["a"]["model"] and \
+                    box_of(now["a"], "a") != KIND_BOX[step] and (now.get("b") or {}).get("status") != "ok":
+                reading.pop("box", None)
+                if KIND_BOX[step] != "read2":
+                    reading["box"] = KIND_BOX[step]
+                now["b"] = reading
+                now.pop("check", None)
+                save_record(cache_dir, now)
+            elif dual and rec["status"] == "ok" and box_of(now["a"], "a") != KIND_BOX[step]:
+                # Both boxes read it with one model: this box reads it again (Book.do).
+                now = dict(now, again=True)
+            rec = now
+        else:
+            save_record(cache_dir, rec)
     pool.live.page(page_no, page_state(rec))
     second = (rec.get("b") or {}).get("model", "-") if dual else "off"
     print(f"  page {page_no}/{total}: {rec['status']} ({(rec.get('a') or {}).get('model', '-')} + {second})")
@@ -2141,8 +2174,8 @@ class Steps:
             self.cv.notify_all()
             return True
 
-    def again(self, step, item):
-        """The page may come back to this step in this run (another step was reading it)."""
+    def forget(self, step, item):
+        """The page may go through this step once more in this run (put again at once)."""
         with self.cv:
             self.tried.discard((step,) + tuple(item))
             self.working.discard((step,) + tuple(item))
@@ -2266,9 +2299,6 @@ class Book:
         self.applied = {"touched": set(), "results": [], "seen": ""}
         self.free_done, self.free_moved = set(), set()
         self.handed, self.hand_lock, self.hand_at = set(), threading.Lock(), [0.0]
-        # The pages one of the reading boxes reads now, with the steps that left them meanwhile
-        # (they come back to them after).
-        self.reading_now = {}
         self.waits = 0
         self.records_now = []
         # The pages that went through the run's check step (check_pages leaves them).
@@ -2315,6 +2345,12 @@ class Book:
         send_readings(self.box, self.filepath, [r for r in recs.values() if r], self.cache_dir, lv, pages=pages)
         tell_helper(self.box, self.args, len(self.doc), recs, False, [q for q in self.share if q not in pages])
 
+    def helper_second(self, p, rec):
+        """The helper's models gave the second reading of a page with no first one yet."""
+        hb = (self.outs.get(p) or {}).get("hb")
+        return self.transcribe and (rec is None or rec.get("status") != "ok") and helperbox.has_text(hb) and \
+            hb["text"].strip() != helperbox.EMPTY
+
     def next_steps(self, p, rec, steps):
         """The steps this page waits for, from the free models, as [(step, back)] (Steps.put):
         none when it waits for nobody in this run (done, pinned, the helper's, or a step it
@@ -2325,6 +2361,9 @@ class Book:
         if rec is not None and rec.get("status") in ("empty", "text-layer"):
             return []
         if rec is None or rec.get("status") != "ok":
+            if self.helper_second(p, rec):
+                # The helper's models gave its second reading: only the first box reads it.
+                return [("a", False)]
             return [("a", False)] + ([("b", True)] if self.dual else [])
         if (rec.get("check") or {}).get("v") == CHECK_VERSION:
             return []
@@ -2354,26 +2393,11 @@ class Book:
 
     def do(self, step, p, pool, steps):
         """One step of one page by the free models. Returns the page's next steps (next_steps).
-        The two reading boxes never read one page at the same time."""
-        if step in ("a", "b"):
-            with self.hand_lock:
-                if p in self.reading_now:
-                    # The other reading box is reading it: this one comes back to it after.
-                    self.reading_now[p].add(step)
-                    steps.again(step, (self.index, p))
-                    return []
-                self.reading_now[p] = set()
-            out = []
-            try:
-                out = self.read(step, p, pool, steps)
-            finally:
-                with self.hand_lock:
-                    left = self.reading_now.pop(p)
-            return out + [(k, False) for k in sorted(left) if k not in {k2 for k2, _ in out}]
-        return self.read(step, p, pool, steps)
-
-    def read(self, step, p, pool, steps):
+        The two reading boxes may read one page at the same time (save_first)."""
         rec = load_record(self.cache_dir, p, pool.rescue)
+        if step == "b" and self.helper_second(p, rec):
+            # The helper's models gave its second reading: only the first box reads it.
+            return []
         if step in ("a", "b") and self.transcribe and not free_can(pool, rec, self.lite):
             # Nobody here can take its next step now (out of quota): the helper's models.
             self.back(p, pool.live)
@@ -2382,14 +2406,15 @@ class Book:
         try:
             if step in ("a", "b"):
                 had = (bool(rec) and rec.get("status") == "ok", bool(rec) and (rec.get("b") or {}).get("status") == "ok")
-                hb = (self.outs.get(p) or {}).get("hb")
-                # The helper's models gave the second reading of a page with no first one yet.
-                given = self.transcribe and not had[0] and helperbox.has_text(hb) and hb["text"].strip() != helperbox.EMPTY
+                given = self.helper_second(p, rec)
                 rec = read_page(pool, local, p - 1, self.cache_dir, len(self.doc), self.dual and not given, step=step)
                 if given and rec and rec.get("status") == "ok":
                     rec, changed = helperbox.merge(rec, self.outs[p], p, CHECK_VERSION)
                     if changed:
                         save_record(self.cache_dir, rec)
+                if rec and rec.pop("again", False):
+                    steps.forget(step, (self.index, p))
+                    return [(step, False)]
                 if rec:
                     self.vocab.update(norm_words(rec.get("text") or ""))
                     self.vocab.update(norm_words((rec.get("b") or {}).get("text") or ""))

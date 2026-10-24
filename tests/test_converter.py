@@ -891,6 +891,24 @@ class Queue(PipelineBase):
             self.assertEqual({r["a"]["model"], r["b"]["model"]}, {"gemma-4-31b-it", "gemini-3.1-flash-lite"})
         self.assertEqual(recs[31]["a"]["box"], "read2", "the second box began at the end of the book")
 
+    def test_both_reading_boxes_may_read_one_page_at_once(self):
+        # The user (2026-10-24): the boxes are separate, so nothing stops one page being read
+        # by both at the same time; both readings are kept.
+        both = threading.Barrier(2, timeout=20)
+
+        def reader(p, n):
+            if p.startswith("أنت تنسخ") and n == 1:
+                both.wait()
+            return answer(TRUE)
+        code, st, md, fake = self.run_book({
+            "gemma-4-31b-it": reader,
+            "gemini-3.1-flash-lite": reader,
+        }, pages="30", extra=("--boxes", "read1=gemma-4-31b-it;read2=gemini-3.1-flash-lite;settle=", "--workers", "1"))
+        self.assertEqual(code, 0, st)
+        r = self.records()[30]
+        self.assertEqual({r["a"]["model"], r["b"]["model"]}, {"gemma-4-31b-it", "gemini-3.1-flash-lite"})
+        self.assertEqual({c.box_of(r["a"], "a"), c.box_of(r["b"], "b")}, {"read1", "read2"})
+
 
 class StepQueues(unittest.TestCase):
     def test_oldest_book_first_and_a_page_at_work_is_never_queued_twice(self):
