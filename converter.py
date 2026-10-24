@@ -800,6 +800,20 @@ def note_reading(pool, page_no, kind, status, reading, error):
                    extra="halves" if reading.get("via") == "halves" else "")
 
 
+def box_of(reading, key):
+    """The box whose model gave this reading: "read1" or "read2". A page's first reading
+    ("a", the first in time) is the first reading box's unless it says otherwise ("box"), and
+    its second ("b") the second's: each box reads the pages it has not read yet, in any order
+    (the user's question, 2026-10-24: "why does the second reading wait for the first?")."""
+    return (reading or {}).get("box") or ("read1" if key == "a" else "read2")
+
+
+def owed_step(rec):
+    """The step ("a": the first reading box, "b": the second) whose reading a page read once
+    still lacks."""
+    return "b" if box_of(rec.get("a"), "a") == "read1" else "a"
+
+
 def read_page(pool, doc, index, cache_dir, total, dual, step=None):
     """First and second reading of one page, saved to cache_dir/NNNN.json; step "a" gives
     only the first, "b" only the second (the run's steps, run_steps).
@@ -818,17 +832,21 @@ def read_page(pool, doc, index, cache_dir, total, dual, step=None):
     need_a = rec is None or rec.get("status") != "ok"
     b = (rec or {}).get("b")
     need_b = dual and (need_a or b is None or b.get("status") in ("failed", "suspicious"))
-    if step == "b" and need_a:
-        # The second reading comes after the first.
-        return rec
+    # Which box gives each reading: the step's own (a box reads a page none of its models read
+    # yet, first or second in time), else the first box first.
+    kind_a, kind_b = "a", "b"
     if step:
-        need_a, need_b = need_a and step == "a", need_b and step == "b"
+        if not need_a and owed_step(rec) != step:
+            # This box already read the page.
+            need_b = False
+        need_a, need_b = need_a, need_b and not need_a
+        kind_a = kind_b = step
     if not need_a and not need_b:
         return rec
-    if need_a and (not pool.can_read("a") or pool.past("read")):
+    if need_a and (not pool.can_read(kind_a) or pool.past("read")):
         # Nobody can read it in this run: no image is made for nothing.
         return None
-    if not need_a and (not pool.can_read("b", rec["a"]["model"]) or pool.past("read")):
+    if not need_a and (not pool.can_read(kind_b, rec["a"]["model"]) or pool.past("read")):
         # Nobody can give its second reading in this run: it waits for one (as a reading
         # waiting for quota does below), and no image is made for nothing.
         if (rec.pop("b", None), rec.pop("check", None)) != (None, None):
@@ -840,12 +858,14 @@ def read_page(pool, doc, index, cache_dir, total, dual, step=None):
     spread = pix.width > pix.height * 1.15
     prompt = OCR_PROMPT.format(spread=SPREAD_HINT if spread else "")
     if need_a:
-        with live.doing(page_no, "a"):
-            status, reading, error = read_with(pool, pool.share(pool.reading("a"), "a"), page, png, pix, prompt, ink,
-                                               rescue=pool.rescue_for())
+        with live.doing(page_no, kind_a):
+            status, reading, error = read_with(pool, pool.share(pool.reading(kind_a), kind_a), page, png, pix, prompt,
+                                               ink, rescue=pool.rescue_for())
         if status == "pending":
             return None
-        note_reading(pool, page_no, "a", status, reading, error)
+        note_reading(pool, page_no, kind_a, status, reading, error)
+        if reading and kind_a != "a":
+            reading["box"] = KIND_BOX[kind_a]
         rec = {"page": page_no, "ink": round(ink, 4), "spread": spread, "status": status,
                "text": reading["text"] if reading else "", "a": reading, **handed_back}
         if error:
@@ -854,16 +874,18 @@ def read_page(pool, doc, index, cache_dir, total, dual, step=None):
         # The second reading comes from a different model, so its mistakes fall elsewhere.
         # Gemma may give it only when Gemini refused this page (and, with the status page's
         # boxes, only from a box).
-        others = [m for m in pool.share(pool.reading("b"), "b") if m != rec["a"]["model"]]
+        others = [m for m in pool.share(pool.reading(kind_b), kind_b) if m != rec["a"]["model"]]
         rescue = pool.rescue_for() if rec["a"].get("refused") and rec["a"]["model"] != pool.rescue else ""
-        with live.doing(page_no, "b"):
+        with live.doing(page_no, kind_b):
             status, reading, error = read_with(pool, others, page, png, pix, prompt, ink, rescue=rescue)
         if status == "pending":
             rec.pop("b", None)
         else:
-            note_reading(pool, page_no, "b", status, reading, error)
+            note_reading(pool, page_no, kind_b, status, reading, error)
             rec["b"] = reading or {"model": "", "text": "", "status": "failed"}
             rec["b"]["status"] = status
+            if kind_b != "b":
+                rec["b"]["box"] = KIND_BOX[kind_b]
             if error:
                 rec["b"]["error"] = error
     rec.pop("check", None)
@@ -1638,7 +1660,8 @@ def waiting_for_reader(pool, records, dual):
     for r in records:
         if r.get("status") != "ok" or review.pin_of(r) or (r.get("b") or {}).get("status") == "ok":
             continue
-        owed = [m for m in second if m != (r.get("a") or {}).get("model")]
+        box = second if owed_step(r) == "b" else first
+        owed = [m for m in box if m != (r.get("a") or {}).get("model")]
         if owed and all(m in pool.exhausted for m in owed):
             pages.add(r["page"])
     return pages, left
@@ -2021,10 +2044,11 @@ def nobody_for(pool, box, records, dual):
         if review.pin_of(r) or r.get("status") in ("empty", "text-layer"):
             continue
         if r.get("status") != "ok":
-            if pool.reading("a") or reads1:
+            if pool.reading("a") or reads1 or (dual and pool.reading("b")):
                 return False
         elif dual and (r.get("b") or {}).get("status") != "ok":
-            if [m for m in pool.reading("b") if m != (r.get("a") or {}).get("model")] or reads2:
+            k = owed_step(r)
+            if [m for m in pool.reading(k) if m != (r.get("a") or {}).get("model")] or (reads2 if k == "b" else reads1):
                 return False
         elif (r.get("check") or {}).get("v") != CHECK_VERSION:
             if pool.boxes.get("settle") or settles or r["a"].get("refused"):
@@ -2055,9 +2079,9 @@ def free_can(pool, rec, lite):
     quota left reads it, gives its second reading, or settles its two readings (lite: the Lite
     readers, and Gemma, may settle; a page handed back by the helper's models always may)."""
     if rec is None or rec.get("status") != "ok":
-        return pool.can_read("a")
+        return pool.can_read("a") or pool.can_read("b")
     if (rec.get("b") or {}).get("status") != "ok":
-        return pool.can_read("b", (rec.get("a") or {}).get("model", ""))
+        return pool.can_read(owed_step(rec), (rec.get("a") or {}).get("model", ""))
     if rec["a"].get("refused") or rec.get("hfinal"):
         # Settled without asking a model (settle_state, check_helper_page).
         return True
@@ -2091,7 +2115,8 @@ class Steps:
     def __init__(self, rescan=None):
         self.cv = threading.Condition()
         self.queues = {k: [] for k in STEPS}
-        self.queued = set()
+        # Each page waiting, with its place in its step's queue.
+        self.queued = {}
         self.tried = set()
         # The pages being worked on now, by step: never queued again meanwhile (rescan).
         self.working = set()
@@ -2099,15 +2124,28 @@ class Steps:
         self.error = None
         self.rescan = rescan or (lambda steps: False)
 
-    def put(self, step, item):
+    def put(self, step, item, back=False):
+        """back: after the pages that waited for this step, last page first (the second reading
+        box takes the pages nobody read yet from the end of each book, so the two reading
+        boxes meet in the middle)."""
         with self.cv:
             key = (step,) + tuple(item)
-            if key in self.queued or key in self.tried or key in self.working:
+            order = (1, item[0], -item[1]) if back else (0,) + tuple(item)
+            if key in self.tried or key in self.working or self.queued.get(key, order) < order:
                 return False
-            self.queued.add(key)
-            heapq.heappush(self.queues[step], tuple(item))
+            if self.queued.get(key) == order:
+                return False
+            # A page waiting at the back moves up (read once, it waits for its other reading).
+            self.queued[key] = order
+            heapq.heappush(self.queues[step], (order, tuple(item)))
             self.cv.notify_all()
             return True
+
+    def again(self, step, item):
+        """The page may come back to this step in this run (another step was reading it)."""
+        with self.cv:
+            self.tried.discard((step,) + tuple(item))
+            self.working.discard((step,) + tuple(item))
 
     def did(self, step, item):
         """The page already went through this step in this run."""
@@ -2121,14 +2159,17 @@ class Steps:
                     return None
                 # The user changed the boxes: the pages passed over go to the models now there.
                 self.rescan(self)
+                while self.queues[step] and self.queued.get((step,) + self.queues[step][0][1]) != self.queues[step][0][0]:
+                    # Its place moved up: this one is left over.
+                    heapq.heappop(self.queues[step])
                 if self.queues[step]:
-                    item = heapq.heappop(self.queues[step])
-                    self.queued.discard((step,) + item)
+                    item = heapq.heappop(self.queues[step])[1]
+                    self.queued.pop((step,) + item)
                     self.tried.add((step,) + item)
                     self.working.add((step,) + item)
                     self.busy += 1
                     return item
-                if not self.busy and not any(self.queues.values()):
+                if not self.busy and not self.queued:
                     self.cv.notify_all()
                     return None
                 self.cv.wait(1)
@@ -2172,8 +2213,8 @@ def run_steps(pool, books, workers):
                 with live.in_book(b.index):
                     nxt = b.do(step, item[1], pool, steps)
                 # Before this one counts as done, so the steps never end in between.
-                if nxt:
-                    steps.put(nxt, item)
+                for k, back in nxt or ():
+                    steps.put(k, item, back)
             except Exception as e:
                 error = e
             steps.done(step, item, error)
@@ -2225,6 +2266,9 @@ class Book:
         self.applied = {"touched": set(), "results": [], "seen": ""}
         self.free_done, self.free_moved = set(), set()
         self.handed, self.hand_lock, self.hand_at = set(), threading.Lock(), [0.0]
+        # The pages one of the reading boxes reads now, with the steps that left them meanwhile
+        # (they come back to them after).
+        self.reading_now = {}
         self.waits = 0
         self.records_now = []
         # The pages that went through the run's check step (check_pages leaves them).
@@ -2271,48 +2315,69 @@ class Book:
         send_readings(self.box, self.filepath, [r for r in recs.values() if r], self.cache_dir, lv, pages=pages)
         tell_helper(self.box, self.args, len(self.doc), recs, False, [q for q in self.share if q not in pages])
 
-    def next_step(self, p, rec, steps):
-        """The step this page waits for, from the free models: None when it waits for nobody in
-        this run (done, pinned, the helper's, or a step it already went through)."""
+    def next_steps(self, p, rec, steps):
+        """The steps this page waits for, from the free models, as [(step, back)] (Steps.put):
+        none when it waits for nobody in this run (done, pinned, the helper's, or a step it
+        already went through). A page nobody read waits for both reading boxes: whichever
+        takes it first gives its first reading, the other its second."""
         if p in self.pins or (rec and review.pin_of(rec)):
-            return None
+            return []
         if rec is not None and rec.get("status") in ("empty", "text-layer"):
-            return None
+            return []
         if rec is None or rec.get("status") != "ok":
-            return "a"
+            return [("a", False)] + ([("b", True)] if self.dual else [])
         if (rec.get("check") or {}).get("v") == CHECK_VERSION:
-            return None
+            return []
         b = rec.get("b")
         second = (b or {}).get("status") == "ok"
-        if self.dual and not second and not steps.did("b", (self.index, p)) and \
+        owed = owed_step(rec)
+        if self.dual and not second and not steps.did(owed, (self.index, p)) and \
                 (b is None or b.get("status") in ("failed", "suspicious")):
-            return "b"
+            return [(owed, False)]
         if self.transcribe:
             # The free models settle their two readings (or a refused page's one); a page the
             # helper's models settled is checked without asking a model.
-            return "c" if second or rec["a"].get("refused") or not self.dual else None
+            return [("c", False)] if second or rec["a"].get("refused") or not self.dual else []
         if from_helper(rec) or rec.get("hfinal") or (self.dual and "b" not in rec):
             # Their readings are checked after the steps (check_pages); a page with no second
             # reading waits for one.
-            return None
-        return "c"
+            return []
+        return [("c", False)]
 
     def scan(self, steps, pool):
         for p in self.free_pages:
             rec = load_record(self.cache_dir, p, pool.rescue)
             if rec and not review.pin_of(rec):
                 upgrade_check(rec)
-            nxt = self.next_step(p, rec, steps)
-            if nxt:
-                steps.put(nxt, (self.index, p))
+            for k, back in self.next_steps(p, rec, steps):
+                steps.put(k, (self.index, p), back)
 
     def do(self, step, p, pool, steps):
-        """One step of one page by the free models. Returns the page's next step."""
+        """One step of one page by the free models. Returns the page's next steps (next_steps).
+        The two reading boxes never read one page at the same time."""
+        if step in ("a", "b"):
+            with self.hand_lock:
+                if p in self.reading_now:
+                    # The other reading box is reading it: this one comes back to it after.
+                    self.reading_now[p].add(step)
+                    steps.again(step, (self.index, p))
+                    return []
+                self.reading_now[p] = set()
+            out = []
+            try:
+                out = self.read(step, p, pool, steps)
+            finally:
+                with self.hand_lock:
+                    left = self.reading_now.pop(p)
+            return out + [(k, False) for k in sorted(left) if k not in {k2 for k2, _ in out}]
+        return self.read(step, p, pool, steps)
+
+    def read(self, step, p, pool, steps):
         rec = load_record(self.cache_dir, p, pool.rescue)
         if step in ("a", "b") and self.transcribe and not free_can(pool, rec, self.lite):
             # Nobody here can take its next step now (out of quota): the helper's models.
             self.back(p, pool.live)
-            return None
+            return []
         local = open_pdf(self.filepath)
         try:
             if step in ("a", "b"):
@@ -2330,7 +2395,7 @@ class Book:
                     self.vocab.update(norm_words((rec.get("b") or {}).get("text") or ""))
                     if (rec.get("status") == "ok", (rec.get("b") or {}).get("status") == "ok") != had:
                         self.free_moved.add(p)
-                return self.next_step(p, rec, steps) if rec else None
+                return self.next_steps(p, rec, steps) if rec else []
             tess = tesseract_for(self.filepath, self.cache_dir, p)
             if self.transcribe and rec.get("hfinal"):
                 result = check_helper_page(rec, tess, self.vocab, pool.live)
@@ -2343,7 +2408,7 @@ class Book:
                 else:
                     with self.hand_lock:
                         self.waits += 1
-                return None
+                return []
             save_record(self.cache_dir, rec)
             pool.live.page(p, page_state(rec))
             c = rec["check"]
@@ -2352,7 +2417,7 @@ class Book:
                 with self.hand_lock:
                     self.free_done.add(p)
                     self.free_moved.add(p)
-            return None
+            return []
         finally:
             close_pdf(local)
 
