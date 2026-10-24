@@ -154,8 +154,7 @@ class HelperPipeline(PipelineBase):
         self.assertEqual(self.drive.json("book.json")["need"], [30, 31])
         # The book's folder was made anew: the readings sent to the old one are sent again.
         for p in (30, 31):
-            self.assertEqual(self.drive.json(f"p{p:04d}.a.json")["text"], WRONG.strip())
-            self.assertEqual(self.drive.json(f"p{p:04d}.b.json")["text"], TRUE.strip())
+            self.assertEqual({self.drive.json(f"p{p:04d}.{k}.json")["text"] for k in "ab"}, {WRONG.strip(), TRUE.strip()})
 
     def test_a_settler_running_out_mid_run_hands_its_pages_over_with_their_readings(self):
         gone = Exception("429 RESOURCE_EXHAUSTED GenerateRequestsPerDayPerProjectPerModel-FreeTier")
@@ -186,7 +185,9 @@ class HelperPipeline(PipelineBase):
         self.assertTrue(handed[1], handed)
         self.assertEqual(handed[-1], [30, 31])
         for p in (30, 31):
-            self.assertEqual(self.drive.json(f"p{p:04d}.b.json")["model"], "gemini-3.1-flash-lite")
+            # Both readings go with the page (the two boxes may read it in either order).
+            self.assertEqual({self.drive.json(f"p{p:04d}.{k}.json")["model"] for k in "ab"},
+                             {"gemini-3.5-flash-lite", "gemini-3.1-flash-lite"})
 
     def test_the_helpers_roles_come_from_the_boxes(self):
         def roles(mode):
@@ -237,10 +238,11 @@ class HelperPipeline(PipelineBase):
         self.assertNotIn("reconcile", asked(fake))
         self.assertEqual(st["pages_helper"], [30, 31])
         # Both free readings of page 31 go to the helper's models, which settle on them.
-        self.assertEqual(self.drive.json("p0031.a.json")["text"], WRONG.strip())
-        self.assertEqual(self.drive.json("p0031.b.json")["model"], "gemini-3.1-flash-lite")
+        a, b = (self.drive.json(f"p0031.{k}.json") for k in "ab")
+        self.assertEqual({a["text"], b["text"]}, {WRONG.strip(), TRUE.strip()})
+        self.assertEqual({a["model"], b["model"]}, {"gemini-3.5-flash-lite", "gemini-3.1-flash-lite"})
         self.drive.put("p0031.final.json", {"page": 31, "model": CHIP, "text": TRUE,
-                                            "a_sha": helperbox.sha(WRONG.strip()), "b_sha": helperbox.sha(TRUE.strip())})
+                                            "a_sha": helperbox.sha(a["text"]), "b_sha": helperbox.sha(b["text"])})
         code, st, md, fake = self.run_helper(free)
         rec = self.records()[31]
         self.assertEqual((rec["b"]["model"], rec["check"]["state"], rec["check"]["model"]),
@@ -293,9 +295,11 @@ class HelperPipeline(PipelineBase):
         self.assertEqual(st["pages_helper"], [30, 31])
         self.assertEqual(self.drive.json("book.json")["need"], [30, 31])
         for page in (30, 31):
-            self.assertEqual(self.drive.json(f"p{page:04d}.b.json")["text"], TRUE.strip())
+            # The two readings, in either order (the two boxes read at once).
+            a, b = (self.drive.json(f"p{page:04d}.{k}.json")["text"] for k in "ab")
+            self.assertEqual({a, b}, {WRONG.strip(), TRUE.strip()})
             self.drive.put(f"p{page:04d}.final.json", {"page": page, "model": CHIP, "text": TRUE,
-                                                        "a_sha": helperbox.sha(WRONG.strip()), "b_sha": helperbox.sha(TRUE.strip())})
+                                                        "a_sha": helperbox.sha(a), "b_sha": helperbox.sha(b)})
         code, st, md, fake = self.run_helper(free, mode="settle")
         self.assertEqual(code, 0, st)
         self.assertEqual({r["check"]["model"] for r in self.records().values()}, {CHIP})
