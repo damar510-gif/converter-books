@@ -1,7 +1,7 @@
 {
   "state": "paused",
   "pages_total": 509,
-  "pages_done": 86,
+  "pages_done": 87,
   "pages_helper": [
     1,
     2,
@@ -218,7 +218,6 @@
     257,
     260,
     269,
-    283,
     284,
     285,
     286,
@@ -447,6 +446,7 @@
     277,
     280,
     282,
+    283,
     328,
     490,
     491,
@@ -469,7 +469,7 @@
   "pages_retry": [],
   "pages_human": [],
   "helper_checked": 0,
-  "review_items": 154,
+  "review_items": 155,
   "review_applied": 0,
   "review_kept": 0,
   "review_conflicts_new": 0,
@@ -477,14 +477,14 @@
   "free_left": false,
   "free_done": 0,
   "stages": {
-    "helper": 415,
+    "helper": 414,
     "done": 52,
-    "unsure": 34,
+    "unsure": 35,
     "read2": 8
   },
   "requests": {
-    "gemma-4-31b-it": 27,
-    "gemma-4-26b-a4b-it": 45
+    "gemma-4-31b-it": 30,
+    "gemma-4-26b-a4b-it": 57
   },
   "models_out": [
     "gemini-3-flash-preview",
@@ -547,8 +547,8 @@
   },
   "book": "تراث الانسانية 2_k2opt",
   "epub": "تراث الانسانية 2_k2opt.epub",
-  "updated_at": "2026-10-24T22:53:54Z",
+  "updated_at": "2026-10-24T23:54:49Z",
   "quota_day": "2026-10-24",
-  "run_id": 40136926690,
-  "run_number": 100
+  "run_id": 40141156299,
+  "run_number": 101
 }

@@ -6,8 +6,8 @@
 - لم تُحسم (مشكوك فيها): 80
 - قُرئت ولم تُراجع بعد: 194
 - لم تُقرأ بعد: 7
-- طلبات gemma-4-31b-it في هذا التشغيل: 27
-- طلبات gemma-4-26b-a4b-it في هذا التشغيل: 45
+- طلبات gemma-4-31b-it في هذا التشغيل: 30
+- طلبات gemma-4-26b-a4b-it في هذا التشغيل: 57
 - نماذج مجانية جديدة أُضيفت تلقائياً: gemini-3.5-flash، gemini-3.1-pro-preview
 - القراءة الأولى (من صفحة الحالة): gemma-4-31b-it، gemma-4-26b-a4b-it، gemini-3.5-flash، gemini-3.7-flash، gemini-3.8-flash، gemini-3.6-flash
 - القراءة الثانية (من صفحة الحالة): gemini-3.1-flash-lite، gemini-3.5-flash-lite
