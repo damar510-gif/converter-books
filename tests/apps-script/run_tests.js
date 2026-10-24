@@ -904,31 +904,28 @@ test('a run of several books: each is delivered once done, a failed one does not
   minutes(env, 30);
   writeStatus(env, a.id, 'paused', { waiting_for: 'time', stages: { done: 4, unread: 300 } });
   tick(env);
-  // a still has many pages to read first: only it (the first readers have work in it).
-  assert.strictEqual(lastDispatch(env).body.inputs.queue, undefined);
-  minutes(env, 30);
-  writeStatus(env, a.id, 'paused', { waiting_for: 'time', stages: { done: 4, read2: 6 } });
-  tick(env);
-  // Nothing left to read first in a: the next books join (from «1- جديد», oldest first).
+  // The books in «1- جديد» join while the run has room (each box takes a's pages first), even
+  // with many pages of a left to read first: one back from «5- مشكلة» may have pages to settle.
   let d = lastDispatch(env).body.inputs;
-  assert.deepStrictEqual(JSON.parse(d.queue).books.map((x) => x.id), [b.id]);
+  assert.deepStrictEqual(JSON.parse(d.queue).books.map((x) => x.id), [b.id, c.id]);
   minutes(env, 30);
   writeStatus(env, a.id, 'done', { epub: 'أ.epub' });   // its EPUB is not in the results: converted again
   writeStatus(env, b.id, 'failed', { reason: 'not a PDF' });
+  writeStatus(env, c.id, 'paused', { waiting_for: 'time', stages: { done: 2, unread: 300 } });
   tick(env);
   assert.strictEqual(jobs(env)[a.id].failStreak, 1);
   assert.strictEqual(jobs(env)[b.id].failStreak, 1);
-  assert.strictEqual(env.gh.dispatches.length, 4, 'one run for the queue, not one per book');
+  assert.strictEqual(env.gh.dispatches.length, 3, 'one run for the queue, not one per book');
   d = lastDispatch(env).body.inputs;
-  assert.deepStrictEqual([d.drive_file_id, JSON.parse(d.queue).books.map((x) => x.id)], [a.id, [b.id]]);
+  assert.deepStrictEqual([d.drive_file_id, JSON.parse(d.queue).books.map((x) => x.id)], [a.id, [b.id, c.id]]);
   minutes(env, 30);
   writeStatus(env, a.id, 'done', { epub: 'أ.epub' });
   writeEpub(env, a.id, 'أ.epub');
   writeStatus(env, b.id, 'paused', { waiting_for: 'time', stages: { done: 2, read2: 8 } });
+  writeStatus(env, c.id, 'paused', { waiting_for: 'time', stages: { done: 2, read2: 8 } });
   tick(env);
   assert.strictEqual(jobs(env)[a.id].stage, 'delivered');
   assert.strictEqual(jobs(env)[b.id].failStreak, 0, 'a failure counts only in a row');
-  // b has nothing left to read first: c joins.
   d = lastDispatch(env).body.inputs;
   assert.deepStrictEqual([d.drive_file_id, JSON.parse(d.queue).books.map((x) => x.id)], [b.id, [c.id]]);
   minutes(env, 30);
@@ -1257,36 +1254,39 @@ test('network failure on dispatch is retried silently', () => {
   assert.strictEqual(jobs(env)[f.id].attempts, 1);
 });
 
-test('only one active job when several books are queued; the next starts when one finishes', () => {
+test('several books in «1- جديد»: one run carries them, the oldest its own; the next run starts when it ends', () => {
   const env = readyEnv();
   const b1 = addBook(env, 'الثاني.pdf', { ageMin: 20 });
   const b0 = addBook(env, 'الأول.pdf', { ageMin: 30 });
   const b2 = addBook(env, 'الثالث.pdf', { ageMin: 10 });
   tick(env);
   assert.strictEqual(env.gh.dispatches.length, 1);
-  assert.strictEqual(lastDispatch(env).body.inputs.drive_file_id, b0.id, 'oldest first');
-  assert.deepStrictEqual(names(env, 'working'), ['الأول.pdf']);
-  assert.strictEqual(names(env, 'inbox').length, 2);
+  let d = lastDispatch(env).body.inputs;
+  assert.deepStrictEqual([d.drive_file_id, JSON.parse(d.queue).books.map((x) => x.id)], [b0.id, [b1.id, b2.id]], 'oldest first');
+  assert.strictEqual(names(env, 'inbox').length, 0);
   env.gh.runs = [{ id: 1, status: 'in_progress', created_at: ghTime(env.clock + 5000) }];
   for (let i = 0; i < 3; i++) { minutes(env, 10); tick(env); }
-  assert.strictEqual(env.gh.dispatches.length, 1);
+  assert.strictEqual(env.gh.dispatches.length, 1, 'one run at a time');
 
   writeStatus(env, b0.id, 'done', { epub: 'الأول.epub' });
   writeEpub(env, b0.id, 'الأول.epub');
+  writeStatus(env, b1.id, 'paused', { waiting_for: 'time', stages: { done: 2, read2: 8 } });
+  writeStatus(env, b2.id, 'paused', { waiting_for: 'time', stages: { unread: 10 } });
   tick(env);
-  assert.strictEqual(env.gh.dispatches.length, 2, 'next book started in the same check');
-  assert.strictEqual(lastDispatch(env).body.inputs.drive_file_id, b1.id);
-  assert.deepStrictEqual(names(env, 'working'), ['الثاني.pdf']);
-  assert.ok(b2);
+  assert.strictEqual(env.gh.dispatches.length, 2, 'next run started in the same check');
+  d = lastDispatch(env).body.inputs;
+  assert.deepStrictEqual([d.drive_file_id, JSON.parse(d.queue).books.map((x) => x.id)], [b1.id, [b2.id]]);
+  assert.strictEqual(jobs(env)[b0.id].stage, 'delivered');
 });
 
 test('a book left in قيد التحويل without a job is picked up again', () => {
   const env = readyEnv();
   const f = addBook(env, 'يتيم.pdf', { folder: 'working' });
-  addBook(env, 'جديد.pdf', { ageMin: 60 });
+  const g = addBook(env, 'جديد.pdf', { ageMin: 60 });
   tick(env);
-  assert.strictEqual(lastDispatch(env).body.inputs.drive_file_id, f.id);
-  assert.strictEqual(names(env, 'inbox').length, 1);
+  const d = lastDispatch(env).body.inputs;
+  assert.deepStrictEqual([d.drive_file_id, JSON.parse(d.queue).books.map((x) => x.id)], [g.id, [f.id]], 'oldest first');
+  assert.strictEqual(names(env, 'inbox').length, 0);
 });
 
 test('a book that cannot be moved is skipped in favour of the next one', () => {
@@ -1328,7 +1328,7 @@ test('token expiry: warned two weeks ahead and three days ahead, once each', () 
 test('getStatus returns sane JSON for the page', () => {
   const env = readyEnv();
   const f = addBook(env, 'الأول.pdf', { ageMin: 30 });
-  addBook(env, 'التالي.pdf', { ageMin: 20 });
+  const g = addBook(env, 'التالي.pdf', { ageMin: 20 });
   let s = status(env);
   assert.strictEqual(s.ok, true);
   assert.strictEqual(s.active, null);
@@ -1339,12 +1339,13 @@ test('getStatus returns sane JSON for the page', () => {
   assert.strictEqual(s.active.title, 'الأول');
   assert.strictEqual(s.active.stage, 'running');
   assert.strictEqual(s.active.minutes, 75);
-  assert.strictEqual(s.queued, 1);
+  assert.strictEqual(s.queued, 0, 'the other book is in the run');
   assert.deepStrictEqual(s.recent, []);
   assert.ok(/^https:\/\/drive\.google\.com\/drive\/folders\//.test(s.links.inbox));
   assert.ok(s.lastTick);
   writeStatus(env, f.id, 'done', { epub: 'الأول.epub' });
   writeEpub(env, f.id, 'الأول.epub');
+  writeStatus(env, g.id, 'paused', { waiting_for: 'time', stages: { unread: 10 } });
   tick(env);
   s = status(env);
   assert.strictEqual(s.recent.length, 1);
@@ -2872,7 +2873,7 @@ test('the page: one board, any model in any box with a tap (or a drag), saved, a
 test('the page: the waiting books by name in their order, and how each finished book ended', () => {
   const env = readyEnv();
   const first = addBook(env, 'أول.pdf', { ageMin: 30 });
-  addBook(env, 'ثان.pdf', { ageMin: 20 });
+  addBook(env, 'ثان.docx', { ageMin: 20 });
   addBook(env, 'ثالث.docx', { ageMin: 10 });
   tick(env);
   let s = status(env);
@@ -3574,7 +3575,7 @@ test('the page: the other books of the run under «الآن» with their pages, 
   minutes(env, 30);
   writeStatus(env, a.id, 'paused', { waiting_for: 'time', stages: { done: 400, read2: 100 }, pages_total: 500 });
   const b = addBook(env, 'ثان.pdf', { ageMin: 12 });
-  const c = addBook(env, 'ثالث.pdf');
+  const c = addBook(env, 'ثالث.docx');
   tick(env);
   const d = lastDispatch(env).body.inputs;
   assert.deepStrictEqual(JSON.parse(d.queue).books.map((x) => x.id), [b.id]);
@@ -3598,8 +3599,8 @@ test('the page: the other books of the run under «الآن» with their pages, 
   assert.ok(/400 *من 500 صفحة أُنجزت/.test(now), 'the first book\'s own pages: ' + now);
   const free = pg.byId.boxes.textContent + pg.byId.free.textContent;
   assert.ok(/ص 3 من «ثان»/.test(free) && /قرأ ص 2 من «ثان»/.test(free), free);
-  // c waits in «1- جديد»: it joins when the first readers need it.
-  assert.ok(names(env, 'inbox').indexOf('ثالث.pdf') >= 0);
+  // c (not a PDF) waits in «1- جديد» for a run of its own.
+  assert.ok(names(env, 'inbox').indexOf('ثالث.docx') >= 0);
   // The run is over; b waits in the queue while a holds the turn.
   minutes(env, 40);
   writeStatus(env, a.id, 'paused', { quota_day: '2026-10-23', stages: { done: 450, read2: 50 }, models_out: LITES });
@@ -3609,7 +3610,7 @@ test('the page: the other books of the run under «الآن» with their pages, 
   assert.deepStrictEqual(s.parked.map((p) => [p.title, p.stage]), [['ثان', 'waiting']]);
   const page = pageSandbox(env, s);
   assert.ok(/«ثان»[\s\S]*في الطابور/.test(page.byId.queue.textContent), page.byId.queue.textContent);
-  assert.strictEqual(c.id && jobs(env)[c.id], undefined, 'not taken before it is needed');
+  assert.strictEqual(c.id && jobs(env)[c.id], undefined, 'not taken while a holds the turn');
 });
 
 test('the fake GitHub saw only known endpoints', () => {
