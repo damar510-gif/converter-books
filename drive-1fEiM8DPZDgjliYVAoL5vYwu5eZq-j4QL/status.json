@@ -483,7 +483,7 @@
  "review_conflicts_new": 0,
  "review_seen": "",
  "free_left": false,
- "free_done": 1,
+ "free_done": 0,
  "stages": {
   "done": 43,
   "unsure": 22,
@@ -491,9 +491,9 @@
  },
  "book": "تراث الانسانية 3_k2opt",
  "epub": "تراث الانسانية 3_k2opt.epub",
- "updated_at": "2026-10-24T17:46:14Z",
+ "updated_at": "2026-10-24T19:14:59Z",
  "quota_day": "2026-10-24",
  "waiting_for": "helper",
- "run_id": 40113639720,
- "run_number": 94
+ "run_id": 40118198352,
+ "run_number": 96
 }
