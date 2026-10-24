@@ -1,13 +1,10 @@
 {
   "state": "paused",
   "pages_total": 509,
-  "pages_done": 135,
+  "pages_done": 147,
   "pages_helper": [
-    97,
-    98,
-    99,
-    100,
-    509
+    108,
+    110
   ],
   "pages_unsure": [
     1,
@@ -32,6 +29,10 @@
     87,
     89,
     95,
+    97,
+    98,
+    101,
+    109,
     471,
     478,
     485,
@@ -42,22 +43,13 @@
   ],
   "pages_missing": [
     47,
-    90,
-    101,
+    105,
+    107,
     474
   ],
   "pages_waiting": [
     40,
     55,
-    102,
-    103,
-    104,
-    105,
-    106,
-    107,
-    108,
-    109,
-    110,
     111,
     112,
     113,
@@ -415,24 +407,24 @@
   ],
   "pages_retry": [],
   "pages_human": [],
-  "helper_checked": 132,
-  "review_items": 264,
+  "helper_checked": 144,
+  "review_items": 290,
   "review_applied": 0,
   "review_kept": 0,
   "review_conflicts_new": 0,
   "review_seen": "",
   "free_left": true,
-  "free_done": 2,
+  "free_done": 1,
   "stages": {
-    "unsure": 29,
-    "done": 106,
+    "unsure": 33,
+    "done": 114,
     "read1": 2,
     "failed": 4,
-    "helper": 5,
-    "unread": 363
+    "helper": 2,
+    "unread": 354
   },
   "requests": {
-    "gemma-4-31b-it": 28
+    "gemma-4-31b-it": 24
   },
   "models_out": [
     "gemini-3-flash-preview",
@@ -490,9 +482,9 @@
   },
   "book": "تراث الانسانية 4_k2opt",
   "epub": "تراث الانسانية 4_k2opt.epub",
-  "updated_at": "2026-10-24T04:38:12Z",
+  "updated_at": "2026-10-24T05:23:40Z",
   "quota_day": "2026-10-23",
   "waiting_for": "helper",
-  "run_id": 40060150263,
-  "run_number": 76
+  "run_id": 40063488840,
+  "run_number": 77
 }
