@@ -475,7 +475,7 @@
   "review_conflicts_new": 0,
   "review_seen": "",
   "free_left": false,
-  "free_done": 1,
+  "free_done": 0,
   "stages": {
     "helper": 415,
     "done": 52,
@@ -483,8 +483,8 @@
     "read2": 8
   },
   "requests": {
-    "gemma-4-31b-it": 26,
-    "gemma-4-26b-a4b-it": 48
+    "gemma-4-31b-it": 27,
+    "gemma-4-26b-a4b-it": 45
   },
   "models_out": [
     "gemini-3-flash-preview",
@@ -547,8 +547,8 @@
   },
   "book": "تراث الانسانية 2_k2opt",
   "epub": "تراث الانسانية 2_k2opt.epub",
-  "updated_at": "2026-10-24T21:54:36Z",
+  "updated_at": "2026-10-24T22:53:54Z",
   "quota_day": "2026-10-24",
-  "run_id": 40132544490,
-  "run_number": 99
+  "run_id": 40136926690,
+  "run_number": 100
 }
