@@ -910,6 +910,23 @@ class Queue(PipelineBase):
         self.assertEqual({c.box_of(r["a"], "a"), c.box_of(r["b"], "b")}, {"read1", "read2"})
 
 
+class Needs(unittest.TestCase):
+    def test_each_box_says_which_models_could_take_its_pages(self):
+        pool = c.ModelPool("gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemma-4-26b-a4b-it", 10)
+        pool.set_boxes({"read1": ["gemma-4-31b-it"], "read2": ["gemini-3.5-flash-lite", "gemini-3.1-flash-lite"],
+                        "settle": []})
+        ok = {"status": "ok", "text": "x"}
+        recs = [{"page": 1, "status": "pending"},
+                {"page": 2, "status": "ok", "a": dict(ok, model="gemma-4-31b-it")},
+                {"page": 3, "status": "ok", "a": dict(ok, model="gemini-3.5-flash-lite", box="read2")},
+                {"page": 4, "status": "ok", "a": dict(ok, model="gemma-4-31b-it"), "b": dict(ok, model="gemini-3.1-flash-lite")}]
+        n = c.book_needs(pool, recs, True)
+        lites = "gemini-3.1-flash-lite,gemini-3.5-flash-lite"
+        self.assertEqual(n["read1"], {"gemma-4-31b-it": 2}, "page 1, and page 3 read by the second box")
+        self.assertEqual(n["read2"], {lites: 2})
+        self.assertEqual(n["settle"], {}, "an empty settling box: nobody")
+
+
 class StepQueues(unittest.TestCase):
     def test_oldest_book_first_and_a_page_at_work_is_never_queued_twice(self):
         steps = c.Steps()

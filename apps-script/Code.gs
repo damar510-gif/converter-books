@@ -945,8 +945,80 @@ function read1Free_(ctx) {
 
 /** The book has pages with no first reading (or was never run). */
 function hasRead1Work_(job) {
+  return boxWork_(job, ['read1']);
+}
+
+/**
+ * {read1, read2, settle}: for each box, the pages waiting for it by the free models that could
+ * take them ({"model,model": n}, converter.book_needs), checked.
+ */
+function cleanNeeds_(v) {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return undefined;
+  var out = {};
+  FREE_KEYS.forEach(function (k) {
+    out[k] = {};
+    var m = v[k];
+    if (!m || typeof m !== 'object' || Array.isArray(m)) return;
+    Object.keys(m).slice(0, 20).forEach(function (key) {
+      var n = Math.floor(Number(m[key]) || 0);
+      if (n > 0 && /^[a-z0-9.,-]{1,400}$/.test(key)) out[k][key] = n;
+    });
+  });
+  return out;
+}
+
+/**
+ * The book has pages for one of these boxes that a free model with quota left today could take
+ * (each box goes its own way, the user's rule 2026-10-24): what the last run said (needs), else
+ * guessed from its stages (an older run: its pages nobody read; those "with the helper's
+ * models" in a book none of whose pages were read yet are such).
+ */
+function boxWork_(job, keys) {
+  var n = job.needs;
+  if (n) {
+    var out = freeOut_();
+    return keys.some(function (k) {
+      return Object.keys(n[k] || {}).some(function (models) {
+        return models.split(',').some(function (id) { return out.indexOf(id) < 0; });
+      });
+    });
+  }
   var st = job.stages;
-  return !st || (Number(st.unread) || 0) + (Number(st.failed) || 0) > 0;
+  // Never converted: every page is unread (a run that said nothing of its pages: unknown).
+  if (!st) return !job.lastState && keys.some(function (k) { return k !== 'settle'; });
+  var num = function (k) { return Number(st[k]) || 0; };
+  var fresh = !num('done') && !num('unsure') && !num('read1') && !num('read2');
+  var unread = num('unread') + num('failed') + (fresh ? num('helper') : 0);
+  // Who could take a page read once, or settle one read twice, an older run did not say.
+  return unread > 0 && keys.some(function (k) { return k !== 'settle'; });
+}
+
+/** A new PDF waits in «1- جديد» and a reading box's free models can work now (it joins the run). */
+function inboxWork_(ctx) {
+  if (!ctx.folders || !freeBoxesNow_().some(function (k) { return k !== 'settle'; })) return false;
+  var files = [];
+  try { files = scanInbox_(ctx.folders.inbox).ready; } catch (err) { Logger.log('inbox: ' + err); }
+  return files.some(function (f) {
+    var ext = SUPPORTED_EXT[extOf_(f.getName())] ? extOf_(f.getName()) : MIME_EXT[f.getMimeType()] || 'pdf';
+    return ext === 'pdf' && !ctx.jobs[f.getId()];
+  });
+}
+
+/** The boxes with a free model that has quota left today. */
+function freeBoxesNow_() {
+  var info = freeInfo_();
+  var out = freeOut_();
+  return FREE_KEYS.filter(function (k) {
+    return info.boxes[k].some(function (id) { return out.indexOf(id) < 0; });
+  });
+}
+
+/** A book of the queue (not one of these) has pages for a box whose free models can work now. */
+function queueWork_(ctx, besides) {
+  var free = freeBoxesNow_();
+  return free.length > 0 && queueJobs_(ctx).some(function (j) {
+    return (besides || []).indexOf(j) < 0 && boxWork_(j, free);
+  });
 }
 
 /**
@@ -972,6 +1044,18 @@ function runWindow_(ctx, lead) {
   if (reads && ahead()) {
     var next = books.filter(function (j) { return run.indexOf(j) < 0 && hasRead1Work_(j); })[0];
     if (next) run.push(next);
+  }
+  // A box whose free models can work has nothing in the run's books: the next book that has
+  // pages for it joins (each box goes its own way).
+  var free = freeBoxesNow_();
+  var idle = function () {
+    return free.filter(function (k) { return !run.some(function (j) { return boxWork_(j, [k]); }); });
+  };
+  for (var left = idle(); left.length;) {
+    var more = books.filter(function (j) { return run.indexOf(j) < 0 && boxWork_(j, left); })[0];
+    if (!more) break;
+    run.push(more);
+    left = idle();
   }
   // A book in «1- جديد» may have pages for the other boxes too (one back from «5- مشكلة» keeps
   // its readings), and each box takes the oldest book's pages first: the run takes it while it
@@ -1008,6 +1092,7 @@ function noteBook_(job, s) {
   if (s.pages_total) job.pagesTotal = Number(s.pages_total) || 0;
   if (s.pages_done !== undefined) job.pagesDone = Number(s.pages_done) || 0;
   job.stages = cleanStages_(s.stages);
+  job.needs = cleanNeeds_(s.needs);
   if (s.state !== 'failed') job.failStreak = 0;
   delete job.helperOff;
 }
@@ -1114,20 +1199,13 @@ function handleRun_(ctx, lead, s) {
   var has = function (k) { return reasons.indexOf(k) >= 0; };
   var why = has('time') || !reasons.length ? 'time' : has('paused') ? 'paused' : has('boxes') ? 'boxes' : 'helper';
   // A book not in this run (or a new one) has pages to read first, and the first readers can.
-  if (why !== 'time' && read1Free_(ctx) && queue.some(function (j) {
-    return books.every(function (b) { return b.job !== j; }) && hasRead1Work_(j);
-  })) why = 'time';
+  if (why !== 'time' && queueWork_(ctx, books.map(function (b) { return b.job; }))) why = 'time';
   if (why !== 'time' && boxesMissed_(holder) && anyoneWorks_(ctx)) why = 'time';
   var tag = 'run over' + (done.length ? ' (' + done.join('; ') + ')' : '') + ', ';
   if (why === 'time') {
     // At most MAX_TIME_RUNS such runs a Pacific day; then the queue waits for the next day.
     var today = pacificDay_(now_());
-    if (holder.timeDay !== today) {
-      holder.timeDay = today;
-      holder.timeRuns = 0;
-    }
-    holder.timeRuns = (holder.timeRuns || 0) + 1;
-    if (holder.timeRuns <= CONFIG.MAX_TIME_RUNS) {
+    if (timeRun_(holder)) {
       saveJobs_(ctx.jobs);
       journal_('end', 'انتهى التشغيل وللنماذج عمل باقٍ: ' + stagesText_(holder.stages) + '.', holder.title);
       return tag + 'go on: ' + dispatch_(ctx, holder, false, 'يكمل ما بقي');
@@ -1152,6 +1230,17 @@ function handleRun_(ctx, lead, s) {
   }
   saveJobs_(ctx.jobs);
   return tag + 'waiting (' + why + ')';
+}
+
+/** One more run of the day that goes on at once: true while a day has at most MAX_TIME_RUNS. */
+function timeRun_(job) {
+  var today = pacificDay_(now_());
+  if (job.timeDay !== today) {
+    job.timeDay = today;
+    job.timeRuns = 0;
+  }
+  job.timeRuns = (job.timeRuns || 0) + 1;
+  return job.timeRuns <= CONFIG.MAX_TIME_RUNS;
 }
 
 /** The user's models finished the pages of some book of the queue they were given. */
@@ -1218,6 +1307,11 @@ function resumeIfNewDay_(ctx, job) {
   }
   // The helper's models read what the free model could not: no need to wait for tomorrow.
   if (helperDoneFor_(ctx, job)) return 'helper finished, resume: ' + dispatch_(ctx, job, false, 'أنهت نماذجك ما أُعطيت');
+  // Another book of the queue has pages for a box whose free models can work now (the book
+  // holding the turn waits for other models): the queue goes on (each box its own way).
+  if ((queueWork_(ctx, [job]) || inboxWork_(ctx)) && timeRun_(job)) {
+    return 'work for a box, resume: ' + dispatch_(ctx, job, false, 'لنماذج أحد المربعات عمل في كتب الطابور');
+  }
   return 'paused until after ' + job.pausedDay + ' (Pacific)';
 }
 
