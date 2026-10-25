@@ -298,20 +298,21 @@
  "review_kept": 0,
  "review_conflicts_new": 0,
  "review_seen": "",
- "free_left": false,
+ "free_left": true,
  "free_done": 0,
  "stages": {
   "unsure": 80,
   "done": 228,
   "read2": 13,
   "helper": 180,
-  "unread": 7,
-  "read1": 1
+  "read1": 6,
+  "unread": 2
  },
  "book": "تراث الانسانية 4_k2opt",
  "epub": "تراث الانسانية 4_k2opt.epub",
- "updated_at": "2026-10-24T23:54:58Z",
+ "updated_at": "2026-10-25T00:51:39Z",
  "quota_day": "2026-10-24",
- "run_id": 40141156299,
- "run_number": 101
+ "waiting_for": "helper",
+ "run_id": 40145207167,
+ "run_number": 102
 }
