@@ -3,10 +3,10 @@
 - عدد الصفحات: 525
 - فارغة/صور: 3
 - قُرئت ولم تُراجع بعد: 522
-- طلبات gemma-4-31b-it في هذا التشغيل: 4
-- طلبات gemma-4-26b-a4b-it في هذا التشغيل: 3
+- طلبات gemma-4-31b-it في هذا التشغيل: 2
+- طلبات gemma-4-26b-a4b-it في هذا التشغيل: 2
 - نماذج مجانية جديدة أُضيفت تلقائياً: gemini-3.5-flash، gemini-3.1-pro-preview
-- القراءة الأولى (من صفحة الحالة): gemma-4-31b-it، gemma-4-26b-a4b-it، gemini-3.5-flash، gemini-3.7-flash، gemini-3.8-flash، gemini-3.6-flash
+- القراءة الأولى (من صفحة الحالة): gemma-4-31b-it، gemma-4-26b-a4b-it
 - القراءة الثانية (من صفحة الحالة): gemini-3.1-flash-lite، gemini-3.5-flash-lite
 - الحسم (من صفحة الحالة): 
 
