@@ -278,7 +278,6 @@
   299,
   300,
   301,
-  302,
   303,
   304,
   305,
@@ -462,6 +461,7 @@
   285,
   286,
   293,
+  302,
   453
  ],
  "pages_retry": [],
@@ -475,10 +475,10 @@
  "free_left": false,
  "free_done": 0,
  "stages": {
-  "helper": 430,
+  "helper": 429,
   "done": 3,
   "read2": 16,
-  "read1": 7,
+  "read1": 8,
   "unsure": 1
  },
  "needs": {
@@ -486,15 +486,14 @@
    "gemma-4-26b-a4b-it,gemma-4-31b-it": 1
   },
   "read2": {
-   "gemini-3.1-flash-lite,gemini-3.5-flash-lite": 38
+   "gemini-3.1-flash-lite,gemini-3.5-flash-lite": 37
   },
   "settle": {}
  },
  "book": "تراث الانسانية 5_k2opt",
  "epub": "تراث الانسانية 5_k2opt.epub",
- "updated_at": "2026-10-25T05:02:30Z",
+ "updated_at": "2026-10-25T05:50:13Z",
  "quota_day": "2026-10-24",
- "waiting_for": "time",
- "run_id": 40162828457,
- "run_number": 108
+ "run_id": 40164169101,
+ "run_number": 109
 }
