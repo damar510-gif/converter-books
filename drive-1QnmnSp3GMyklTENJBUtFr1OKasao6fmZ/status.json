@@ -444,23 +444,23 @@
  "pages_unsure": [],
  "pages_missing": [
   31,
-  37,
-  39,
-  43
+  43,
+  63,
+  65,
+  67,
+  71
  ],
  "pages_waiting": [
   19,
   25,
   27,
   29,
+  37,
+  39,
   41,
   47,
   51,
   62,
-  63,
-  65,
-  67,
-  71,
   73,
   79,
   81,
@@ -515,13 +515,13 @@
  "stages": {
   "helper": 437,
   "done": 2,
-  "read1": 6,
-  "failed": 4,
-  "unread": 46
+  "read1": 29,
+  "failed": 6,
+  "unread": 21
  },
  "needs": {
   "read1": {
-   "gemma-4-26b-a4b-it,gemma-4-31b-it": 50
+   "gemma-4-26b-a4b-it,gemma-4-31b-it": 27
   },
   "read2": {
    "gemini-3.1-flash-lite,gemini-3.5-flash-lite": 493
@@ -530,9 +530,9 @@
  },
  "book": "تراث الانسانية 7_k2opt",
  "epub": "تراث الانسانية 7_k2opt.epub",
- "updated_at": "2026-10-25T05:50:13Z",
+ "updated_at": "2026-10-25T06:40:22Z",
  "quota_day": "2026-10-24",
  "waiting_for": "helper",
- "run_id": 40164169101,
- "run_number": 109
+ "run_id": 40167166183,
+ "run_number": 110
 }
