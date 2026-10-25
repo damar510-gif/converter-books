@@ -1,7 +1,7 @@
 {
  "state": "paused",
  "pages_total": 495,
- "pages_done": 2,
+ "pages_done": 3,
  "pages_helper": [],
  "pages_unsure": [],
  "pages_missing": [],
@@ -47,7 +47,6 @@
   40,
   41,
   42,
-  43,
   44,
   45,
   46,
@@ -508,11 +507,11 @@
  "review_kept": 0,
  "review_conflicts_new": 0,
  "review_seen": "",
- "free_left": true,
+ "free_left": false,
  "free_done": 0,
  "stages": {
-  "read1": 493,
-  "done": 2
+  "read1": 492,
+  "done": 3
  },
  "needs": {
   "read1": {
@@ -525,9 +524,8 @@
  },
  "book": "تراث الانسانية 7_k2opt",
  "epub": "تراث الانسانية 7_k2opt.epub",
- "updated_at": "2026-10-25T11:38:15Z",
+ "updated_at": "2026-10-25T12:33:14Z",
  "quota_day": "2026-10-25",
- "waiting_for": "helper",
- "run_id": 40186626299,
- "run_number": 118
+ "run_id": 40190089425,
+ "run_number": 119
 }
