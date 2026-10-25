@@ -1,7 +1,7 @@
 {
   "state": "paused",
   "pages_total": 509,
-  "pages_done": 148,
+  "pages_done": 177,
   "pages_helper": [
     15,
     16,
@@ -345,12 +345,24 @@
     9,
     13,
     14,
+    41,
+    48,
+    53,
+    54,
+    57,
+    70,
+    71,
+    80,
     87,
     88,
     89,
     91,
     92,
     93,
+    106,
+    112,
+    130,
+    131,
     179,
     180,
     181,
@@ -362,6 +374,8 @@
     191,
     204,
     205,
+    226,
+    244,
     254,
     256,
     266,
@@ -397,71 +411,41 @@
     505
   ],
   "pages_missing": [],
-  "pages_waiting": [
-    4,
-    10,
-    32,
-    41,
-    44,
-    48,
-    51,
-    52,
-    53,
-    54,
-    56,
-    57,
-    63,
-    67,
-    70,
-    71,
-    73,
-    75,
-    76,
-    77,
-    80,
-    106,
-    112,
-    130,
-    131,
-    135,
-    226,
-    244,
-    301
-  ],
+  "pages_waiting": [],
   "pages_retry": [],
   "pages_human": [],
-  "helper_checked": 10,
-  "review_items": 358,
+  "helper_checked": 31,
+  "review_items": 505,
   "review_applied": 0,
   "review_kept": 0,
   "review_conflicts_new": 0,
   "review_seen": "",
-  "free_left": false,
+  "free_left": true,
   "free_done": 0,
+  "boxes_at": "2026-10-25T11:04:00.317Z",
   "stages": {
-    "unsure": 58,
-    "read2": 29,
-    "done": 90,
+    "unsure": 72,
+    "done": 105,
     "helper": 332
   },
   "needs": {
     "read1": {},
     "read2": {},
-    "settle": {}
+    "settle": {
+      "gemini-3-flash-preview,gemini-3.5-flash,gemini-3.6-flash,gemini-3.7-flash,gemini-3.8-flash": 332
+    }
   },
   "requests": {
-    "gemma-4-31b-it": 6,
-    "gemma-4-26b-a4b-it": 3
+    "gemma-4-31b-it": 2,
+    "gemini-3.5-flash-lite": 2,
+    "gemma-4-26b-a4b-it": 1,
+    "gemini-3.7-flash": 5,
+    "gemini-3.8-flash": 7,
+    "gemini-3.5-flash": 8,
+    "gemini-3.6-flash": 8,
+    "gemini-3-flash-preview": 8
   },
-  "models_out": [
-    "gemini-3-flash-preview",
-    "gemini-3.1-flash-lite",
-    "gemini-3.5-flash",
-    "gemini-3.5-flash-lite",
-    "gemini-3.6-flash",
-    "gemini-3.7-flash",
-    "gemini-3.8-flash"
-  ],
+  "models_out": [],
   "free_models": [
     "gemini-3.5-flash-lite",
     "gemini-3.1-flash-lite",
@@ -506,12 +490,19 @@
       "gemini-3.5-flash-lite",
       "gemini-3.1-flash-lite"
     ],
-    "settle": []
+    "settle": [
+      "gemini-3.7-flash",
+      "gemini-3.8-flash",
+      "gemini-3.5-flash",
+      "gemini-3.6-flash",
+      "gemini-3-flash-preview"
+    ]
   },
   "book": "تراث الانسانية 2_k2opt",
   "epub": "تراث الانسانية 2_k2opt.epub",
-  "updated_at": "2026-10-25T10:43:35Z",
+  "updated_at": "2026-10-25T11:38:10Z",
   "quota_day": "2026-10-25",
-  "run_id": 40184588703,
-  "run_number": 117
+  "waiting_for": "helper",
+  "run_id": 40186626299,
+  "run_number": 118
 }

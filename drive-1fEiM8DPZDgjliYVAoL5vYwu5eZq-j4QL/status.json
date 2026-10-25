@@ -482,7 +482,7 @@
  "review_kept": 0,
  "review_conflicts_new": 0,
  "review_seen": "",
- "free_left": false,
+ "free_left": true,
  "free_done": 0,
  "stages": {
   "done": 43,
@@ -492,13 +492,15 @@
  "needs": {
   "read1": {},
   "read2": {},
-  "settle": {}
+  "settle": {
+   "gemini-3-flash-preview,gemini-3.5-flash,gemini-3.6-flash,gemini-3.7-flash,gemini-3.8-flash": 444
+  }
  },
  "book": "تراث الانسانية 3_k2opt",
  "epub": "تراث الانسانية 3_k2opt.epub",
- "updated_at": "2026-10-25T10:43:40Z",
+ "updated_at": "2026-10-25T11:38:15Z",
  "quota_day": "2026-10-25",
  "waiting_for": "helper",
- "run_id": 40184588703,
- "run_number": 117
+ "run_id": 40186626299,
+ "run_number": 118
 }
