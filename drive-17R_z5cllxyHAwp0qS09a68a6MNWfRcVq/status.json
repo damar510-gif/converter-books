@@ -481,11 +481,19 @@
   "read1": 38,
   "unsure": 1
  },
+ "needs": {
+  "read1": {
+   "gemma-4-26b-a4b-it,gemma-4-31b-it": 1
+  },
+  "read2": {
+   "gemini-3.1-flash-lite,gemini-3.5-flash-lite": 38
+  },
+  "settle": {}
+ },
  "book": "تراث الانسانية 5_k2opt",
  "epub": "تراث الانسانية 5_k2opt.epub",
- "updated_at": "2026-10-25T03:38:31Z",
+ "updated_at": "2026-10-25T04:06:02Z",
  "quota_day": "2026-10-24",
- "waiting_for": "time",
- "run_id": 40157801202,
- "run_number": 105
+ "run_id": 40159273688,
+ "run_number": 107
 }
