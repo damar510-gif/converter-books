@@ -540,15 +540,15 @@
  "free_left": true,
  "free_done": 0,
  "stages": {
-  "read1": 520,
+  "read1": 521,
   "done": 3,
-  "unread": 2
+  "unread": 1
  },
  "book": "تراث الانسانية 6_k2opt",
  "epub": "تراث الانسانية 6_k2opt.epub",
- "updated_at": "2026-10-25T00:51:39Z",
+ "updated_at": "2026-10-25T01:21:21Z",
  "quota_day": "2026-10-24",
  "waiting_for": "helper",
- "run_id": 40145207167,
- "run_number": 102
+ "run_id": 40148464467,
+ "run_number": 103
 }
