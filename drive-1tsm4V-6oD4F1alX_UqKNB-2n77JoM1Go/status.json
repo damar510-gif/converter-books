@@ -100,6 +100,7 @@
   349,
   350,
   353,
+  359,
   363,
   376,
   378,
@@ -282,7 +283,6 @@
   332,
   351,
   352,
-  359,
   377,
   379,
   390,
@@ -299,14 +299,14 @@
  "review_kept": 0,
  "review_conflicts_new": 0,
  "review_seen": "",
- "free_left": false,
+ "free_left": true,
  "free_done": 0,
  "stages": {
   "unsure": 80,
   "done": 228,
   "read2": 13,
-  "helper": 180,
-  "read1": 7,
+  "helper": 181,
+  "read1": 6,
   "failed": 1
  },
  "needs": {
@@ -320,8 +320,9 @@
  },
  "book": "تراث الانسانية 4_k2opt",
  "epub": "تراث الانسانية 4_k2opt.epub",
- "updated_at": "2026-10-25T04:06:02Z",
+ "updated_at": "2026-10-25T05:02:30Z",
  "quota_day": "2026-10-24",
- "run_id": 40159273688,
- "run_number": 107
+ "waiting_for": "helper",
+ "run_id": 40162828457,
+ "run_number": 108
 }
