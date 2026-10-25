@@ -991,6 +991,44 @@ class CrossCheck(unittest.TestCase):
         self.assertIn("نص {أ}", prompt)
         self.assertIn("سطر", prompt)
 
+    def test_a_line_tesseract_misread_is_not_missing(self):
+        text = "وقد اجتمع فيها العلماء والشعراء والأطباء من أقطار شتى وكتبوا كتبا كثيرة"
+        vocab = set(crosscheck.norm_words(text + " فبها مں أقطاز"))
+        misread = "وقد اجتمع فبها العلماء والشعرا والأطباء مں أقطاز شتى"
+        self.assertEqual(crosscheck.missing_lines(misread, text, vocab), [])
+        gone = "والأطباء من أقطار شتى العلماء والشعراء وكتبوا"
+        self.assertEqual(crosscheck.missing_lines(gone, "سطر آخر لا علاقة له بالموضوع أبدا", vocab), [gone])
+
+    def test_unsure_pages_of_the_old_line_check_are_checked_again_without_a_request(self):
+        text = "وقد اجتمع فيها العلماء والشعراء والأطباء من أقطار شتى وكتبوا كتبا كثيرة"
+        tess = "وقد اجتمع فبها العلماء والشعرا والأطباء مں أقطاز شتى"
+        settled = {"page": 1, "status": "ok", "text": text, "a": {"text": text + " أ"},
+                   "b": {"status": "ok", "text": text + " ب"},
+                   "check": {"v": c.CHECK_VERSION, "state": "unsure", "model": "gemini-3.8-flash",
+                             "diffs": 1, "missing_final": 1}}
+        agreed = {"page": 2, "status": "ok", "text": text, "a": {"text": text}, "b": {"status": "ok", "text": text},
+                  "check": {"v": c.CHECK_VERSION, "state": "unsure", "diffs": 0, "kept": "a",
+                            "rejected": "gemini-3.8-flash: 1 lines missing (readings: 1/1)"}}
+        open_ = {"page": 3, "status": "ok", "text": text, "a": {"text": text}, "b": {"status": "ok", "text": "نص"},
+                 "check": {"v": c.CHECK_VERSION, "state": "unsure", "diffs": 4, "kept": "a",
+                           "rejected": "gemini-3.8-flash: drops text the readings agree on"}}
+        with tempfile.TemporaryDirectory() as d:
+            os.makedirs(os.path.join(d, "tesseract"))
+            for p in (1, 2, 3):
+                with open(os.path.join(d, "tesseract", f"{p:04d}.txt"), "w", encoding="utf-8") as f:
+                    f.write(tess)
+            real = shutil.which
+            shutil.which = lambda n: "tesseract" if n == "tesseract" else real(n)
+            try:
+                c.recheck_lines([settled, agreed, open_], "none.pdf", d)
+            finally:
+                shutil.which = real
+            self.assertEqual([r["check"]["state"] for r in (settled, agreed, open_)],
+                             ["reconciled", "agreed", "unsure"])
+            self.assertTrue(all(r["check"]["lines"] == c.LINES_CHECK for r in (settled, agreed, open_)))
+            with open(os.path.join(d, "0001.json"), encoding="utf-8") as f:
+                self.assertEqual(json.load(f)["check"]["state"], "reconciled")
+
     def test_validate_final(self):
         self.assertTrue(crosscheck.validate_final(TRUE, WRONG, TRUE))
         self.assertFalse(crosscheck.validate_final("قصير", WRONG, TRUE))
