@@ -532,23 +532,26 @@
  "pages_retry": [],
  "pages_human": [],
  "helper_checked": 0,
+ "readers_left": [
+  "gemma-4-31b-it",
+  "gemma-4-26b-a4b-it"
+ ],
  "review_items": 0,
  "review_applied": 0,
  "review_kept": 0,
  "review_conflicts_new": 0,
  "review_seen": "",
- "free_left": true,
+ "free_left": false,
  "free_done": 0,
  "stages": {
-  "read1": 521,
-  "done": 3,
-  "unread": 1
+  "read1": 522,
+  "done": 3
  },
  "book": "تراث الانسانية 6_k2opt",
  "epub": "تراث الانسانية 6_k2opt.epub",
- "updated_at": "2026-10-25T01:21:21Z",
+ "updated_at": "2026-10-25T01:49:53Z",
  "quota_day": "2026-10-24",
- "waiting_for": "helper",
- "run_id": 40148464467,
- "run_number": 103
+ "waiting_for": "reader",
+ "run_id": 40150450064,
+ "run_number": 104
 }
