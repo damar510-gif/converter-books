@@ -198,11 +198,41 @@ def norm_words(text):
     return [w for w in re.findall(r"[\u0621-\u064A]+", text) if len(w) > 2]
 
 
+def fuzzy_find(needle, hay, slack=2, lo=0, hi=None):
+    """The stretch hay[i:j] (i >= lo, j <= hi) that reads most like the word list needle,
+    comparing letters, since Tesseract and the readers misspell different letters.
+    Returns (ratio, i, j)."""
+    hi = len(hay) if hi is None else hi
+    best = (0.0, lo, lo)
+    if not needle or hi <= lo:
+        return best
+    sm = SequenceMatcher(None, autojunk=False)
+    sm.set_seq2(" ".join(needle))
+    n = len(needle)
+    for i in range(lo, hi):
+        for w in range(max(1, n - slack), n + slack + 1):
+            if i + w > hi:
+                break
+            sm.set_seq1(" ".join(hay[i:i + w]))
+            if sm.real_quick_ratio() <= best[0] or sm.quick_ratio() <= best[0]:
+                continue
+            r = sm.ratio()
+            if r > best[0]:
+                best = (r, i, i + w)
+    return best
+
+
+# A line Tesseract saw is in the text when some stretch of it reads this much alike, letter
+# by letter. Lines that were in the text read 0.65-0.97 alike, lines really missing 0.44-0.58
+# (books 2-2 and 2-5_k2opt, 2026-10-25: 164 of 167 "missing" lines were in the text).
+LINE_FOUND = 0.6
+
+
 def missing_lines(tess, text, vocab):
     """Lines Tesseract saw on the page that the model's text does not contain.
     Tesseract makes many letter mistakes, so only lines made mostly of words that
     appear elsewhere in the book count, and a line is missing when almost none of
-    its word pairs are in the page text."""
+    its word pairs are in the page text and no stretch of the text reads like it."""
     w = norm_words(text)
     pairs = set(zip(w, w[1:]))
     out = []
@@ -212,6 +242,7 @@ def missing_lines(tess, text, vocab):
             continue
         known = sum(x in vocab for x in lw) / len(lw)
         lp = list(zip(lw, lw[1:]))
-        if known >= 0.7 and sum(x in pairs for x in lp) / len(lp) <= 0.15:
+        if known >= 0.7 and sum(x in pairs for x in lp) / len(lp) <= 0.15 \
+                and fuzzy_find(lw, w)[0] < LINE_FOUND:
             out.append(line.strip())
     return out

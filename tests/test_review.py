@@ -222,9 +222,10 @@ class Missing(unittest.TestCase):
         garbled = "فاجتمع فبها العلماء والشعرا والأطباء مں أقطاز شتى"
         lines = review.parse_tsv(tsv(column_lines(SENTENCES[:3] + [garbled] + SENTENCES[4:])))
         text = " ".join(SENTENCES)
+        # A line the text has, only misread by Tesseract, is not missing (2026-10-25).
         miss = review.tsv_missing(lines, text, self.vocab | set(crosscheck.norm_words(garbled)))
-        self.assertEqual(miss, [3])
-        item = review.missing_items(3, text, lines, miss, [], 500, (1000, 1000), [])[0]
+        self.assertEqual(miss, [])
+        item = review.missing_items(3, text, lines, [3], [], 500, (1000, 1000), [])[0]
         self.assertEqual((item["core"], item["hint"]), (SENTENCES[3], "likely-ok"))
 
     def test_running_header_and_heading_hints(self):

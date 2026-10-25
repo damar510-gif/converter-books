@@ -65,28 +65,7 @@ def norms(text):
 # ---------------------------------------------------------------- finding text
 
 
-def fuzzy_find(needle, hay, slack=2, lo=0, hi=None):
-    """The stretch hay[i:j] (i >= lo, j <= hi) that reads most like the word list needle,
-    comparing letters, since Tesseract and the readers misspell different letters.
-    Returns (ratio, i, j)."""
-    hi = len(hay) if hi is None else hi
-    best = (0.0, lo, lo)
-    if not needle or hi <= lo:
-        return best
-    sm = SequenceMatcher(None, autojunk=False)
-    sm.set_seq2(" ".join(needle))
-    n = len(needle)
-    for i in range(lo, hi):
-        for w in range(max(1, n - slack), n + slack + 1):
-            if i + w > hi:
-                break
-            sm.set_seq1(" ".join(hay[i:i + w]))
-            if sm.real_quick_ratio() <= best[0] or sm.quick_ratio() <= best[0]:
-                continue
-            r = sm.ratio()
-            if r > best[0]:
-                best = (r, i, i + w)
-    return best
+fuzzy_find = crosscheck.fuzzy_find
 
 
 def align(a, b):

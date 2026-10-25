@@ -1111,6 +1111,44 @@ def upgrade_check(rec):
         rec["text"] = a
 
 
+# The missing-line check that skips lines Tesseract misread but the text has
+# (crosscheck.LINE_FOUND, 2026-10-25). Unsure pages checked before it are checked again once.
+LINES_CHECK = 2
+
+
+def recheck_lines(records, filepath, cache_dir, lv=live.NULL):
+    """Pages left unsure by the old missing-line check are checked again with the texts
+    already saved: nothing is asked of a model. A settled text that only lost "missing" lines
+    becomes settled; a page whose readings agreed becomes agreed; a page the helper's models
+    settled is checked again as theirs. Pages that need a new settling stay unsure."""
+    old = [r for r in records if r.get("status") == "ok" and not review.pin_of(r)
+           and (r.get("check") or {}).get("v") == CHECK_VERSION
+           and r["check"].get("state") == "unsure" and r["check"].get("lines") != LINES_CHECK]
+    if not old:
+        return
+    vocab = book_vocab(records)
+    cleared = 0
+    for r in old:
+        tess = tesseract_for(filepath, cache_dir, r["page"])
+        if not tess:
+            continue
+        c = r["check"]
+        if r.get("hfinal") and (r.get("b") or {}).get("status") == "ok":
+            check_helper_page(r, tess, vocab, lv)
+        elif c.get("model") and not c.get("rejected"):
+            miss = missing_lines(tess, r.get("text", ""), vocab)
+            c["missing_final"] = len(miss)
+            if not miss:
+                c["state"] = "reconciled"
+        elif not c.get("diffs") and not missing_lines(tess, r.get("text", ""), vocab):
+            c["state"] = "agreed" if (r.get("b") or {}).get("status") == "ok" else "single"
+        r["check"]["lines"] = LINES_CHECK
+        cleared += r["check"]["state"] != "unsure"
+        save_record(cache_dir, r)
+        lv.page(r["page"], page_state(r))
+    print(f"Missing-line check again: {cleared} of {len(old)} unsure pages are no longer unsure")
+
+
 def tesseract_for(filepath, cache_dir, page_no, kind="txt"):
     """Tesseract's reading of a page ("txt") or its word boxes ("tsv"), cached; empty when
     Tesseract is missing."""
@@ -2689,6 +2727,7 @@ def finish_book(b, pool, lv, args, gen, lead):
         recs = {r["page"]: r for r in records if r.get("status") not in ("text-layer", "empty")}
         b.take_helper_files(recs)
         records = [recs.get(r["page"], r) for r in records]
+    recheck_lines(records, b.filepath, b.cache_dir, lv)
     if pool and not args.review_only:
         lv.set_phase("check", pages=sum(1 for r in records if page_state(r) in ("read2", "read1")))
         helper_wait = check_pages(pool, b.filepath, records, b.cache_dir, b.dual, args.workers,
