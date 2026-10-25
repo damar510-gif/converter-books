@@ -1700,6 +1700,33 @@ def waiting_for_reader(pool, records, dual):
     return pages, left
 
 
+def book_needs(pool, records, dual):
+    """The pages waiting for each box, whoever holds them now (the helper's models too), by the
+    free models that could take them: {"read1": {"model,model": n}, "read2": …, "settle": …}.
+    The Drive inbox starts a run when one of those models has quota left (each box goes its
+    own way, 2026-10-24). A page nobody read waits for both reading boxes; a page read once
+    only for a model of the other box that did not read it."""
+    n = {"read1": {}, "read2": {}, "settle": {}}
+
+    def add(box, models):
+        key = ",".join(sorted(set(m for m in models if m)))
+        if key:
+            n[box][key] = n[box].get(key, 0) + 1
+    for r in records:
+        if review.pin_of(r) or r.get("status") in ("empty", "text-layer"):
+            continue
+        if r.get("status") != "ok":
+            add("read1", pool.reading("a"))
+            if dual:
+                add("read2", pool.reading("b"))
+        elif dual and (r.get("b") or {}).get("status") != "ok":
+            k = owed_step(r)
+            add(KIND_BOX[k], [m for m in pool.reading(k) if m != (r.get("a") or {}).get("model")])
+        elif (r.get("check") or {}).get("v") != CHECK_VERSION:
+            add("settle", pool.boxes.get("settle") or [] if pool.strict else pool.settlers())
+    return n
+
+
 def summarize(records, dual, review_pages=None, applied=None, helper_wait=(), reader_wait=(), readers_left=()):
     """Book state for status.json and the report. review_pages and applied (from
     review.build and review.overlay) add the review's numbers; helper_wait are the pages
@@ -2723,6 +2750,8 @@ def finish_book(b, pool, lv, args, gen, lead):
         summary["boxes_at"] = lv.boxes_at
     summary["stages"] = dict(collections.Counter("helper" if r["page"] in helper_wait else page_state(r)
                                                  for r in records))
+    if pool and not args.review_only:
+        summary["needs"] = book_needs(pool, records, dual)
     md = assemble(records, review_pages)
     if not bargs.pages:
         md = keep_main_headings(md, pool, b.cache_dir)

@@ -948,7 +948,8 @@ test('reader wait: with both readers out the book keeps its turn; waiting for a 
   tick(env);
   addBook(env, 'ب.pdf');
   minutes(env, 30);
-  writeStatus(env, a.id, 'paused', { epub: 'أ.epub', pages_waiting: [3] });
+  writeStatus(env, a.id, 'paused', { epub: 'أ.epub', pages_waiting: [3], models_out: LITES,
+    requests: { 'gemini-3.5-flash-lite': 500 } });
   tick(env);
   assert.ok(jobs(env)[a.id].pausedDay, 'paused, holding its turn');
   assert.strictEqual(env.gh.dispatches.length, 1, 'no other book starts');
@@ -3603,7 +3604,8 @@ test('the page: the other books of the run under «الآن» with their pages, 
   assert.ok(names(env, 'inbox').indexOf('ثالث.docx') >= 0);
   // The run is over; b waits in the queue while a holds the turn.
   minutes(env, 40);
-  writeStatus(env, a.id, 'paused', { quota_day: '2026-10-23', stages: { done: 450, read2: 50 }, models_out: LITES });
+  writeStatus(env, a.id, 'paused', { quota_day: '2026-10-23', stages: { done: 450, read2: 50 }, models_out: LITES,
+    requests: { 'gemini-3.5-flash-lite': 400 } });
   writeStatus(env, b.id, 'paused', { quota_day: '2026-10-23', stages: { read2: 2, unread: 18 } });
   tick(env);
   const s = status(env);
@@ -3611,6 +3613,34 @@ test('the page: the other books of the run under «الآن» with their pages, 
   const page = pageSandbox(env, s);
   assert.ok(/«ثان»[\s\S]*في الطابور/.test(page.byId.queue.textContent), page.byId.queue.textContent);
   assert.strictEqual(c.id && jobs(env)[c.id], undefined, 'not taken while a holds the turn');
+});
+
+test('each box its own way: the first readers read another book while the oldest waits for its second readers', () => {
+  // The user (2026-10-25): every Flash-Lite and Flash out, Gemma in the first reading box, six
+  // new books in the queue, and no run started: the oldest book held the turn till the next day.
+  const env = readyEnv({ start: '2026-10-23T07:03:00Z' });
+  status(env);
+  assert.strictEqual(JSON.parse(env.ctx.setBoxes(JSON.stringify({ read1: ['gemma-4-31b-it'], read2: LITES,
+    settle: [], review: [] }))).ok, true);
+  const a = addBook(env, 'أول.pdf', { ageMin: 30 });
+  tick(env);
+  minutes(env, 40);
+  // Its pages wait for the second readers only (Gemma read them all), who are out today.
+  writeStatus(env, a.id, 'paused', { quota_day: '2026-10-23', models_out: LITES, requests: { 'gemini-3.5-flash-lite': 500 },
+    stages: { read1: 300 }, needs: { read1: {}, read2: { [LITES.slice().sort().join(',')]: 300 }, settle: {} } });
+  tick(env);
+  assert.ok(jobs(env)[a.id].pausedDay, 'nothing to do in it today');
+  const dispatched = env.gh.dispatches.length;
+  minutes(env, 10);
+  tick(env);
+  assert.strictEqual(env.gh.dispatches.length, dispatched, 'no run for nobody');
+  // A new book: Gemma has pages to read first in it, so a run starts with both.
+  const b = addBook(env, 'ثان.pdf');
+  minutes(env, 10);
+  tick(env);
+  assert.strictEqual(env.gh.dispatches.length, dispatched + 1, 'the first readers do not wait for the second');
+  const d = lastDispatch(env).body.inputs;
+  assert.deepStrictEqual([d.drive_file_id, JSON.parse(d.queue).books.map((x) => x.id)], [a.id, [b.id]]);
 });
 
 test('the fake GitHub saw only known endpoints', () => {
