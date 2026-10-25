@@ -434,17 +434,9 @@
   457
  ],
  "pages_unsure": [
-  7,
-  8,
   27,
-  29,
-  30,
-  37,
-  43,
-  94,
   128,
   162,
-  182,
   274
  ],
  "pages_missing": [],
@@ -462,7 +454,7 @@
  "pages_retry": [],
  "pages_human": [],
  "helper_checked": 0,
- "review_items": 115,
+ "review_items": 103,
  "review_applied": 0,
  "review_kept": 0,
  "review_conflicts_new": 0,
@@ -471,8 +463,8 @@
  "free_done": 0,
  "stages": {
   "helper": 429,
-  "done": 8,
-  "unsure": 12,
+  "done": 16,
+  "unsure": 4,
   "read2": 8
  },
  "needs": {
@@ -486,8 +478,8 @@
  },
  "book": "تراث الانسانية 5_k2opt",
  "epub": "تراث الانسانية 5_k2opt.epub",
- "updated_at": "2026-10-25T18:41:11Z",
+ "updated_at": "2026-10-25T19:36:08Z",
  "quota_day": "2026-10-25",
- "run_id": 40218650863,
- "run_number": 126
+ "run_id": 40222619810,
+ "run_number": 127
 }
