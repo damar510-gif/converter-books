@@ -513,7 +513,7 @@
  "review_kept": 0,
  "review_conflicts_new": 0,
  "review_seen": "",
- "free_left": true,
+ "free_left": false,
  "free_done": 0,
  "stages": {
   "read1": 490,
@@ -531,9 +531,9 @@
  },
  "book": "تراث الانسانية 7_k2opt",
  "epub": "تراث الانسانية 7_k2opt.epub",
- "updated_at": "2026-10-25T08:40:25Z",
+ "updated_at": "2026-10-25T09:07:34Z",
  "quota_day": "2026-10-25",
  "waiting_for": "reader",
- "run_id": 40175789388,
- "run_number": 113
+ "run_id": 40177764631,
+ "run_number": 114
 }
