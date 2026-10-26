@@ -214,8 +214,6 @@
   184,
   200,
   202,
-  211,
-  212,
   213,
   214,
   215,
@@ -513,7 +511,9 @@
  ],
  "pages_retry": [
   207,
-  208
+  208,
+  211,
+  212
  ],
  "pages_human": [],
  "helper_checked": 0,
@@ -522,7 +522,7 @@
  "review_kept": 0,
  "review_conflicts_new": 0,
  "review_seen": "",
- "free_left": true,
+ "free_left": false,
  "free_done": 0,
  "stages": {
   "helper": 185,
@@ -545,9 +545,8 @@
  },
  "book": "تراث الانسانية 8_k2opt",
  "epub": "تراث الانسانية 8_k2opt.epub",
- "updated_at": "2026-10-26T17:43:21Z",
+ "updated_at": "2026-10-26T18:43:00Z",
  "quota_day": "2026-10-26",
- "waiting_for": "helper",
- "run_id": 40361914882,
- "run_number": 152
+ "run_id": 40371341577,
+ "run_number": 153
 }
