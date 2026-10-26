@@ -525,8 +525,9 @@
  },
  "book": "تراث الانسانية 7_k2opt",
  "epub": "تراث الانسانية 7_k2opt.epub",
- "updated_at": "2026-10-26T00:10:28Z",
+ "updated_at": "2026-10-26T00:50:25Z",
  "quota_day": "2026-10-25",
- "run_id": 40245329911,
- "run_number": 134
+ "waiting_for": "time",
+ "run_id": 40248315548,
+ "run_number": 135
 }
