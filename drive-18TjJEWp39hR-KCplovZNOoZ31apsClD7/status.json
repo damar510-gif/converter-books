@@ -1,9 +1,11 @@
 {
  "state": "paused",
  "pages_total": 507,
- "pages_done": 1,
+ "pages_done": 3,
  "pages_helper": [],
- "pages_unsure": [],
+ "pages_unsure": [
+  192
+ ],
  "pages_missing": [
   353
  ],
@@ -69,6 +71,7 @@
   59,
   60,
   61,
+  62,
   63,
   64,
   66,
@@ -176,6 +179,7 @@
   169,
   170,
   171,
+  172,
   173,
   174,
   175,
@@ -185,17 +189,15 @@
   179,
   180,
   181,
+  182,
   183,
   184,
   185,
   186,
   187,
   188,
-  190,
   191,
-  192,
   193,
-  194,
   195,
   196,
   197,
@@ -510,41 +512,40 @@
   507
  ],
  "pages_retry": [
-  62,
-  65,
-  172,
-  182,
-  189
+  189,
+  190,
+  194
  ],
  "pages_human": [],
  "helper_checked": 0,
- "review_items": 0,
+ "review_items": 16,
  "review_applied": 0,
  "review_kept": 0,
  "review_conflicts_new": 0,
  "review_seen": "",
  "stages": {
-  "read2": 183,
-  "read1": 321,
-  "done": 2,
+  "read2": 187,
+  "done": 3,
+  "read1": 315,
+  "unsure": 1,
   "failed": 1
  },
  "needs": {
   "read1": {
-   "gemma-4-31b-it": 324
+   "gemma-4-31b-it": 319
   },
   "read2": {
    "gemini-3.1-flash-lite,gemini-3.5-flash-lite": 1
   },
   "settle": {
-   "gemini-3-flash-preview,gemini-3.5-flash,gemini-3.6-flash,gemini-3.7-flash,gemini-3.8-flash": 183
+   "gemini-3-flash-preview,gemini-3.5-flash,gemini-3.6-flash,gemini-3.7-flash,gemini-3.8-flash": 187
   }
  },
  "book": "تراث الانسانية 8_k2opt",
  "epub": "تراث الانسانية 8_k2opt.epub",
- "updated_at": "2026-10-26T11:55:29Z",
+ "updated_at": "2026-10-26T13:04:50Z",
  "quota_day": "2026-10-26",
  "waiting_for": "time",
- "run_id": 40312195072,
- "run_number": 147
+ "run_id": 40319662221,
+ "run_number": 148
 }
