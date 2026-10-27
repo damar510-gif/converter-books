@@ -326,10 +326,12 @@
   325,
   326,
   327,
+  328,
   330,
   331,
   332,
   333,
+  334,
   335,
   336,
   337,
@@ -340,7 +342,6 @@
   342,
   343,
   344,
-  345,
   346,
   347,
   348,
@@ -504,9 +505,8 @@
   507
  ],
  "pages_retry": [
-  328,
   329,
-  334
+  345
  ],
  "pages_human": [],
  "helper_checked": 0,
@@ -516,28 +516,28 @@
  "review_conflicts_new": 0,
  "review_seen": "",
  "stages": {
-  "read2": 325,
+  "read2": 333,
   "done": 11,
   "unsure": 1,
-  "read1": 169,
+  "read1": 161,
   "failed": 1
  },
  "needs": {
   "read1": {
-   "gemma-4-31b-it": 181
+   "gemma-4-31b-it": 173
   },
   "read2": {
    "gemini-3.1-flash-lite,gemini-3.5-flash-lite": 1
   },
   "settle": {
-   "gemini-3-flash-preview,gemini-3.5-flash,gemini-3.6-flash,gemini-3.7-flash,gemini-3.8-flash": 325
+   "gemini-3-flash-preview,gemini-3.5-flash,gemini-3.6-flash,gemini-3.7-flash,gemini-3.8-flash": 333
   }
  },
  "book": "تراث الانسانية 8_k2opt",
  "epub": "تراث الانسانية 8_k2opt.epub",
- "updated_at": "2026-10-27T10:17:59Z",
+ "updated_at": "2026-10-27T11:20:56Z",
  "quota_day": "2026-10-27",
  "waiting_for": "time",
- "run_id": 40480435604,
- "run_number": 168
+ "run_id": 40488115720,
+ "run_number": 169
 }

@@ -318,7 +318,7 @@
     }
   },
   "requests": {
-    "gemma-4-31b-it": 27,
+    "gemma-4-31b-it": 25,
     "gemini-3.5-flash-lite": 2,
     "gemini-3.1-flash-lite": 2
   },
@@ -382,9 +382,9 @@
   },
   "book": "تراث الانسانية 2_k2opt",
   "epub": "تراث الانسانية 2_k2opt.epub",
-  "updated_at": "2026-10-27T10:17:51Z",
+  "updated_at": "2026-10-27T11:20:47Z",
   "quota_day": "2026-10-27",
   "waiting_for": "time",
-  "run_id": 40480435604,
-  "run_number": 168
+  "run_id": 40488115720,
+  "run_number": 169
 }
