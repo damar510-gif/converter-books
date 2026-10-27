@@ -159,6 +159,7 @@
   400,
   401,
   402,
+  403,
   404,
   405,
   406,
@@ -222,9 +223,7 @@
   464,
   474
  ],
- "pages_retry": [
-  403
- ],
+ "pages_retry": [],
  "pages_human": [],
  "helper_checked": 244,
  "review_items": 284,
@@ -251,8 +250,8 @@
  },
  "book": "تراث الانسانية 4_k2opt",
  "epub": "تراث الانسانية 4_k2opt.epub",
- "updated_at": "2026-10-27T20:04:40Z",
+ "updated_at": "2026-10-27T21:11:05Z",
  "quota_day": "2026-10-27",
- "run_id": 40568703273,
- "run_number": 178
+ "run_id": 40576138718,
+ "run_number": 179
 }
