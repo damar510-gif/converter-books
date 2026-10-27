@@ -2,7 +2,14 @@
  "state": "paused",
  "pages_total": 507,
  "pages_done": 9,
- "pages_helper": [
+ "pages_helper": [],
+ "pages_unsure": [
+  192
+ ],
+ "pages_missing": [
+  353
+ ],
+ "pages_waiting": [
   1,
   2,
   3,
@@ -25,6 +32,7 @@
   20,
   21,
   22,
+  23,
   24,
   25,
   26,
@@ -35,8 +43,10 @@
   31,
   32,
   33,
+  34,
   35,
   36,
+  37,
   38,
   39,
   40,
@@ -46,9 +56,11 @@
   44,
   45,
   46,
+  47,
   48,
   49,
   50,
+  51,
   52,
   53,
   54,
@@ -57,6 +69,7 @@
   57,
   58,
   59,
+  60,
   61,
   62,
   63,
@@ -105,6 +118,7 @@
   107,
   108,
   109,
+  110,
   111,
   112,
   113,
@@ -129,8 +143,10 @@
   132,
   133,
   134,
+  135,
   136,
   137,
+  138,
   139,
   140,
   141,
@@ -147,18 +163,23 @@
   152,
   153,
   154,
+  155,
   156,
   157,
   158,
   159,
+  160,
   161,
   162,
+  164,
+  165,
   166,
   167,
   168,
   169,
   170,
   171,
+  172,
   173,
   174,
   175,
@@ -168,7 +189,9 @@
   179,
   180,
   181,
+  182,
   183,
+  184,
   185,
   186,
   187,
@@ -215,43 +238,18 @@
   235,
   236,
   237,
+  239,
   240,
   241,
   242,
-  243
- ],
- "pages_unsure": [
-  192
- ],
- "pages_missing": [
-  353
- ],
- "pages_waiting": [
-  23,
-  34,
-  37,
-  47,
-  51,
-  60,
-  110,
-  135,
-  138,
-  155,
-  160,
-  164,
-  165,
-  172,
-  182,
-  184,
+  243,
   244,
   245,
   246,
   247,
   248,
   249,
-  250,
   251,
-  252,
   253,
   254,
   255,
@@ -509,7 +507,8 @@
  ],
  "pages_retry": [
   238,
-  239
+  250,
+  252
  ],
  "pages_human": [],
  "helper_checked": 0,
@@ -518,32 +517,29 @@
  "review_kept": 0,
  "review_conflicts_new": 0,
  "review_seen": "",
- "free_left": true,
- "free_done": 0,
  "stages": {
-  "helper": 216,
-  "read2": 16,
+  "read2": 242,
   "done": 9,
   "unsure": 1,
-  "read1": 264,
+  "read1": 254,
   "failed": 1
  },
  "needs": {
   "read1": {
-   "gemma-4-31b-it": 274
+   "gemma-4-31b-it": 264
   },
   "read2": {
    "gemini-3.1-flash-lite,gemini-3.5-flash-lite": 1
   },
   "settle": {
-   "gemini-3-flash-preview,gemini-3.5-flash,gemini-3.6-flash,gemini-3.7-flash,gemini-3.8-flash": 232
+   "gemini-3-flash-preview,gemini-3.5-flash,gemini-3.6-flash,gemini-3.7-flash,gemini-3.8-flash": 242
   }
  },
  "book": "تراث الانسانية 8_k2opt",
  "epub": "تراث الانسانية 8_k2opt.epub",
- "updated_at": "2026-10-27T00:37:22Z",
+ "updated_at": "2026-10-27T01:37:55Z",
  "quota_day": "2026-10-26",
- "waiting_for": "helper",
- "run_id": 40421703771,
- "run_number": 159
+ "waiting_for": "time",
+ "run_id": 40428223118,
+ "run_number": 160
 }
