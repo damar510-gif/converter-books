@@ -1,7 +1,7 @@
 {
   "state": "paused",
   "pages_total": 509,
-  "pages_done": 383,
+  "pages_done": 403,
   "pages_helper": [
     94,
     95,
@@ -108,26 +108,6 @@
     229,
     230,
     231,
-    471,
-    473,
-    474,
-    475,
-    476,
-    477,
-    478,
-    479,
-    480,
-    481,
-    482,
-    483,
-    484,
-    485,
-    486,
-    487,
-    488,
-    489,
-    492,
-    493,
     494
   ],
   "pages_unsure": [
@@ -174,6 +154,7 @@
     378,
     405,
     444,
+    479,
     496,
     503
   ],
@@ -182,27 +163,27 @@
   "pages_retry": [],
   "pages_human": [],
   "helper_checked": 83,
-  "review_items": 1204,
+  "review_items": 1222,
   "review_applied": 0,
   "review_kept": 0,
   "review_conflicts_new": 0,
   "review_seen": "",
   "free_left": false,
-  "free_done": 8,
+  "free_done": 9,
   "stages": {
-    "unsure": 45,
-    "done": 338,
-    "helper": 126
+    "unsure": 46,
+    "done": 357,
+    "helper": 106
   },
   "needs": {
     "read1": {},
     "read2": {},
     "settle": {
-      "gemini-3-flash-preview,gemini-3.5-flash,gemini-3.6-flash,gemini-3.7-flash,gemini-3.8-flash": 126
+      "gemini-3-flash-preview,gemini-3.5-flash,gemini-3.6-flash,gemini-3.7-flash,gemini-3.8-flash": 106
     }
   },
   "requests": {
-    "gemma-4-31b-it": 2,
+    "gemma-4-31b-it": 3,
     "gemini-3.5-flash-lite": 3,
     "gemini-3.1-flash-lite": 2
   },
@@ -266,9 +247,9 @@
   },
   "book": "تراث الانسانية 2_k2opt",
   "epub": "تراث الانسانية 2_k2opt.epub",
-  "updated_at": "2026-10-28T19:43:27Z",
+  "updated_at": "2026-10-28T20:41:30Z",
   "quota_day": "2026-10-28",
   "waiting_for": "helper",
-  "run_id": 40750849978,
-  "run_number": 204
+  "run_id": 40758402925,
+  "run_number": 205
 }
