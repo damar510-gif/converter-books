@@ -1,39 +1,8 @@
 {
   "state": "paused",
   "pages_total": 509,
-  "pages_done": 245,
-  "pages_helper": [],
-  "pages_unsure": [
-    1,
-    2,
-    3,
-    5,
-    14,
-    70,
-    80,
-    106,
-    131,
-    205,
-    206,
-    232,
-    233,
-    239,
-    244,
-    248,
-    253,
-    257,
-    269,
-    295,
-    316,
-    335,
-    378,
-    496,
-    503
-  ],
-  "pages_missing": [],
-  "pages_waiting": [
-    15,
-    16,
+  "pages_done": 247,
+  "pages_helper": [
     17,
     18,
     19,
@@ -297,28 +266,61 @@
     493,
     494
   ],
+  "pages_unsure": [
+    1,
+    2,
+    3,
+    5,
+    14,
+    15,
+    16,
+    70,
+    80,
+    106,
+    131,
+    205,
+    206,
+    232,
+    233,
+    239,
+    244,
+    248,
+    253,
+    257,
+    269,
+    295,
+    316,
+    335,
+    378,
+    496,
+    503
+  ],
+  "pages_missing": [],
+  "pages_waiting": [],
   "pages_retry": [],
   "pages_human": [],
-  "helper_checked": 31,
-  "review_items": 599,
+  "helper_checked": 33,
+  "review_items": 675,
   "review_applied": 0,
   "review_kept": 0,
   "review_conflicts_new": 0,
   "review_seen": "",
+  "free_left": false,
+  "free_done": 0,
   "stages": {
-    "unsure": 25,
+    "unsure": 27,
     "done": 220,
-    "read2": 264
+    "helper": 262
   },
   "needs": {
     "read1": {},
     "read2": {},
     "settle": {
-      "gemini-3-flash-preview,gemini-3.5-flash,gemini-3.6-flash,gemini-3.7-flash,gemini-3.8-flash": 264
+      "gemini-3-flash-preview,gemini-3.5-flash,gemini-3.6-flash,gemini-3.7-flash,gemini-3.8-flash": 262
     }
   },
   "requests": {
-    "gemma-4-31b-it": 1,
+    "gemma-4-31b-it": 3,
     "gemini-3.5-flash-lite": 2,
     "gemini-3.1-flash-lite": 3
   },
@@ -382,8 +384,9 @@
   },
   "book": "تراث الانسانية 2_k2opt",
   "epub": "تراث الانسانية 2_k2opt.epub",
-  "updated_at": "2026-10-28T14:11:08Z",
+  "updated_at": "2026-10-28T14:47:41Z",
   "quota_day": "2026-10-28",
-  "run_id": 40694501015,
-  "run_number": 196
+  "waiting_for": "helper",
+  "run_id": 40703886071,
+  "run_number": 197
 }
