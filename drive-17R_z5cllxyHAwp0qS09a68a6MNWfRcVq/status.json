@@ -2,17 +2,7 @@
  "state": "paused",
  "pages_total": 457,
  "pages_done": 27,
- "pages_helper": [],
- "pages_unsure": [
-  27,
-  128,
-  162,
-  274,
-  285,
-  293
- ],
- "pages_missing": [],
- "pages_waiting": [
+ "pages_helper": [
   1,
   2,
   4,
@@ -438,11 +428,22 @@
   450,
   451,
   452,
-  453,
   454,
   455,
   456,
   457
+ ],
+ "pages_unsure": [
+  27,
+  128,
+  162,
+  274,
+  285,
+  293
+ ],
+ "pages_missing": [],
+ "pages_waiting": [
+  453
  ],
  "pages_retry": [],
  "pages_human": [],
@@ -452,8 +453,10 @@
  "review_kept": 0,
  "review_conflicts_new": 0,
  "review_seen": "",
+ "free_left": false,
+ "free_done": 0,
  "stages": {
-  "read2": 429,
+  "helper": 429,
   "done": 22,
   "unsure": 6
  },
@@ -468,9 +471,8 @@
  },
  "book": "تراث الانسانية 5_k2opt",
  "epub": "تراث الانسانية 5_k2opt.epub",
- "updated_at": "2026-10-29T16:13:46Z",
+ "updated_at": "2026-10-29T17:06:51Z",
  "quota_day": "2026-10-29",
- "waiting_for": "time",
- "run_id": 40897729214,
- "run_number": 226
+ "run_id": 40911135532,
+ "run_number": 227
 }
