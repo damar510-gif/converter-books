@@ -244,7 +244,7 @@
  "review_conflicts_new": 0,
  "review_seen": "",
  "free_left": false,
- "free_done": 2,
+ "free_done": 0,
  "stages": {
   "helper": 200,
   "done": 232,
@@ -261,8 +261,8 @@
  },
  "book": "تراث الانسانية 5_k2opt",
  "epub": "تراث الانسانية 5_k2opt.epub",
- "updated_at": "2026-11-01T04:38:21Z",
+ "updated_at": "2026-11-01T06:00:55Z",
  "quota_day": "2026-10-31",
- "run_id": 41269008180,
- "run_number": 287
+ "run_id": 41274213162,
+ "run_number": 288
 }
