@@ -1,7 +1,7 @@
 {
  "state": "paused",
  "pages_total": 457,
- "pages_done": 252,
+ "pages_done": 256,
  "pages_helper": [
   1,
   2,
@@ -195,7 +195,6 @@
   212,
   213,
   214,
-  244,
   287,
   296,
   297,
@@ -203,10 +202,7 @@
   304,
   305,
   306,
-  307,
-  357,
-  363,
-  437
+  307
  ],
  "pages_unsure": [
   27,
@@ -248,10 +244,10 @@
  "review_conflicts_new": 0,
  "review_seen": "",
  "free_left": false,
- "free_done": 0,
+ "free_done": 2,
  "stages": {
-  "helper": 204,
-  "done": 228,
+  "helper": 200,
+  "done": 232,
   "unsure": 25
  },
  "needs": {
@@ -260,13 +256,13 @@
   },
   "read2": {},
   "settle": {
-   "gemini-3-flash-preview,gemini-3.5-flash,gemini-3.6-flash,gemini-3.7-flash,gemini-3.8-flash": 204
+   "gemini-3-flash-preview,gemini-3.5-flash,gemini-3.6-flash,gemini-3.7-flash,gemini-3.8-flash": 200
   }
  },
  "book": "تراث الانسانية 5_k2opt",
  "epub": "تراث الانسانية 5_k2opt.epub",
- "updated_at": "2026-11-01T03:22:17Z",
+ "updated_at": "2026-11-01T04:38:21Z",
  "quota_day": "2026-10-31",
- "run_id": 41263867701,
- "run_number": 286
+ "run_id": 41269008180,
+ "run_number": 287
 }
