@@ -993,6 +993,30 @@ function boxWork_(job, keys) {
   return unread > 0 && keys.some(function (k) { return k !== 'settle'; });
 }
 
+/**
+ * How many of the book's pages one box could take now (free models with quota left today):
+ * what the last run said (needs), else its pages nobody read (an older run). A book with one
+ * page left for a box must not count as work enough to keep the next books out of the run
+ * (2026-11-01: one page for Gemma in each of two books kept «تراث 8» and «خواطر باسكال», with
+ * hundreds of pages to read, out of every run for days).
+ */
+function boxLeft_(job, key) {
+  var n = job.needs;
+  if (n) {
+    var out = freeOut_();
+    var m = n[key] || {};
+    return Object.keys(m).reduce(function (sum, models) {
+      var can = models.split(',').some(function (id) { return out.indexOf(id) < 0; });
+      return sum + (can ? Number(m[models]) || 0 : 0);
+    }, 0);
+  }
+  if (!boxWork_(job, [key])) return 0;
+  var st = job.stages;
+  // Never converted: all its pages are left.
+  if (!st) return CONFIG.READ_AHEAD;
+  return (Number(st.unread) || 0) + (Number(st.failed) || 0) || 1;
+}
+
 /** A new PDF waits in «1- جديد» and a reading box's free models can work now (it joins the run). */
 function inboxWork_(ctx) {
   if (!ctx.folders || !freeBoxesNow_().some(function (k) { return k !== 'settle'; })) return false;
@@ -1036,20 +1060,21 @@ function runWindow_(ctx, lead) {
   if (run.indexOf(lead) < 0) run = [lead].concat(run.slice(0, CONFIG.QUEUE_BOOKS - 1));
   var reads = read1Free_(ctx);
   // The first readers would run out of pages in this run's books.
-  var ahead = function () {
-    var left = run.filter(hasRead1Work_);
-    var last = left[left.length - 1];
-    return !last || (!!last.stages && (Number(last.stages.unread) || 0) + (Number(last.stages.failed) || 0) < CONFIG.READ_AHEAD);
+  var pagesFor = function (k) {
+    return run.reduce(function (sum, j) { return sum + boxLeft_(j, k); }, 0);
   };
-  if (reads && ahead()) {
+  var ahead = function () { return pagesFor('read1') < CONFIG.READ_AHEAD; };
+  while (reads && ahead()) {
     var next = books.filter(function (j) { return run.indexOf(j) < 0 && hasRead1Work_(j); })[0];
-    if (next) run.push(next);
+    if (!next) break;
+    run.push(next);
   }
-  // A box whose free models can work has nothing in the run's books: the next book that has
-  // pages for it joins (each box goes its own way).
+  // A box whose free models can work has (almost) nothing in the run's books: the next book
+  // that has pages for it joins (each box goes its own way). A reading box with fewer than
+  // READ_AHEAD pages left counts as idle; the settling box only with none.
   var free = freeBoxesNow_();
   var idle = function () {
-    return free.filter(function (k) { return !run.some(function (j) { return boxWork_(j, [k]); }); });
+    return free.filter(function (k) { return pagesFor(k) < (k === 'settle' ? 1 : CONFIG.READ_AHEAD); });
   };
   for (var left = idle(); left.length;) {
     var more = books.filter(function (j) { return run.indexOf(j) < 0 && boxWork_(j, left); })[0];

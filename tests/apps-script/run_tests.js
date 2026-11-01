@@ -3643,6 +3643,39 @@ test('each box its own way: the first readers read another book while the oldest
   assert.deepStrictEqual([d.drive_file_id, JSON.parse(d.queue).books.map((x) => x.id)], [a.id, [b.id]]);
 });
 
+test('one page left for the first readers in a book does not keep the next books out of the run', () => {
+  // 2026-11-01: books 5 and 7 had one page each for Gemma; «تراث 8» (131 pages for Gemma) and
+  // «خواطر باسكال» were left out of every run for days, the first reading box idle.
+  const env = readyEnv({ start: '2026-10-23T07:03:00Z' });
+  status(env);
+  assert.strictEqual(JSON.parse(env.ctx.setBoxes(JSON.stringify({ read1: ['gemma-4-31b-it'], read2: LITES,
+    settle: ['gemini-3.8-flash'], review: [] }))).ok, true);
+  const books = [1, 2, 3, 4, 5, 6].map((i) => addBook(env, 'كتاب ' + i + '.pdf', { ageMin: 70 - i }));
+  const ids = books.map((b) => b.id);
+  const settleOnly = { read1: {}, read2: {}, settle: { 'gemini-3.8-flash': 100 } };
+  const read1 = (n) => ({ read1: { 'gemma-4-31b-it': n }, read2: {}, settle: { 'gemini-3.8-flash': 100 } });
+  const runBooks = () => {
+    const d = lastDispatch(env).body.inputs;
+    return [d.drive_file_id].concat(JSON.parse(d.queue || '{"books":[]}').books.map((x) => x.id));
+  };
+  const end = (needs) => {
+    minutes(env, 40);
+    Object.keys(needs).forEach((id) => writeStatus(env, id, 'paused', { waiting_for: 'time', pages_total: 500,
+      pages_done: 300, stages: { done: 300, read2: 200 }, needs: needs[id] }));
+    tick(env);
+  };
+  tick(env);
+  assert.deepStrictEqual(runBooks(), ids.slice(0, 4));
+  end({ [ids[0]]: settleOnly, [ids[1]]: settleOnly, [ids[2]]: settleOnly, [ids[3]]: settleOnly });
+  assert.deepStrictEqual(runBooks(), ids.slice(0, 5));
+  end({ [ids[0]]: settleOnly, [ids[1]]: settleOnly, [ids[2]]: settleOnly, [ids[3]]: settleOnly, [ids[4]]: read1(1) });
+  assert.deepStrictEqual(runBooks(), ids);
+  // The fifth book has one page left for Gemma, the sixth 131: the sixth stays in the run.
+  end({ [ids[0]]: settleOnly, [ids[1]]: settleOnly, [ids[2]]: settleOnly, [ids[3]]: settleOnly, [ids[4]]: read1(1),
+    [ids[5]]: read1(131) });
+  assert.deepStrictEqual(runBooks(), ids, 'the book with pages for the first readers is carried');
+});
+
 test('the fake GitHub saw only known endpoints', () => {
   // Re-run a full happy path and make sure every request matched a route.
   const env = readyEnv();
