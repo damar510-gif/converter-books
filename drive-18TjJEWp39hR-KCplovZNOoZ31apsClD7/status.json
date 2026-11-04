@@ -1,7 +1,7 @@
 {
  "state": "paused",
  "pages_total": 507,
- "pages_done": 344,
+ "pages_done": 353,
  "pages_helper": [
   1,
   2,
@@ -31,15 +31,15 @@
   113,
   156,
   178,
-  389,
-  391,
-  393,
-  394,
-  395,
-  396,
-  397,
-  398,
-  399
+  401,
+  403,
+  404,
+  405,
+  406,
+  407,
+  408,
+  411,
+  412
  ],
  "pages_unsure": [
   27,
@@ -99,7 +99,8 @@
   354,
   359,
   385,
-  386
+  386,
+  399
  ],
  "pages_missing": [],
  "pages_waiting": [
@@ -121,18 +122,6 @@
   184,
   336,
   353,
-  401,
-  402,
-  403,
-  404,
-  405,
-  406,
-  407,
-  408,
-  409,
-  410,
-  411,
-  412,
   413,
   414,
   415,
@@ -230,27 +219,30 @@
   507
  ],
  "pages_retry": [
-  400
+  400,
+  402,
+  409,
+  410
  ],
  "pages_human": [],
  "helper_checked": 141,
- "review_items": 1548,
+ "review_items": 1575,
  "review_applied": 0,
  "review_kept": 0,
  "review_conflicts_new": 0,
  "review_seen": "",
  "free_left": true,
- "free_done": 165,
+ "free_done": 4,
  "stages": {
   "helper": 37,
   "read2": 16,
-  "done": 288,
-  "unsure": 58,
-  "read1": 108
+  "done": 296,
+  "unsure": 59,
+  "read1": 99
  },
  "needs": {
   "read1": {
-   "gemma-4-31b-it": 122
+   "gemma-4-31b-it": 113
   },
   "read2": {},
   "settle": {
@@ -259,9 +251,9 @@
  },
  "book": "تراث الانسانية 8_k2opt",
  "epub": "تراث الانسانية 8_k2opt.epub",
- "updated_at": "2026-11-04T13:04:02Z",
+ "updated_at": "2026-11-04T15:59:29Z",
  "quota_day": "2026-11-04",
  "waiting_for": "helper",
- "run_id": 41817319616,
- "run_number": 348
+ "run_id": 41836179732,
+ "run_number": 349
 }
