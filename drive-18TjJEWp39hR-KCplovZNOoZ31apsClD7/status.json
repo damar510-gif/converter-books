@@ -127,7 +127,7 @@
  "review_conflicts_new": 0,
  "review_seen": "",
  "free_left": false,
- "free_done": 1,
+ "free_done": 0,
  "stages": {
   "helper": 28,
   "read2": 16,
@@ -145,8 +145,8 @@
  },
  "book": "تراث الانسانية 8_k2opt",
  "epub": "تراث الانسانية 8_k2opt.epub",
- "updated_at": "2026-11-05T20:54:43Z",
+ "updated_at": "2026-11-05T23:19:02Z",
  "quota_day": "2026-11-05",
- "run_id": 42087049177,
- "run_number": 361
+ "run_id": 42109140635,
+ "run_number": 362
 }
