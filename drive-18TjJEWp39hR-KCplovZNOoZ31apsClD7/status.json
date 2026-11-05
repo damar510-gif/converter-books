@@ -1,7 +1,7 @@
 {
  "state": "paused",
  "pages_total": 507,
- "pages_done": 379,
+ "pages_done": 386,
  "pages_helper": [
   1,
   2,
@@ -31,13 +31,13 @@
   113,
   156,
   178,
-  414,
-  427,
-  429,
-  431,
-  432,
-  434,
-  435
+  428,
+  430,
+  435,
+  439,
+  440,
+  441,
+  442
  ],
  "pages_unsure": [
   27,
@@ -120,14 +120,6 @@
   184,
   336,
   353,
-  436,
-  437,
-  438,
-  439,
-  440,
-  441,
-  442,
-  443,
   444,
   445,
   446,
@@ -194,9 +186,10 @@
   507
  ],
  "pages_retry": [
-  428,
-  430,
-  433
+  433,
+  436,
+  437,
+  438
  ],
  "pages_human": [],
  "helper_checked": 141,
@@ -206,17 +199,17 @@
  "review_conflicts_new": 0,
  "review_seen": "",
  "free_left": true,
- "free_done": 5,
+ "free_done": 3,
  "stages": {
   "helper": 35,
   "read2": 16,
-  "done": 322,
+  "done": 329,
   "unsure": 59,
-  "read1": 75
+  "read1": 68
  },
  "needs": {
   "read1": {
-   "gemma-4-31b-it": 90
+   "gemma-4-31b-it": 84
   },
   "read2": {},
   "settle": {
@@ -225,9 +218,9 @@
  },
  "book": "تراث الانسانية 8_k2opt",
  "epub": "تراث الانسانية 8_k2opt.epub",
- "updated_at": "2026-11-04T22:36:07Z",
+ "updated_at": "2026-11-05T00:35:14Z",
  "quota_day": "2026-11-04",
  "waiting_for": "helper",
- "run_id": 41906200001,
- "run_number": 352
+ "run_id": 41927819205,
+ "run_number": 353
 }
