@@ -2,24 +2,7 @@
  "state": "paused",
  "pages_total": 525,
  "pages_done": 60,
- "pages_helper": [],
- "pages_unsure": [
-  4,
-  139,
-  164,
-  200,
-  208,
-  326,
-  432,
-  449,
-  450,
-  518,
-  519,
-  520,
-  521
- ],
- "pages_missing": [],
- "pages_waiting": [
+ "pages_helper": [
   1,
   2,
   3,
@@ -486,6 +469,23 @@
   523,
   525
  ],
+ "pages_unsure": [
+  4,
+  139,
+  164,
+  200,
+  208,
+  326,
+  432,
+  449,
+  450,
+  518,
+  519,
+  520,
+  521
+ ],
+ "pages_missing": [],
+ "pages_waiting": [],
  "pages_retry": [],
  "pages_human": [],
  "helper_checked": 0,
@@ -494,8 +494,10 @@
  "review_kept": 0,
  "review_conflicts_new": 0,
  "review_seen": "",
+ "free_left": false,
+ "free_done": 0,
  "stages": {
-  "read2": 465,
+  "helper": 465,
   "unsure": 13,
   "done": 47
  },
@@ -508,9 +510,9 @@
  },
  "book": "تراث الانسانية 6_k2opt",
  "epub": "تراث الانسانية 6_k2opt.epub",
- "updated_at": "2026-11-09T08:57:35Z",
+ "updated_at": "2026-11-09T11:41:37Z",
  "quota_day": "2026-11-09",
- "waiting_for": "time",
- "run_id": 42574859806,
- "run_number": 399
+ "waiting_for": "helper",
+ "run_id": 42590472584,
+ "run_number": 400
 }
