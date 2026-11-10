@@ -134,10 +134,13 @@
   215,
   216,
   217,
+  218,
   219,
   220,
   221,
   223,
+  224,
+  225,
   226,
   227,
   228,
@@ -152,7 +155,6 @@
   237,
   238,
   239,
-  240,
   241,
   242,
   243,
@@ -250,10 +252,8 @@
   336
  ],
  "pages_retry": [
-  218,
   222,
-  224,
-  225
+  240
  ],
  "pages_human": [],
  "helper_checked": 0,
@@ -265,23 +265,23 @@
  "stages": {
   "done": 91,
   "unsure": 2,
-  "read2": 135,
-  "read1": 108
+  "read2": 149,
+  "read1": 94
  },
  "needs": {
   "read1": {
-   "gemma-4-31b-it": 110
+   "gemma-4-31b-it": 96
   },
   "read2": {},
   "settle": {
-   "gemini-3-flash-preview,gemini-3.5-flash,gemini-3.6-flash,gemini-3.7-flash,gemini-3.8-flash": 135
+   "gemini-3-flash-preview,gemini-3.5-flash,gemini-3.6-flash,gemini-3.7-flash,gemini-3.8-flash": 149
   }
  },
  "book": "خواطر باسكال",
  "epub": "خواطر باسكال.epub",
- "updated_at": "2026-11-10T03:04:47Z",
+ "updated_at": "2026-11-10T05:56:35Z",
  "quota_day": "2026-11-09",
  "waiting_for": "time",
- "run_id": 42734305889,
- "run_number": 406
+ "run_id": 42748039652,
+ "run_number": 407
 }
