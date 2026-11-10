@@ -1,46 +1,17 @@
 {
  "state": "paused",
  "pages_total": 336,
- "pages_done": 204,
+ "pages_done": 233,
  "pages_helper": [
   182,
   186,
   188,
   198,
-  207,
-  208,
-  209,
-  210,
-  211,
-  212,
-  213,
-  214,
   215,
-  216,
-  217,
-  218,
-  219,
-  220,
-  221,
-  222,
-  223,
-  224,
-  225,
-  226,
-  227,
-  228,
   229,
-  230,
-  231,
   232,
   233,
-  234,
-  235,
-  236,
-  237,
-  238,
   239,
-  241,
   242,
   243,
   244,
@@ -74,11 +45,13 @@
   272,
   273,
   274,
+  275,
   276,
   277,
   278,
   279,
   280,
+  281,
   282,
   283,
   284,
@@ -87,20 +60,11 @@
   287,
   288,
   289,
-  290
- ],
- "pages_unsure": [
-  33,
-  43
- ],
- "pages_missing": [],
- "pages_waiting": [
-  291,
+  290,
   292,
   293,
   294,
   295,
-  296,
   297,
   298,
   299,
@@ -113,8 +77,15 @@
   306,
   307,
   308,
-  309,
-  310,
+  309
+ ],
+ "pages_unsure": [
+  33,
+  43,
+  219
+ ],
+ "pages_missing": [],
+ "pages_waiting": [
   311,
   312,
   313,
@@ -142,12 +113,13 @@
   336
  ],
  "pages_retry": [
-  275,
-  281
+  291,
+  296,
+  310
  ],
  "pages_human": [],
  "helper_checked": 0,
- "review_items": 9,
+ "review_items": 19,
  "review_applied": 0,
  "review_kept": 0,
  "review_conflicts_new": 0,
@@ -155,25 +127,25 @@
  "free_left": true,
  "free_done": 0,
  "stages": {
-  "done": 202,
-  "unsure": 2,
-  "helper": 85,
-  "read1": 47
+  "done": 230,
+  "unsure": 3,
+  "helper": 75,
+  "read1": 28
  },
  "needs": {
   "read1": {
-   "gemma-4-31b-it": 50
+   "gemma-4-31b-it": 31
   },
   "read2": {},
   "settle": {
-   "gemini-3-flash-preview,gemini-3.5-flash,gemini-3.6-flash,gemini-3.7-flash,gemini-3.8-flash": 85
+   "gemini-3-flash-preview,gemini-3.5-flash,gemini-3.6-flash,gemini-3.7-flash,gemini-3.8-flash": 75
   }
  },
  "book": "خواطر باسكال",
  "epub": "خواطر باسكال.epub",
- "updated_at": "2026-11-10T13:54:46Z",
+ "updated_at": "2026-11-10T15:53:46Z",
  "quota_day": "2026-11-10",
  "waiting_for": "helper",
- "run_id": 42805768026,
- "run_number": 410
+ "run_id": 42830312777,
+ "run_number": 411
 }
