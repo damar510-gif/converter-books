@@ -1,11 +1,9 @@
 {
  "state": "paused",
  "pages_total": 336,
- "pages_done": 331,
+ "pages_done": 333,
  "pages_helper": [
-  312,
   318,
-  322,
   333,
   336
  ],
@@ -27,9 +25,9 @@
  "free_left": false,
  "free_done": 0,
  "stages": {
-  "done": 328,
+  "done": 330,
   "unsure": 3,
-  "helper": 5
+  "helper": 3
  },
  "needs": {
   "read1": {
@@ -37,14 +35,14 @@
   },
   "read2": {},
   "settle": {
-   "gemini-3-flash-preview,gemini-3.5-flash,gemini-3.6-flash,gemini-3.7-flash,gemini-3.8-flash": 5
+   "gemini-3-flash-preview,gemini-3.5-flash,gemini-3.6-flash,gemini-3.7-flash,gemini-3.8-flash": 3
   }
  },
  "book": "خواطر باسكال",
  "epub": "خواطر باسكال.epub",
- "updated_at": "2026-11-11T05:00:20Z",
+ "updated_at": "2026-11-11T07:18:43Z",
  "quota_day": "2026-11-10",
  "waiting_for": "helper",
- "run_id": 42947994919,
- "run_number": 417
+ "run_id": 42963231806,
+ "run_number": 418
 }
