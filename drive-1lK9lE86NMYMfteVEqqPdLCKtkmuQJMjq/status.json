@@ -1,20 +1,8 @@
 {
  "state": "paused",
  "pages_total": 336,
- "pages_done": 301,
+ "pages_done": 324,
  "pages_helper": [
-  182,
-  186,
-  188,
-  198,
-  215,
-  229,
-  232,
-  233,
-  239,
-  242,
-  249,
-  264,
   279,
   283,
   291,
@@ -23,15 +11,9 @@
   305,
   311,
   312,
-  319,
-  323,
-  324,
-  325,
-  326,
-  327,
-  328,
-  329,
-  331
+  318,
+  322,
+  333
  ],
  "pages_unsure": [
   33,
@@ -39,15 +21,9 @@
   219
  ],
  "pages_missing": [],
- "pages_waiting": [
-  332,
-  333,
-  334,
-  336
- ],
+ "pages_waiting": [],
  "pages_retry": [
-  318,
-  322
+  336
  ],
  "pages_human": [],
  "helper_checked": 0,
@@ -57,27 +33,27 @@
  "review_conflicts_new": 0,
  "review_seen": "",
  "free_left": true,
- "free_done": 5,
+ "free_done": 11,
  "stages": {
-  "done": 298,
+  "done": 321,
   "unsure": 3,
-  "helper": 29,
-  "read1": 6
+  "helper": 11,
+  "read1": 1
  },
  "needs": {
   "read1": {
-   "gemma-4-31b-it": 10
+   "gemma-4-31b-it": 5
   },
   "read2": {},
   "settle": {
-   "gemini-3-flash-preview,gemini-3.5-flash,gemini-3.6-flash,gemini-3.7-flash,gemini-3.8-flash": 29
+   "gemini-3-flash-preview,gemini-3.5-flash,gemini-3.6-flash,gemini-3.7-flash,gemini-3.8-flash": 11
   }
  },
  "book": "خواطر باسكال",
  "epub": "خواطر باسكال.epub",
- "updated_at": "2026-11-10T22:58:38Z",
+ "updated_at": "2026-11-11T00:28:10Z",
  "quota_day": "2026-11-10",
  "waiting_for": "helper",
- "run_id": 42902991016,
- "run_number": 414
+ "run_id": 42920177033,
+ "run_number": 415
 }
