@@ -428,8 +428,20 @@ function makeEnv(options) {
 
   const Logger = { log: (...a) => { env.logs.push(a.map(String).join(' ')); } };
 
+  const cacheStore = new Map();
+  const CacheService = {
+    getScriptCache: () => ({
+      get: (k) => {
+        const e = cacheStore.get(k);
+        return e && e.until > env.clock ? e.v : null;
+      },
+      put: (k, v, seconds) => { cacheStore.set(k, { v: String(v), until: env.clock + (seconds || 600) * 1000 }); },
+      remove: (k) => { cacheStore.delete(k); }
+    })
+  };
+
   const sandbox = {
-    DriveApp, UrlFetchApp, ScriptApp, MailApp, Session, LockService, HtmlService, Utilities, Logger,
+    DriveApp, UrlFetchApp, ScriptApp, MailApp, Session, LockService, HtmlService, Utilities, Logger, CacheService,
     PropertiesService: { getScriptProperties: () => props }
   };
   vm.createContext(sandbox);
@@ -2763,7 +2775,7 @@ test('a deleted book: its review folder goes even while the review box is empty,
   assert.strictEqual(sub(env, reviews(), g.id), undefined, 'gone before the model starts');
 });
 
-test('a book deleted while it waits for the helper: dropped after two checks, its folder goes, and the helper is told', () => {
+test('a book deleted while it waits for the helper: dropped at the next check, its folder goes, and the helper is told', () => {
   const env = boxesEnv({ transcribe: [GEMINI], review: [] });
   const f = addBook(env, 'محذوف قبل التسليم.pdf');
   tick(env);
@@ -2771,10 +2783,7 @@ test('a book deleted while it waits for the helper: dropped after two checks, it
   env.drive.DriveApp.getFileById(f.id).setTrashed(true);
   minutes(env, 10);
   tick(env);
-  assert.ok(jobs(env)[f.id], 'one check is not enough');
-  minutes(env, 10);
-  tick(env);
-  assert.strictEqual(jobs(env)[f.id], undefined, 'dropped');
+  assert.strictEqual(jobs(env)[f.id], undefined, 'dropped at once');
   assert.ok(!bookFolderOf(env, f.id), 'its folder for the helper goes');
   assert.deepStrictEqual(requestsFile(env).gone, [f.id]);
   assert.strictEqual(status(env).active, null);
@@ -3691,6 +3700,133 @@ test('the fake GitHub saw only known endpoints', () => {
 
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Deleted books (2026-11-13: the first book of a run was deleted during it, and the four books
+// it carried waited for it for good; the user: "why is there no near-instant sync?")
+// ---------------------------------------------------------------------------
+
+function runOfThree(env) {
+  const a = addBook(env, 'أول.pdf', { ageMin: 30 });
+  const b = addBook(env, 'ثان.pdf', { ageMin: 20 });
+  const c = addBook(env, 'ثالث.pdf', { ageMin: 15 });
+  tick(env);
+  const d = lastDispatch(env).body.inputs;
+  assert.deepStrictEqual([d.drive_file_id, JSON.parse(d.queue).books.map((x) => x.id)], [a.id, [b.id, c.id]]);
+  return { a, b, c };
+}
+
+test('deleted: the first book of a run is deleted during it: the next book takes the run over, and its end is handled with the run\'s facts', () => {
+  const env = readyEnv();
+  const { a, b, c } = runOfThree(env);
+  const runs = env.gh.dispatches.length;
+  minutes(env, 5);
+  env.drive.DriveApp.getFileById(a.id).setTrashed(true);
+  tick(env);
+  assert.strictEqual(jobs(env)[a.id], undefined, 'dropped at the first check');
+  assert.strictEqual(jobs(env)[b.id].runLead, undefined, 'b holds the run now');
+  assert.deepStrictEqual(jobs(env)[b.id].runBooks, [c.id]);
+  assert.strictEqual(jobs(env)[c.id].runLead, b.id);
+  assert.strictEqual(env.gh.dispatches.length, runs, 'no second run while it goes on');
+  assert.deepStrictEqual(Object.keys(controlOf(env).gone), [a.id], 'the run going is told');
+  assert.ok(journal(env).some((e) => /حذفتَ الكتاب/.test(e.x)));
+  // The run ends; it did not know, so its facts are with the deleted book.
+  minutes(env, 40);
+  writeStatus(env, a.id, 'paused', { requests: { 'gemini-3.5-flash-lite': 120 }, models_out: ['gemini-3.5-flash-lite'] });
+  writeStatus(env, b.id, 'paused', { stages: { done: 4, read2: 6 } });
+  writeStatus(env, c.id, 'paused', { stages: { done: 2, read2: 8 } });
+  tick(env);
+  assert.strictEqual(jobs(env)[c.id].runLead, undefined, 'handled');
+  assert.strictEqual(jobs(env)[b.id].factsDir, undefined);
+  assert.ok(jobs(env)[b.id].pausedDay, 'the queue waits for a new day, the oldest book holding the turn');
+  assert.strictEqual(jobs(env)[c.id].stage, 'waiting');
+  const u = JSON.parse(env.props.get('USAGE'));
+  assert.strictEqual(u.m['gemini-3.5-flash-lite'].n, 120, 'the run\'s requests counted');
+  assert.strictEqual(u.m['gemini-3.5-flash-lite'].out, true, 'and the model out of quota known');
+});
+
+test('deleted: a run stuck on a deleted first book (an older version) goes on at the next check', () => {
+  const env = readyEnv();
+  const { a, b, c } = runOfThree(env);
+  minutes(env, 40);
+  writeStatus(env, b.id, 'paused', { waiting_for: 'time', stages: { done: 4, unread: 6 } });
+  writeStatus(env, c.id, 'paused', { waiting_for: 'time', stages: { done: 2, unread: 8 } });
+  // As an older version left it: the first book's job gone, the others tied to it.
+  const j = jobs(env);
+  delete j[a.id];
+  env.props.set('JOBS', JSON.stringify(j));
+  const runs = env.gh.dispatches.length;
+  tick(env);
+  assert.strictEqual(env.gh.dispatches.length, runs + 1, 'the queue runs again at once (time)');
+  const d = lastDispatch(env).body.inputs;
+  assert.deepStrictEqual([d.drive_file_id, JSON.parse(d.queue).books.map((x) => x.id)], [b.id, [c.id]]);
+});
+
+test('deleted: a book carried by another book\'s run is dropped too, and the run is told', () => {
+  const env = readyEnv();
+  const { a, b, c } = runOfThree(env);
+  minutes(env, 5);
+  env.drive.DriveApp.getFileById(c.id).setTrashed(true);
+  tick(env);
+  assert.strictEqual(jobs(env)[c.id], undefined);
+  assert.deepStrictEqual(Object.keys(controlOf(env).gone), [c.id]);
+  minutes(env, 40);
+  writeStatus(env, a.id, 'paused', { waiting_for: 'time', stages: { done: 4, unread: 6 } });
+  writeStatus(env, b.id, 'paused', { waiting_for: 'time', stages: { done: 2, unread: 8 } });
+  tick(env);
+  const d = lastDispatch(env).body.inputs;
+  assert.deepStrictEqual([d.drive_file_id, JSON.parse(d.queue).books.map((x) => x.id)], [a.id, [b.id]], 'goes on without it');
+});
+
+test('deleted: the status page drops a deleted book within seconds, without waiting for a check', () => {
+  const env = boxesEnv({ transcribe: [GEMINI], review: [] });
+  const { a, b, c } = runOfThree(env);
+  assert.ok(bookFolderOf(env, b.id), 'folder for the helper');
+  minutes(env, 2);
+  env.drive.DriveApp.getFileById(b.id).setTrashed(true);
+  JSON.parse(env.ctx.getLive('{}'));
+  assert.strictEqual(jobs(env)[b.id], undefined, 'gone from the page');
+  assert.ok(!bookFolderOf(env, b.id), 'the helper\'s models leave it');
+  assert.deepStrictEqual(requestsFile(env).gone, [b.id]);
+  assert.deepStrictEqual(Object.keys(controlOf(env).gone), [b.id]);
+  // At most every few seconds: a second look at once does nothing more.
+  env.drive.DriveApp.getFileById(c.id).setTrashed(true);
+  status(env);
+  assert.ok(jobs(env)[c.id], 'not looked at again yet');
+  minutes(env, 1);
+  status(env);
+  assert.strictEqual(jobs(env)[c.id], undefined);
+  assert.ok(jobs(env)[a.id]);
+  // While a check holds the lock, the page does not touch the books.
+  env.drive.DriveApp.getFileById(a.id).setTrashed(true);
+  minutes(env, 1);
+  env.lockBusy = true;
+  status(env);
+  env.lockBusy = false;
+  assert.ok(jobs(env)[a.id], 'left to the check');
+});
+
+test('deleted: Drive\'s "not found" said once is no deletion', () => {
+  const env = readyEnv();
+  const f = addBook(env, 'مرة.pdf');
+  tick(env);
+  const real = env.drive.DriveApp.getFileById;
+  let calls = 0;
+  env.drive.DriveApp.getFileById = (id) => {
+    if (id === f.id && calls++ === 0) throw new Error('No item with the given ID could be found.');
+    return real(id);
+  };
+  minutes(env, 10);
+  tick(env);
+  env.drive.DriveApp.getFileById = real;
+  assert.ok(jobs(env)[f.id], 'kept');
+  // Gone for good (deleted from the trash): dropped.
+  env.drive.items.delete(f.id);
+  minutes(env, 10);
+  tick(env);
+  assert.strictEqual(jobs(env)[f.id], undefined);
+});
+
+
 let failed = 0;
 // ONLY=<part of a test name> runs those tests alone.
 for (const t of tests.filter((x) => !process.env.ONLY || x.name.indexOf(process.env.ONLY) >= 0)) {
@@ -3705,3 +3841,4 @@ for (const t of tests.filter((x) => !process.env.ONLY || x.name.indexOf(process.
 }
 console.log('\n' + (tests.length - failed) + ' of ' + tests.length + ' tests passed' + (failed ? ', ' + failed + ' FAILED' : ''));
 process.exit(failed ? 1 : 0);
+

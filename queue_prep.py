@@ -195,6 +195,8 @@ def prepare(lead_hash=""):
             if os.path.exists(got):
                 os.remove(got)
         manifest.append({"pdf": pdf, "out": dout, "title": b["title"], "helper": b["helper"], "order": b["order"],
+                         # Its file in the user's Drive: the run leaves the book if the user deletes it.
+                         "id": "" if b.get("path") else str(b.get("id") or ""),
                          "answers": answers if os.path.exists(answers) else "",
                          "judge": judge if os.path.exists(judge) else "",
                          "human": human if os.path.exists(human) else ""})

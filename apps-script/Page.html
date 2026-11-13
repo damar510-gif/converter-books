@@ -1473,7 +1473,7 @@
   var ENDS = { done: 'اكتمل الكتاب', paused: 'نفد رصيد النماذج المجانية، ويكمل بعد تجدده',
     time: 'انتهى وقت التشغيل والرصيد باقٍ، فيبدأ تشغيل جديد', helper: 'بقي العمل لنماذجك على جهازك',
     reader: 'ينتظر تجدد رصيد القارئ الثاني', incomplete: 'بقيت صفحات لم تُقرأ', failed: 'تعثّر التشغيل',
-    boxes: 'لا نموذج في المربعات يكمل الصفحات الباقية، فينتظر أن تضع نموذجاً' };
+    boxes: 'لا نموذج في المربعات يكمل الصفحات الباقية، فينتظر أن تضع نموذجاً', gone: 'حذفتَ كتبه' };
   // The workflow's steps on GitHub, while the run itself has nothing to say yet.
   var STEPS = { 'Set up job': 'تجهيز الجهاز', 'Checkout Repository': 'تنزيل البرنامج', 'Set up Python': 'تجهيز Python',
     'Tell the status page': 'إبلاغ هذه الصفحة', 'Name the package cache': 'تثبيت الأدوات',
@@ -1566,6 +1566,7 @@
       case 'single': return ['quiet', p + ': قراءة واحدة فقط.'];
       case 'wait': return ['hold', count(e.n || 0, 'صفحة واحدة تنتظر', 'صفحتان تنتظران', 'صفحات تنتظر', 'صفحة تنتظر') +
         ' من يحسمها: لا حاسم متاح في هذا التشغيل.'];
+      case 'gone': return ['hold', 'حذفتَ الكتاب' + bookOf(e.b).replace(' من ', ' ') + '، فترك التشغيل صفحاته.'];
       case 'sent': return ['ok', 'أُرسلت ' + count(e.n || 0, 'صفحة واحدة', 'صفحتان', 'صفحات', 'صفحة') + ' إلى نماذجك على جهازك.'];
       case 'phase': return ['quiet', (PHASES[e.x] || e.x) + '.'];
       case 'end': return [e.x === 'done' ? 'ok' : 'hold', 'انتهى التشغيل: ' + (ENDS[e.x] || e.x) + '.'];

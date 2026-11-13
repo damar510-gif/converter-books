@@ -36,6 +36,9 @@ var CONFIG = {
   WORKFLOW: 'convert.yml',
   RESULTS_BRANCH: 'results',
   TICK_MINUTES: 10,
+  // While the status page is open, it looks for books the user deleted at most this often
+  // (seconds; syncGone_), so a deleted book leaves within seconds, not at the next check.
+  GONE_EVERY_S: 10,
   // A file changed in the last 2 minutes may still be uploading from the phone.
   SETTLE_MS: 2 * 60 * 1000,
   // A dispatch with no run and no status after this long was lost.
@@ -298,6 +301,7 @@ function tick() {
 /** Status for the web page, as a JSON string (google.script.run cannot return Dates). */
 function getStatus() {
   try {
+    syncGone_();
     var props = props_();
     var cfg = config_();
     var now = now_();
@@ -769,7 +773,7 @@ function advanceJob_(ctx, job) {
 }
 
 function handleStatus_(ctx, job, s) {
-  if (job.runBooks && job.runBooks.length) return handleRun_(ctx, job, s);
+  if ((job.runBooks && job.runBooks.length) || job.factsDir) return handleRun_(ctx, job, s);
   job.lastState = s.state;
   if (s.pages_total) job.pagesTotal = Number(s.pages_total) || 0;
   if (s.pages_done !== undefined) job.pagesDone = Number(s.pages_done) || 0;
@@ -1153,6 +1157,9 @@ function deliverPending_(ctx) {
  * the free models still have work, else when their quota renews, when the boxes change, or when
  * the user's models have done their part (resumeIfNewDay_).
  */
+// What a run says once, with its first book (converter.finish_book).
+var RUN_FACTS = ['requests', 'models_out', 'models_missing', 'free_models', 'free_default', 'boxes', 'boxes_at'];
+
 function handleRun_(ctx, lead, s) {
   var books = [{ job: lead, s: s }];
   (lead.runBooks || []).forEach(function (id) {
@@ -1162,6 +1169,17 @@ function handleRun_(ctx, lead, s) {
     books.push({ job: j, s: st && st !== 'error' ? st : null });
   });
   delete lead.runBooks;
+  if (lead.factsDir) {
+    // The run's first book was deleted (adoptRuns_): its facts went with it, unless the run
+    // knew and gave them to this book.
+    var facts = s.requests ? null : readStatusAt_(ctx, lead.factsDir, lead.dispatchedAt);
+    if (facts && facts !== 'error' && facts.requests) {
+      RUN_FACTS.forEach(function (k) {
+        if (facts[k] !== undefined) s[k] = facts[k];
+      });
+    }
+    delete lead.factsDir;
+  }
   noteUsage_(s);
   noteFreeModels_(s);
   // When the boxes this run took during it were saved (live.py): boxesMissed_.
@@ -1875,40 +1893,145 @@ function bookGone_(id, epubId) {
 }
 
 /**
- * Books the user deleted (the original in the trash) before they were finished: no more
- * runs, the helper's models stop on them (their folder goes, and requests.json lists them
- * in "gone"), and they leave the page. Seen at two checks in a row, so a passing Drive
- * error never drops a book.
+ * Books the user deleted (the original in the trash, or gone from Drive) before they were
+ * finished, whether a run of their own or another book's run carries them: no more runs, the
+ * run going leaves them within seconds (the requests file, {gone: {id: when}}), the helper's
+ * models stop on them (their folder goes, and requests.json lists them in "gone"), and they
+ * leave the page. Seen once is enough (2026-11-13, the user: "why is there no near-instant
+ * sync?"): Drive's "not found" is looked at twice (goneNow_). The books a deleted book's run
+ * carries go on without it (adoptRuns_). Returns the books dropped.
  */
 function dropGoneBooks_(ctx) {
   var gone = [];
-  var changed = false;
+  var dirs = {};
   Object.keys(ctx.jobs).forEach(function (id) {
     var j = ctx.jobs[id];
     // Review and improvement rounds are of delivered books: their original may go (orig-gone).
-    if (!j || !(isActive_(j) || isParked_(j)) || j.humanRound || j.refining) return;
-    if (!fileTrashed_(id)) {
-      if (j.goneSeen) { delete j.goneSeen; changed = true; }
-      return;
-    }
-    if (!j.goneSeen) { j.goneSeen = now_().toISOString(); changed = true; return; }
-    gone.push(id);
+    if (!j || !inProgress_(j) || j.humanRound || j.refining) return;
+    if (goneNow_(id)) gone.push(id);
   });
+  var at = now_().toISOString();
   gone.forEach(function (id) {
+    var j = ctx.jobs[id];
+    dirs[id] = j.resultDir || 'drive-' + id;
     dropBookFolder_(id);
-    journal_('gone', 'حذفتَ الكتاب، فتوقف العمل عليه.', ctx.jobs[id].title);
+    journal_('gone', 'حذفتَ الكتاب، فتوقف العمل عليه.', j.title);
     delete ctx.jobs[id];
   });
-  if (changed || gone.length) saveJobs_(ctx.jobs);
-  if (!gone.length) return;
+  var adopted = adoptRuns_(ctx, dirs);
+  if (gone.length || adopted) saveJobs_(ctx.jobs);
+  if (!gone.length) return gone;
   Logger.log('books deleted by the user: ' + gone.join(', '));
+  try {
+    // The run going (if any) takes no more page of these books.
+    editControl_(function (data) {
+      var g = data.gone && typeof data.gone === 'object' && !Array.isArray(data.gone) ? data.gone : {};
+      gone.forEach(function (id) { g[id] = at; });
+      var keys = Object.keys(g).sort(function (a, b) { return String(g[b]).localeCompare(String(g[a])); });
+      var kept = {};
+      keys.slice(0, 40).forEach(function (k) { kept[k] = g[k]; });
+      data.gone = kept;
+    });
+  } catch (err) {
+    Logger.log('could not tell the run about the deleted books: ' + err);
+  }
   var props = props_();
   var old = parseJson_(props.getProperty('HELPER_GONE'));
   props.setProperty('HELPER_GONE', JSON.stringify((Array.isArray(old) ? old : []).concat(gone).slice(-30)));
   if (props.getProperty('HELPER_INSTALL_ID')) writeRequests_();
+  return gone;
 }
 
-/** The file is in the trash or deleted for good (a Drive error is not taken for either). */
+/**
+ * True when the user deleted this file: in the trash, or gone from Drive. Drive's "not found"
+ * may be a passing fault: it counts only when said twice, a moment apart, while Drive answers
+ * for the user's own folder.
+ */
+function goneNow_(id) {
+  var look = function () {
+    try {
+      return DriveApp.getFileById(id).isTrashed() ? 'trashed' : 'here';
+    } catch (err) {
+      return /not found|no item with the given id/i.test(String(err && err.message ? err.message : err)) ? 'missing' : 'error';
+    }
+  };
+  var seen = look();
+  if (seen !== 'missing') return seen === 'trashed';
+  Utilities.sleep(1500);
+  if (look() !== 'missing') return false;
+  try {
+    DriveApp.getRootFolder().getId();
+    return true;
+  } catch (err) {
+    return false;
+  }
+}
+
+/**
+ * Books carried by a run whose own book is gone: the user deleted it during the run, or before
+ * its end was handled (2026-11-13: «تراث 5» was deleted while its run carried four more books,
+ * and those waited for a book that no longer existed: never handled, never run again, and
+ * their own deletion never seen). The oldest of them takes the run over, with its dispatch
+ * time, so the run's end is handled as before; the run's facts (requests, models out of quota)
+ * may be in the deleted book's folder (factsDir, handleRun_). dirs: the folders of the books
+ * dropped just now. Returns how many runs were taken over.
+ */
+function adoptRuns_(ctx, dirs) {
+  var groups = {};
+  Object.keys(ctx.jobs).forEach(function (id) {
+    var j = ctx.jobs[id];
+    if (!j || !j.runLead) return;
+    var lead = ctx.jobs[j.runLead];
+    // Its run's own book still holds the run (another end, given up for example, frees them too).
+    if (lead && isActive_(lead) && (lead.runBooks || []).indexOf(id) >= 0) return;
+    (groups[j.runLead] = groups[j.runLead] || []).push(j);
+  });
+  var leads = Object.keys(groups);
+  leads.forEach(function (old) {
+    var books = groups[old].sort(queueCmp_);
+    var lead = books[0];
+    delete lead.runLead;
+    lead.stage = 'running';
+    lead.pausedDay = '';
+    lead.runBooks = books.slice(1).map(function (b) {
+      b.runLead = lead.fileId;
+      return b.fileId;
+    });
+    var was = ctx.jobs[old];
+    if (was) delete was.runBooks;
+    lead.factsDir = (dirs && dirs[old]) || (was && was.resultDir) || 'drive-' + old;
+    journal_('queue', 'حُذف الكتاب الذي بدأ به التشغيل، فصار هذا الكتاب أوله: تُقرأ نتائج التشغيل حين ينتهي.', lead.title);
+  });
+  return leads.length;
+}
+
+/**
+ * The status page looks (getStatus, getLive): a book the user deleted leaves within seconds,
+ * not at the next check. At most every GONE_EVERY_S seconds; skipped while a check holds the
+ * lock (the check looks for deleted books first). Returns true when a book was dropped.
+ */
+function syncGone_() {
+  try {
+    var cache = CacheService.getScriptCache();
+    if (cache.get('GONE_LOOK')) return false;
+    cache.put('GONE_LOOK', '1', CONFIG.GONE_EVERY_S);
+  } catch (err) {
+    return false;
+  }
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(500)) return false;
+  try {
+    var ctx = { jobs: loadJobs_(), dispatched: 0 };
+    return dropGoneBooks_(ctx).length > 0;
+  } catch (err) {
+    Logger.log('looking for deleted books failed: ' + (err && err.stack ? err.stack : err));
+    return false;
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/** In the trash, or not found (fileTrashed_ of older checks; goneNow_ looks twice). */
 function fileTrashed_(id) {
   try {
     return DriveApp.getFileById(id).isTrashed();
@@ -2236,7 +2359,12 @@ function deliverReview_(ctx, job, s) {
 
 /** Returns the fresh status object, null when there is none, or 'error'. */
 function readStatus_(ctx, job) {
-  var r = gh_(ctx.cfg, 'get', contentsPath_(ctx.cfg, job.resultDir + '/status.json'), null, GH_RAW);
+  return readStatusAt_(ctx, job.resultDir, job.dispatchedAt);
+}
+
+/** status.json in this results folder, written after `since` (readStatus_). */
+function readStatusAt_(ctx, dir, since) {
+  var r = gh_(ctx.cfg, 'get', contentsPath_(ctx.cfg, dir + '/status.json'), null, GH_RAW);
   if (r.code === 404) return null;
   if (r.code !== 200) {
     reportGitHubProblem_(ctx, r, 'status');
@@ -2246,7 +2374,7 @@ function readStatus_(ctx, job) {
   if (!s || typeof s !== 'object' || !s.state) return null;
   // status.json of an earlier attempt stays in the folder until the new run replaces
   // it. Only a status written after this dispatch describes the current attempt.
-  if (!(Date.parse(s.updated_at) >= Date.parse(job.dispatchedAt))) return null;
+  if (!(Date.parse(s.updated_at) >= Date.parse(since))) return null;
   return s;
 }
 
@@ -3614,6 +3742,7 @@ function runSteps_(job) {
  */
 function getLive(json) {
   try {
+    syncGone_();
     var q = parseJson_(json) || {};
     var now = now_();
     var props = props_();
@@ -4146,7 +4275,7 @@ function pruneJobs_(jobs) {
     ['name', 'driveName', 'resultDir', 'dispatchedAt', 'createdAt', 'pausedDay', 'pausedAt',
       'pendingCount', 'noteId', 'pauseMailed', 'pagesDone', 'pagesTotal', 'pauses',
       'judgeDay', 'judgeRounds', 'judgeMailed', 'rvDonePrev', 'downloadFails',
-      'helperAt', 'helperMovedAt', 'helperFinished', 'helperPages', 'helperDoneSeen', 'helperOff', 'goneSeen',
+      'helperAt', 'helperMovedAt', 'helperFinished', 'helperPages', 'helperDoneSeen', 'helperOff', 'goneSeen', 'factsDir',
       'freeLeft', 'freeDay',
       'readerDay', 'readerWaits', 'readerMailed',
       'stages', 'pauseWhy', 'timeDay', 'timeRuns', 'forced']

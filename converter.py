@@ -2313,11 +2313,14 @@ def run_steps(pool, books, workers):
             error = None
             try:
                 b = books[item[0]]
-                with live.in_book(b.index):
-                    nxt = b.do(step, item[1], pool, steps)
-                # Before this one counts as done, so the steps never end in between.
-                for k, back in nxt or ():
-                    steps.put(k, item, back)
+                # The user deleted the book during the run: its pages are left (book_gone).
+                nxt = None
+                if not b.gone:
+                    with live.in_book(b.index):
+                        nxt = b.do(step, item[1], pool, steps)
+                    # Before this one counts as done, so the steps never end in between.
+                    for k, back in nxt or ():
+                        steps.put(k, item, back)
             except Exception as e:
                 error = e
             steps.done(step, item, error)
@@ -2378,6 +2381,8 @@ class Book:
         # The pages that went through the run's check step (check_pages leaves them).
         self.checked = set()
         self.state, self.summary = "", {}
+        # The user deleted the book's file during the run (Live.watch_books): no more work on it.
+        self.gone = False
 
     def rescue(self, pool):
         return pool.rescue if pool else self.args.rescue_model
@@ -2405,7 +2410,7 @@ class Book:
     def back(self, p, lv):
         """A page the free models leave during the run (no model of its box has quota left)
         goes to the helper's models within a minute, with its readings."""
-        if not self.transcribe:
+        if not self.transcribe or self.gone:
             return
         with self.hand_lock:
             self.handed.add(p)
@@ -2458,6 +2463,8 @@ class Book:
         return [("c", False)]
 
     def scan(self, steps, pool):
+        if self.gone:
+            return
         for p in self.free_pages:
             rec = load_record(self.cache_dir, p, pool.rescue)
             if rec and not review.pin_of(rec):
@@ -2551,6 +2558,10 @@ def generate_epub_from_pdf(filepath, output_path, args, others=()):
                     save_record(b.cache_dir, rec)
                 lv.page(i + 1, "done" if (i + 1) in b.pins else page_state(rec))
     lv.set_phase("apply" if args.review_only else "start")
+    # A book the user deletes during the run is left within seconds (the status page tells the
+    # run, and the run looks at its books' files itself).
+    if not args.review_only:
+        lv.watch_books({b.args.drive_id: b for b in books if getattr(b.args, "drive_id", "")}, book_gone(lv))
     lv.start()
 
     pool = None
@@ -2652,20 +2663,52 @@ def generate_epub_from_pdf(filepath, output_path, args, others=()):
                 print(f"Free models settled {len(b.free_done)} pages")
 
     codes = []
+    # A book the user deleted during the run is not finished (the Drive inbox dropped it); the
+    # run's facts go with the first book left, the one that takes the run over (adoptRuns_).
+    left = [b for b in books if not b.gone]
     for b in books:
+        if b.gone:
+            print(f"«{b.args.title}»: deleted by the user during the run, left unfinished")
+    for b in left:
         try:
             with live.in_book(b.index):
-                codes.append(finish_book(b, pool, lv, args, gen, b is lead))
+                codes.append(finish_book(b, pool, lv, args, gen, b is left[0]))
         except Exception as e:
-            if b is lead:
+            if b is left[0]:
                 raise
             print(f"Book {b.filepath} could not be finished: {e}")
             write_status(b.args.status, failed_summary(str(e)), b.args.title, "")
             codes.append(1)
-    lv.finish(lead.state, unsure=len(lead.summary["pages_unsure"]), waiting=len(lead.summary["pages_waiting"]),
-              helper=len(lead.summary["pages_helper"]), missing=len(lead.summary["pages_missing"]),
-              out=lead.summary.get("models_out"))
+    if not left:
+        lv.finish("gone")
+        return 0
+    first = left[0]
+    lv.finish(first.state, unsure=len(first.summary["pages_unsure"]), waiting=len(first.summary["pages_waiting"]),
+              helper=len(first.summary["pages_helper"]), missing=len(first.summary["pages_missing"]),
+              out=first.summary.get("models_out"))
     return next((c for c in codes if c), 0)
+
+
+def book_gone(lv):
+    """What the run does when the user deleted one of its books (Live.watch_books): it takes no
+    more page of it, and the helper's models are told at once to leave it (its book.json asks
+    for no page; the Drive inbox removes the folder too)."""
+    def gone(b):
+        if b.gone:
+            return
+        b.gone = True
+        print(f"«{b.args.title}»: deleted by the user; no more work on it in this run")
+        with live.in_book(b.index):
+            lv.note("", "gone", kind="book")
+        if b.box and b.box.fresh():
+            try:
+                b.box.put_json("book.json", {"v": 1, "title": b.args.title, "order": getattr(b.args, "order", "") or "",
+                                             "total": len(b.doc), "need": [], "need_a": [], "lite_out": False,
+                                             "gone": True, "at": helperbox.now(),
+                                             "run": os.environ.get("GITHUB_RUN_ID", "")})
+            except Exception as e:  # the Drive inbox removes the folder anyway
+                print(f"  could not tell the helper: {str(e)[:120]}")
+    return gone
 
 
 def failed_summary(reason):
@@ -2892,6 +2935,8 @@ def plain_summary():
 
 
 # What the helper's models do in a run (helperInput_ in Code.gs; the workflow checks it too).
+# A Google Drive file id (the run's books, Live.watch_books).
+DRIVE_ID = re.compile(r"^[A-Za-z0-9_-]{10,200}$")
 HELPER_SPEC = re.compile(r"^[A-Za-z0-9_-]+:((read1|read2|settle)(\+(read1|read2|settle))*|transcribe|read|import)$")
 
 
@@ -2913,8 +2958,10 @@ def queue_books(path, args):
         bargs = argparse.Namespace(**vars(args))
         helper = str(e.get("helper") or "")
         given = lambda k: str(e.get(k) or "") if e.get(k) and os.path.isfile(str(e.get(k))) else ""
+        drive_id = str(e.get("id") or "")
         bargs.__dict__.update(
             title=str(e.get("title") or name), pages="", order=str(e.get("order") or ""),
+            drive_id=drive_id if DRIVE_ID.match(drive_id) else "",
             report=os.path.join(folder, "report.md"), status=os.path.join(folder, "status.json"),
             review_out=os.path.join(folder, "review-out"), keep_markdown=True,
             answers=given("answers"), judge_answers=given("judge"), human=given("human"),
@@ -2987,7 +3034,11 @@ def main():
                              "order: [{pdf, out, title, answers, judge, human, helper, order}]. Each box's "
                              "models take the oldest page waiting for their step in any of them")
     parser.add_argument("--order", default="", help="The book's place in the Drive inbox's order (book.json)")
+    parser.add_argument("--drive-id", default=os.environ.get("DRIVE_FILE_ID", ""),
+                        help="The book's file in the user's Drive: the run leaves the book if the user deletes it")
     args = parser.parse_args()
+    if not DRIVE_ID.match(args.drive_id or ""):
+        args.drive_id = ""
 
     input_path = args.input
     if not os.path.exists(input_path):
