@@ -394,6 +394,8 @@ jobs:
           BOOK_PAGES: ${{ inputs.pages }}
           HELPER: ${{ inputs.helper }}
           FREE_BOXES: ${{ inputs.models }}
+          # The book's file in the user's Drive: the run leaves the book if the user deletes it.
+          DRIVE_FILE_ID: ${{ inputs.drive_file_id }}
           PYTHONUNBUFFERED: '1'
         run: |
           set +e

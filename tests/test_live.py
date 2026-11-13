@@ -526,3 +526,140 @@ class DailyLimitChecks(unittest.TestCase):
         self.assertIn("gemini-9-flash-lite", pool.exhausted)
         self.assertEqual(len([s for s in self.slept if s >= c.DAY_CHECK_SECONDS]), 2)
         self.assertLessEqual(max(self.slept), c.DAY_CHECK_SECONDS)
+
+
+class DeletedBooks(unittest.TestCase):
+    """A book the user deletes during the run is left within seconds (2026-11-13, the user: "why
+    is there no near-instant sync?"): the status page says so in the requests file, or the run
+    sees it in the user's Drive itself."""
+
+    class Files(FakeSink):
+        def __init__(self, seen):
+            super().__init__()
+            self.seen = seen
+
+        def trashed(self, file_id):
+            v = self.seen.get(file_id)
+            return v.pop(0) if isinstance(v, list) else v
+
+    def test_the_status_page_says_a_book_is_gone(self):
+        lv = live.Live(FakeSink({"dispatched": "2026-11-13T10:24:00.000Z"}), clock=Clock())
+        lv.start()
+        lv.stop()
+        got = []
+        lv.watch_books({"book_a_1234567890": "a", "book_b_1234567890": "b"}, got.append)
+        lv.control = FakeSink({"gone": {"book_b_1234567890": "2026-11-13T10:40:00.000Z",
+                                        # Deleted before this run: the user put it back since.
+                                        "book_a_1234567890": "2026-11-12T09:00:00.000Z",
+                                        "other_book_1234567890": "2026-11-13T10:41:00.000Z"}})
+        lv.check_control()
+        lv.check_control()
+        self.assertEqual(got, ["b"], "once, and only a book of this run")
+
+    def test_the_run_sees_a_book_in_the_trash_or_gone_for_good(self):
+        sink = self.Files({"book_a_1234567890": [False, True], "book_b_1234567890": ["missing", None, "missing", "missing"]})
+        lv = live.Live(sink, clock=Clock())
+        got = []
+        lv.watch_books({"book_a_1234567890": "a", "book_b_1234567890": "b"}, got.append)
+        lv.check_files()
+        self.assertEqual(got, [])
+        lv.check_files()
+        self.assertEqual(got, ["a"], "in the trash")
+        lv.check_files()
+        self.assertEqual(got, ["a"], "Drive's \"not found\" once is no deletion")
+        lv.check_files()
+        self.assertEqual(got, ["a", "b"], "said twice in a row")
+
+    def test_drive_answers_on_a_file(self):
+        class Open:
+            def __init__(self, answer):
+                self.answer, self.urls = answer, []
+
+            def __call__(self, req, timeout=None):
+                self.urls.append(req.full_url)
+                if isinstance(self.answer, int):
+                    raise urllib.error.HTTPError(req.full_url, self.answer, "error", {}, io.BytesIO(b"{}"))
+                return Response(json.dumps(self.answer).encode("utf-8"))
+
+        o = Open({"trashed": True})
+        self.assertIs(live.DriveFile(LIVE_ID, "t", o).trashed("book_a_1234567890"), True)
+        self.assertIn("book_a_1234567890?fields=trashed", o.urls[0])
+        self.assertIs(live.DriveFile(LIVE_ID, "t", Open({"trashed": False})).trashed("book_a_1234567890"), False)
+        self.assertEqual(live.DriveFile(LIVE_ID, "t", Open(404)).trashed("book_a_1234567890"), "missing")
+        self.assertIsNone(live.DriveFile(LIVE_ID, "t", Open(500)).trashed("book_a_1234567890"))
+
+
+class DeletedBookInRun(unittest.TestCase):
+    """The run's steps leave a deleted book's pages, and it is not finished."""
+
+    class Book:
+        def __init__(self, index, pages):
+            self.index, self.pages, self.gone, self.done = index, pages, False, []
+
+        def scan(self, steps, pool):
+            if self.gone:
+                return
+            for p in self.pages:
+                steps.put("a", (self.index, p))
+
+        def do(self, step, p, pool, steps):
+            self.done.append(p)
+            if self.index == 0 and p == 1:
+                # The user deletes the other book while this page is read.
+                others[0].gone = True
+            return []
+
+    def test_its_pages_are_left(self):
+        global others
+        a, b = self.Book(0, [1, 2, 3]), self.Book(1, [1, 2, 3])
+        others = [b]
+
+        class Pool:
+            box_gen = 0
+
+        c.run_steps(Pool(), [a, b], 1)
+        self.assertEqual(sorted(a.done), [1, 2, 3])
+        self.assertLess(len(b.done), 3, "the deleted book's pages are left")
+
+    def test_the_helper_is_told_to_leave_it(self):
+        class Box:
+            def __init__(self):
+                self.put = {}
+
+            def fresh(self):
+                return True
+
+            def put_json(self, name, data):
+                self.put[name] = data
+                return True
+
+        class Doc(list):
+            pass
+
+        b = self.Book(0, [1])
+        b.box, b.doc = Box(), Doc([0, 0, 0])
+        b.args = type("A", (), {"title": "كتاب", "order": "2026-10-22T13:38:40.497Z"})()
+        lv = live.Live(FakeSink(), clock=Clock())
+        gone = c.book_gone(lv)
+        gone(b)
+        gone(b)
+        self.assertTrue(b.gone)
+        self.assertEqual(b.box.put["book.json"]["need"], [])
+        self.assertTrue(b.box.put["book.json"]["gone"])
+        self.assertEqual([e["r"] for e in lv.snapshot()["events"]].count("gone"), 1)
+
+    def test_a_queue_book_knows_its_drive_file(self):
+        with tempfile.TemporaryDirectory() as d:
+            pdf = os.path.join(d, "book.pdf")
+            open(pdf, "wb").close()
+            man = os.path.join(d, "manifest.json")
+            with open(man, "w", encoding="utf-8") as f:
+                json.dump([{"pdf": pdf, "out": os.path.join(d, "out"), "title": "ب", "id": "book_b_1234567890"},
+                           {"pdf": pdf, "out": os.path.join(d, "out2"), "title": "ج", "id": "bad id!"}], f)
+            args = type("A", (), {})()
+            args.__dict__.update(drive_id="lead_file_1234567890")
+            got = c.queue_books(man, args)
+        self.assertEqual([x[2].drive_id for x in got], ["book_b_1234567890", ""])
+
+
+others = []

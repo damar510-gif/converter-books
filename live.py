@@ -38,6 +38,9 @@ EVENTS = 80
 LIMITS = (("flash-lite", 500),)
 # How often the run looks at the status page's requests (Live.watch), in seconds.
 CONTROL_EVERY = 10
+# How often the run looks at its books' files in the user's Drive (watch_books): a book the user
+# deleted is left even while the status page is closed.
+FILES_EVERY = 30
 MODEL_ID = re.compile(r"^(gemini|gemma)-[a-z0-9.-]{1,60}$")
 # The boxes the page sends to a run going (Live.watch): the steps of a book's pages.
 WORK_BOXES = ("read1", "read2", "settle")
@@ -127,6 +130,21 @@ class DriveFile:
         except (urllib.error.URLError, OSError, ValueError):
             return {}
 
+    def trashed(self, file_id):
+        """Another file of the user's Drive: True in the trash, False there, "missing" when Drive
+        does not find it (deleted for good), None when Drive did not answer."""
+        if self.dead:
+            return None
+        try:
+            body = self._call("GET", FILES + file_id + "?fields=trashed&supportsAllDrives=true")
+            return bool(json.loads(body.decode("utf-8")).get("trashed"))
+        except urllib.error.HTTPError as e:
+            if e.code == 401:
+                self.dead = True
+            return "missing" if e.code == 404 else None
+        except (urllib.error.URLError, OSError, ValueError, AttributeError):
+            return None
+
     def write(self, data):
         """True when the file was written. A refused token (401) stops all writes; a passing
         error only skips this one (the next write carries everything)."""
@@ -209,6 +227,12 @@ class Live:
         self.boxes_seen = ""
         self.boxes_at = ""
         self.control_at = 0.0
+        # The run's books by their Drive file (watch_books): on_gone(book) once the user deleted one.
+        self.books_by_id = {}
+        self.on_gone = None
+        self.gone_seen = set()
+        self.missing = {}
+        self.files_at = 0.0
 
     @property
     def on(self):
@@ -426,17 +450,60 @@ class Live:
         self.on_retry = on_retry
         self.on_boxes = on_boxes
 
+    def watch_books(self, books, on_gone):
+        """books: {Drive file id: book}. on_gone(book) is called once for a book the user deleted
+        during the run: the status page says so (the requests file's "gone", {id: when}), or the
+        run sees it in the trash or gone from Drive itself (check_files)."""
+        self.books_by_id = {k: v for k, v in books.items() if FILE_ID.match(str(k))}
+        self.on_gone = on_gone
+
+    def _gone(self, file_id):
+        if file_id in self.gone_seen or file_id not in self.books_by_id or not self.on_gone:
+            return
+        self.gone_seen.add(file_id)
+        try:
+            self.on_gone(self.books_by_id[file_id])
+        except Exception as e:  # never stops the conversion
+            print(f"  live view: gone: {str(e)[:120]}")
+
+    def check_files(self):
+        """Looks at the run's books' files: one in the trash is gone; one Drive does not find,
+        when it says so twice in a row (a passing fault is no deletion)."""
+        self.files_at = self.clock()
+        if not self.books_by_id or not self.sink or getattr(self.sink, "dead", False):
+            return
+        for file_id in list(self.books_by_id):
+            if file_id in self.gone_seen:
+                continue
+            seen = self.sink.trashed(file_id) if hasattr(self.sink, "trashed") else None
+            if seen is None:
+                self.missing.pop(file_id, None)
+            elif seen == "missing":
+                self.missing[file_id] = self.missing.get(file_id, 0) + 1
+                if self.missing[file_id] >= 2:
+                    self._gone(file_id)
+            elif seen:
+                self._gone(file_id)
+            else:
+                self.missing.pop(file_id, None)
+
     def check_control(self):
         """Reads the requests file and acts on what is new. A request made before the run was
         dispatched is skipped: the run was started knowing it (the script's list of models out
         of quota today leaves that model out, and the boxes it sent are the ones saved)."""
-        if not self.control or not (self.on_retry or self.on_boxes):
+        if not self.control or not (self.on_retry or self.on_boxes or self.on_gone):
             return
         self.control_at = self.clock()
         data = self.control.read()
         if not isinstance(data, dict):
             return
         since = str(self.base.get("dispatched") or "")
+        gone = data.get("gone")
+        if isinstance(gone, dict):
+            for file_id, at in list(gone.items())[:40]:
+                # One deleted before this run was dispatched is not in it (the user put it back).
+                if str(at) > since:
+                    self._gone(str(file_id))
         boxes, at = data.get("boxes"), str(data.get("boxes_at") or "")
         if self.on_boxes and isinstance(boxes, dict) and at and at != self.boxes_seen:
             self.boxes_seen = at
@@ -483,6 +550,11 @@ class Live:
                 if self.control and self.clock() - self.control_at >= CONTROL_EVERY:
                     try:
                         self.check_control()
+                    except Exception as e:
+                        print(f"  live view: {str(e)[:120]}")
+                if self.books_by_id and self.clock() - self.files_at >= FILES_EVERY:
+                    try:
+                        self.check_files()
                     except Exception as e:
                         print(f"  live view: {str(e)[:120]}")
 
