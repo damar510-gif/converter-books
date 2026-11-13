@@ -527,7 +527,6 @@ class Kept(unittest.TestCase):
 
 class Fetch(unittest.TestCase):
     def test_files_already_downloaded_are_not_downloaded_again(self):
-        import tempfile
         tmp = tempfile.mkdtemp()
         drive = FakeDrive()
         drive.put("p0001.hb.json", {"model": CHIP, "text": TRUE})
@@ -574,3 +573,39 @@ class WorkflowModes(unittest.TestCase):
                              tuple(p in mode for p in parts), mode)
         self.assertNotRegex("1AbCdEfGhIjKlMnOp:other", pattern)
         self.assertNotRegex("1AbCdEfGhIjKlMnOp:review", pattern, "the free review is its own step")
+
+
+class SendReadingsHelperFirst(unittest.TestCase):
+    """A page whose first reading the helper's models gave (ha.json) and whose second the
+    free models gave: its b.json goes to the helper so its settling box can settle it
+    (2026-11-13: 465 pages waited two days for it)."""
+
+    def test_second_reading_sent_for_a_helper_first_reading(self):
+        converter = c
+
+        class Box:
+            listed = False
+            files = {}
+
+            def __init__(self):
+                self.put = {}
+
+            def fresh(self):
+                return True
+
+            def has(self, name):
+                return False
+
+            def put_readings(self, payloads, kind="a"):
+                self.put.setdefault(kind, {}).update(payloads)
+                return set(payloads)
+
+        rec = {"page": 7, "status": "ok", "text": "نص",
+               "a": {"status": "ok", "model": "claude|haiku", "via": "helper", "text": "نص أول"},
+               "b": {"status": "ok", "model": "gemini-3.5-flash-lite", "text": "نص ثان"}}
+        box = Box()
+        with tempfile.TemporaryDirectory() as d:
+            converter.send_readings(box, "none.pdf", [rec], d)
+        self.assertEqual(set(box.put.get("b", {})), {7})
+        self.assertFalse(box.put.get("a"))
+        self.assertEqual(box.put["b"][7]["text"], "نص ثان")

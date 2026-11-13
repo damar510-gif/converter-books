@@ -2057,17 +2057,22 @@ def send_readings(box, filepath, records, cache_dir, lv=live.NULL, pages=None):
     def owed(r, key, reading):
         return reading.get("up") != helperbox.sha(reading["text"]) or not box.has(f"p{r['page']:04d}.{key}.json")
 
-    todo = [r for r in records if r.get("status") == "ok" and (r.get("a") or {}).get("via") != "helper"
+    # A first reading the helper's models gave is theirs already (pNNNN.ha.json): only the
+    # free models' second reading goes to them, so they can settle the page (2026-11-13: 465
+    # pages of a book read first on the computer waited two days for a b.json never sent).
+    free_a = lambda r: (r.get("a") or {}).get("via") != "helper"
+    todo = [r for r in records if r.get("status") == "ok" and r.get("a")
             and (pages is None or r["page"] in pages) and helperbox.needs_helper(r, CHECK_VERSION)
-            and (owed(r, "a", r["a"]) or (free_second(r) and owed(r, "b", free_second(r))))]
+            and ((free_a(r) and owed(r, "a", r["a"])) or (free_second(r) and owed(r, "b", free_second(r))))]
     if not todo or not box.fresh():
         return
+    firsts = [r for r in todo if free_a(r)]
     vocab = book_vocab(records)
     with ThreadPoolExecutor(max_workers=os.cpu_count() or 2) as tp:
-        tess = dict(zip((r["page"] for r in todo),
-                        tp.map(lambda r: tesseract_for(filepath, cache_dir, r["page"]), todo)))
+        tess = dict(zip((r["page"] for r in firsts),
+                        tp.map(lambda r: tesseract_for(filepath, cache_dir, r["page"]), firsts)))
     payloads = {}
-    for r in todo:
+    for r in firsts:
         t = tess[r["page"]]
         payloads[r["page"]] = {"page": r["page"], "model": r["a"]["model"], "text": r["a"]["text"],
                                "spread": bool(r.get("spread")),
@@ -2338,6 +2343,10 @@ class Book:
         self.output_path = output_path
         self.args = args
         self.doc = pymupdf.open(filepath)
+        # A file with no page is no book (2026-11-08: «تراث الانسانية 7» came as 0 pages,
+        # was called done and went to «6- مكتمل» unread): it fails, and the run goes on.
+        if not len(self.doc):
+            raise ValueError("the file has no pages (a broken or partly uploaded PDF?)")
         self.selected = parse_pages(args.pages, len(self.doc))
         self.hash = file_sha(filepath)
         self.cache_dir = os.path.join(args.work_dir, f"{self.hash}-{CACHE_VERSION}")
