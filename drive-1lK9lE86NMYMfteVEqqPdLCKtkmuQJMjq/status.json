@@ -21,6 +21,8 @@
  "review_kept": 0,
  "review_conflicts_new": 0,
  "review_seen": "",
+ "free_left": false,
+ "free_done": 0,
  "stages": {
   "done": 331,
   "unsure": 4,
@@ -37,8 +39,8 @@
  },
  "book": "خواطر باسكال",
  "epub": "خواطر باسكال.epub",
- "updated_at": "2026-11-13T10:23:02Z",
+ "updated_at": "2026-11-13T11:19:20Z",
  "quota_day": "2026-11-13",
- "run_id": 43390325468,
- "run_number": 443
+ "run_id": 43408779530,
+ "run_number": 444
 }
