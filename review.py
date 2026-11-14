@@ -259,7 +259,7 @@ def diff_items(page, text, other, tess_words):
         other_text = other[s["other_start"]:s["other_end"]] if s["other_start"] is not None else ""
         extra = {}
         # Text only this reading has that Tesseract saw too: the other reading dropped it.
-        if len(fw) >= 5 and len(ow) <= 1 and tess_words and fuzzy_find(fw, tess_words)[0] >= PRESENT:
+        if len(fw) >= 5 and len(ow) <= 1 and tess_words and fuzzy_find(fw, tess_words, floor=PRESENT, any_at=True)[0] >= PRESENT:
             extra["hint"] = "likely-ok"
         out.append(make_item(page, "diff", text, start, end,
                              f"diff|{' '.join(norms(text[start:end]))}|{' '.join(norms(other_text))}",
@@ -270,7 +270,7 @@ def diff_items(page, text, other, tess_words):
 def best_in(words, text):
     """The literal piece of text that reads like the word list, or ''."""
     toks = crosscheck.tokens(text)
-    r, i, j = fuzzy_find(words, [n for n, _, _ in toks])
+    r, i, j = fuzzy_find(words, [n for n, _, _ in toks], floor=PRESENT)
     return text[toks[i][1]:toks[j - 1][2]] if r >= PRESENT else ""
 
 
@@ -352,39 +352,79 @@ def repeats(words, heads):
     return n
 
 
+# A difference longer than this many words is looked for by its two ends: the whole of it,
+# letter by letter against every stretch of the page, took up to a minute each (2026-11-14).
+LONG_CORE = 12
+EDGE = 6
+
+
+def find_once(needle, hay, lo=0):
+    """Where the word list needle reads alike in hay, from lo on, when it does so in one place
+    only: (i, j, {needle index: hay index - i}), or None."""
+    r, i, j = fuzzy_find(needle, hay, slack=3, lo=lo, floor=LOCATED)
+    if r < LOCATED:
+        return None
+    # Read about as alike somewhere else on the page: not sure which is the place.
+    near = r - 0.03
+    if fuzzy_find(needle, hay, slack=3, lo=lo, hi=i, floor=near, any_at=True)[0] >= near or \
+            fuzzy_find(needle, hay, slack=3, lo=j, floor=near, any_at=True)[0] >= near:
+        return None
+    return i, j, align(needle, hay[i:j])
+
+
+def core_span(b, c, a, hay):
+    """The words of hay (first, last) that are the core c, between b and a; or None."""
+    nb, nc = len(b), len(c)
+    if nc <= LONG_CORE:
+        found = find_once(b + c + a, hay)
+        if not found:
+            return None
+        i, _, pairs = found
+        before_hits = [pairs[x] for x in range(nb) if x in pairs]
+        after_hits = [pairs[x] for x in range(nb + nc, nb + nc + len(a)) if x in pairs]
+        core_hits = [pairs[x] for x in range(nb, nb + nc) if x in pairs]
+        if core_hits:
+            lo, hi = min(core_hits), max(core_hits)
+            if nb not in pairs and before_hits:
+                lo = min(lo, before_hits[-1] + 1)
+            if nb + nc - 1 not in pairs and after_hits:
+                hi = max(hi, after_hits[0] - 1)
+        elif before_hits and after_hits:
+            lo, hi = before_hits[-1], after_hits[0]
+        else:
+            return None
+        return (i + lo, i + hi) if hi >= lo else None
+    # A long one: its first words after b, and its last words before a.
+    head = find_once(b + c[:EDGE], hay)
+    if not head:
+        return None
+    tail = find_once(c[-EDGE:] + a, hay, lo=head[0])
+    if not tail:
+        return None
+    hi_, ti = head[2], tail[2]
+    first = [hi_[x] for x in range(nb, nb + EDGE) if x in hi_]
+    last = [ti[x] for x in range(EDGE) if x in ti]
+    if not first or not last:
+        return None
+    lo, hi = head[0] + min(first), tail[0] + max(last)
+    # The two ends must enclose about as many words as the difference has.
+    if hi < lo or hi - lo + 1 > 2 * nc + 10:
+        return None
+    return lo, hi
+
+
 def locate(item, seq, hay, lines, gutter, size):
     """Boxes of a difference in the page image: its words and their neighbours are looked
     for among Tesseract's words, by how alike they read. None when not found for sure."""
     width, height = size
     b, c, a = norms(item["before"])[-6:], norms(item["core"]), norms(item["after"])[:6]
-    needle = b + c + a
-    if len(needle) < 3:
+    if len(b + c + a) < 3:
         return None
-    r, i, j = fuzzy_find(needle, hay, slack=3)
-    if r < LOCATED:
-        return None
-    other = max(fuzzy_find(needle, hay, slack=3, hi=i)[0], fuzzy_find(needle, hay, slack=3, lo=j)[0])
-    if other >= r - 0.03:
-        return None
-    pairs = align(needle, hay[i:j])
-    nb, nc = len(b), len(c)
-    before_hits = [pairs[x] for x in range(nb) if x in pairs]
-    after_hits = [pairs[x] for x in range(nb + nc, len(needle)) if x in pairs]
-    core_hits = [pairs[x] for x in range(nb, nb + nc) if x in pairs]
-    if core_hits:
-        lo, hi = min(core_hits), max(core_hits)
-        if nb not in pairs and before_hits:
-            lo = min(lo, before_hits[-1] + 1)
-        if nb + nc - 1 not in pairs and after_hits:
-            hi = max(hi, after_hits[0] - 1)
-    elif before_hits and after_hits:
-        lo, hi = before_hits[-1], after_hits[0]
-    else:
-        return None
-    if hi < lo:
+    span = core_span(b, c, a, hay)
+    if not span:
         return None
     by_line = {}
-    for x in range(i + lo, i + hi + 1):
+    for x in range(span[0], span[1] + 1):
         line_no, word = seq[x]
         by_line.setdefault(line_no, []).append(word["box"])
     boxes = [pad(union(v), width, height) for _, v in sorted(by_line.items())]
@@ -640,12 +680,13 @@ def build(records, pages, answers=None, results=None, vocab=None, heads=None):
             if done:
                 continue
             items = [whole]
-        for it in items:
-            if "boxes" not in it:
-                it.update(locate(it, seq, hay, lines, gutter, size) or {"boxes": [], "located": False})
-        # The biggest differences first when there are too many, and the "likely right" ones last.
+        # The biggest differences first when there are too many, and the "likely right" ones last;
+        # only those shown are looked for in the image.
         keep = sorted(items, key=lambda it: (it.get("hint") == "likely-ok", -weight(it)))[:MAX_ITEMS]
         keep.sort(key=lambda it: (it.get("hint") == "likely-ok", it["pos"]))
+        for it in keep:
+            if "boxes" not in it:
+                it.update(locate(it, seq, hay, lines, gutter, size) or {"boxes": [], "located": False})
         for n, it in enumerate(keep, 1):
             it["n"] = n
         out.append({"page": page, "base": base_of(text), "w": size[0], "h": size[1], "more": len(items) - len(keep),
