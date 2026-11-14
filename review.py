@@ -38,7 +38,10 @@ FOOTNOTE_LINE = re.compile(r"^\s*(\[\^[^\]\s]+\]:|\([0-9٠-٩۰-۹]{1,3}\)\s)")
 BLOCK_START = re.compile(r"\s*(#{1,6}\s|\|\s|>\s|\[\^[^\]\s]+\]:)")
 FOOTNOTE_REF = re.compile(r"\[\^[^\]\s]+\](?!:)")
 # Differences made only of footnote numbers: the readers numbered the notes differently.
-NOTES_ONLY = re.compile(r"(\s*(\[\^[^\]\s]+\]:?|\(?[0-9٠-٩۰-۹]{1,3}\)?))*\s*")
+# A footnote number is a whole run of digits (never part of a longer one): otherwise a long run
+# of digits that is not notes splits every possible way before failing (2026-11-14: building the
+# review places of «تراث 8» took 42 minutes).
+NOTES_ONLY = re.compile(r"(?:\s*(?:\[\^[^\]\s]+\]:?|\(?(?<![0-9٠-٩۰-۹])[0-9٠-٩۰-۹]{1,3}(?![0-9٠-٩۰-۹])\)?))*\s*")
 # Characters an answer may not carry: control characters and direction marks.
 UNWANTED = re.compile("[\x00-\x08\x0b-\x1f\x7f-\x9f‎‏‪-‮⁦-⁩﻿]")
 WHITE = re.compile(r"\s*")
