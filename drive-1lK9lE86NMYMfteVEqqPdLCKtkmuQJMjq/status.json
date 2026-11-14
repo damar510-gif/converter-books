@@ -1,13 +1,47 @@
 {
- "state": "failed",
- "reason": "crash",
- "epub": "",
- "pages_total": 0,
- "pages_done": 0,
- "pages_unsure": [],
+ "state": "paused",
+ "pages_total": 336,
+ "pages_done": 335,
+ "pages_helper": [],
+ "pages_unsure": [
+  33,
+  43,
+  219,
+  336
+ ],
  "pages_missing": [],
- "pages_waiting": [],
- "run_id": 43614437208,
- "run_number": 447,
- "updated_at": "2026-11-14T17:15:01Z"
+ "pages_waiting": [
+  333
+ ],
+ "pages_retry": [],
+ "pages_human": [],
+ "helper_checked": 0,
+ "review_items": 21,
+ "review_applied": 0,
+ "review_kept": 0,
+ "review_conflicts_new": 0,
+ "review_seen": "",
+ "free_left": false,
+ "free_done": 0,
+ "stages": {
+  "done": 331,
+  "unsure": 4,
+  "read2": 1
+ },
+ "needs": {
+  "read1": {
+   "gemma-4-31b-it": 4
+  },
+  "read2": {},
+  "settle": {
+   "gemini-3.5-flash,gemini-3.6-flash,gemini-3.7-flash,gemini-3.8-flash": 1
+  }
+ },
+ "book": "خواطر باسكال",
+ "epub": "خواطر باسكال.epub",
+ "updated_at": "2026-11-14T18:27:23Z",
+ "quota_day": "2026-11-14",
+ "waiting_for": "time",
+ "run_id": 43620863466,
+ "run_number": 448
 }
