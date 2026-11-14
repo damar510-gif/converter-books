@@ -6,7 +6,7 @@
 # places through the folders «كتب», «مراجعة» and «أحكام» (docs/helper-boxes-plan.md).
 # Windows PowerShell 5.1: no ?? or ?: operators.
 
-$HelperVersion = '2026-10-23.3'
+$HelperVersion = '2026-11-14.1'
 $BooksName = 'كتب'
 $ReviewsName = 'مراجعة'
 $VerdictsName = 'أحكام'
@@ -647,7 +647,10 @@ function Get-PageFiles($book, [int]$page) {
   }
   $s.img = $null
   if ($book.names[(Page-Name $page 'jpg')]) { $s.img = Join-Path $book.dir (Page-Name $page 'jpg') }
-  if (-not $s.hb -and $s.b -and $s.b.text -and $s.a -and $s.a.text) { $s.hb = $s.b }
+  # Also when the first reading is this computer's own (ha): the run sends b for such pages too
+  # (2026-11-13: 23 pages of «تراث 8» waited with their b.json, the models «with no work»).
+  $own = if ($s.a -and $s.a.text) { $s.a } elseif ($s.ha -and $s.ha.text) { $s.ha } else { $null }
+  if (-not $s.hb -and $s.b -and $s.b.text -and $own -and [string]$s.b.model -ne [string]$own.model) { $s.hb = $s.b }
   $s.first = $null
   if ($s.a -and $s.a.text) { $s.first = $s.a } elseif ($s.ha -and $s.ha.text) { $s.first = $s.ha }
   # "[[EMPTY]]" as the second reading of a page the first reading found words on is not one
