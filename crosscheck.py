@@ -198,10 +198,15 @@ def norm_words(text):
     return [w for w in re.findall(r"[\u0621-\u064A]+", text) if len(w) > 2]
 
 
-def fuzzy_find(needle, hay, slack=2, lo=0, hi=None):
+def fuzzy_find(needle, hay, slack=2, lo=0, hi=None, floor=0.0, any_at=False):
     """The stretch hay[i:j] (i >= lo, j <= hi) that reads most like the word list needle,
     comparing letters, since Tesseract and the readers misspell different letters.
-    Returns (ratio, i, j)."""
+    Returns (ratio, i, j): the first such stretch (by i, then j) among the best.
+    The exact comparison (ratio) is costly; quick_ratio is cheap and never below it, so the
+    stretches are compared exactly in that bound's order, until none left can do better
+    (2026-11-14: the review places of one book took 42 minutes). floor: stretches that cannot
+    read at least this alike are not compared (the answer is (0.0, lo, lo) when none does);
+    any_at: the first stretch found that reads at least floor alike is enough."""
     hi = len(hay) if hi is None else hi
     best = (0.0, lo, lo)
     if not needle or hi <= lo:
@@ -209,16 +214,30 @@ def fuzzy_find(needle, hay, slack=2, lo=0, hi=None):
     sm = SequenceMatcher(None, autojunk=False)
     sm.set_seq2(" ".join(needle))
     n = len(needle)
+    cands = []
     for i in range(lo, hi):
         for w in range(max(1, n - slack), n + slack + 1):
             if i + w > hi:
                 break
             sm.set_seq1(" ".join(hay[i:i + w]))
-            if sm.real_quick_ratio() <= best[0] or sm.quick_ratio() <= best[0]:
-                continue
-            r = sm.ratio()
-            if r > best[0]:
-                best = (r, i, i + w)
+            q = sm.real_quick_ratio()
+            if q > 0 and q >= floor:
+                q = sm.quick_ratio()
+                if q > 0 and q >= floor:
+                    cands.append((-q, i, w))
+    cands.sort()
+    for nq, i, w in cands:
+        if -nq < best[0]:
+            # No stretch left can read as alike (one as alike may still come first, by i and j).
+            break
+        sm.set_seq1(" ".join(hay[i:i + w]))
+        r = sm.ratio()
+        if any_at and r >= floor:
+            return (r, i, i + w)
+        if r < floor:
+            continue
+        if r > best[0] or (r == best[0] and r > 0 and (i, i + w) < best[1:]):
+            best = (r, i, i + w)
     return best
 
 
@@ -243,6 +262,6 @@ def missing_lines(tess, text, vocab):
         known = sum(x in vocab for x in lw) / len(lw)
         lp = list(zip(lw, lw[1:]))
         if known >= 0.7 and sum(x in pairs for x in lp) / len(lp) <= 0.15 \
-                and fuzzy_find(lw, w)[0] < LINE_FOUND:
+                and fuzzy_find(lw, w, floor=LINE_FOUND, any_at=True)[0] < LINE_FOUND:
             out.append(line.strip())
     return out
