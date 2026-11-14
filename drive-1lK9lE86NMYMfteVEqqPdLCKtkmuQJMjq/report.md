@@ -7,12 +7,15 @@
 - لم تُحسم (مشكوك فيها): 4
 - فارغة/صور: 5
 - قُرئت ولم تُراجع بعد: 1
-- طلبات gemini-3.1-flash-lite في هذا التشغيل: 2
 - طلبات gemini-3-flash-preview في هذا التشغيل: 1
-- طلبات gemini-3.5-flash-lite في هذا التشغيل: 2
+- طلبات gemini-3.6-flash في هذا التشغيل: 19
+- طلبات gemini-3.5-flash في هذا التشغيل: 19
+- طلبات gemini-3.8-flash في هذا التشغيل: 14
+- طلبات gemini-3.7-flash في هذا التشغيل: 12
+- طلبات gemini-3.5-flash-lite في هذا التشغيل: 1
 - القراءة الأولى (من صفحة الحالة): gemma-4-31b-it
 - القراءة الثانية (من صفحة الحالة): gemini-3.1-flash-lite، gemini-3.5-flash-lite
-- الحسم (من صفحة الحالة): gemini-3.7-flash، gemini-3.8-flash، gemini-3.5-flash، gemini-3.6-flash، gemini-3-flash-preview
+- الحسم (من صفحة الحالة): gemini-3-flash-preview، gemini-3.6-flash، gemini-3.5-flash، gemini-3.8-flash، gemini-3.7-flash
 - مواضع تنتظر مراجعتك: 21
 
 **توقف التشغيل لانتهاء الحد اليومي لـ Gemini.** ما أُنجز محفوظ، وتشغيل نفس الكتاب بعد منتصف الليل (بتوقيت أمريكا الغربي) يكمل الباقي فقط.
