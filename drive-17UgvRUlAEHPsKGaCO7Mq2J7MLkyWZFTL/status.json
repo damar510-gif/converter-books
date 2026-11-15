@@ -1,15 +1,8 @@
 {
  "state": "paused",
  "pages_total": 260,
- "pages_done": 74,
+ "pages_done": 81,
  "pages_helper": [
-  73,
-  74,
-  75,
-  76,
-  77,
-  78,
-  79,
   80,
   81,
   82,
@@ -40,22 +33,8 @@
   108,
   109,
   110,
-  111
- ],
- "pages_unsure": [
-  24,
-  26,
-  33,
-  51,
-  53,
-  64,
-  67
- ],
- "pages_missing": [],
- "pages_waiting": [
-  112,
+  111,
   113,
-  114,
   115,
   116,
   117,
@@ -71,7 +50,19 @@
   127,
   128,
   129,
-  130,
+  130
+ ],
+ "pages_unsure": [
+  24,
+  26,
+  33,
+  51,
+  53,
+  64,
+  67
+ ],
+ "pages_missing": [],
+ "pages_waiting": [
   131,
   132,
   133,
@@ -202,7 +193,10 @@
   259,
   260
  ],
- "pages_retry": [],
+ "pages_retry": [
+  112,
+  114
+ ],
  "pages_human": [],
  "helper_checked": 0,
  "review_items": 28,
@@ -213,25 +207,25 @@
  "free_left": true,
  "free_done": 1,
  "stages": {
-  "done": 67,
+  "done": 74,
   "unsure": 7,
-  "helper": 38,
-  "read1": 148
+  "helper": 48,
+  "read1": 131
  },
  "needs": {
   "read1": {
-   "gemma-4-31b-it": 148
+   "gemma-4-31b-it": 131
   },
   "read2": {},
   "settle": {
-   "gemini-3.5-flash,gemini-3.6-flash,gemini-3.7-flash,gemini-3.8-flash": 38
+   "gemini-3.5-flash,gemini-3.6-flash,gemini-3.7-flash,gemini-3.8-flash": 48
   }
  },
  "book": "تهذيب حادي الأرواح إلى بلاد الأفراح - ابن القيم",
  "epub": "تهذيب حادي الأرواح إلى بلاد الأفراح - ابن القيم.epub",
- "updated_at": "2026-11-15T21:24:36Z",
+ "updated_at": "2026-11-15T22:14:24Z",
  "quota_day": "2026-11-15",
  "waiting_for": "helper",
- "run_id": 43759688799,
- "run_number": 494
+ "run_id": 43764355704,
+ "run_number": 495
 }
