@@ -1,43 +1,36 @@
 {
- "state": "paused",
+ "state": "done",
  "pages_total": 288,
- "pages_done": 286,
+ "pages_done": 288,
  "pages_helper": [],
  "pages_unsure": [
+  3,
   284
  ],
  "pages_missing": [],
- "pages_waiting": [
-  3,
-  4
- ],
+ "pages_waiting": [],
  "pages_retry": [],
  "pages_human": [],
  "helper_checked": 0,
- "review_items": 1,
+ "review_items": 10,
  "review_applied": 0,
  "review_kept": 0,
  "review_conflicts_new": 0,
  "review_seen": "",
- "free_left": true,
- "free_done": 4,
+ "free_left": false,
+ "free_done": 1,
  "stages": {
-  "done": 285,
-  "read1": 2,
-  "unsure": 1
+  "done": 286,
+  "unsure": 2
  },
  "needs": {
-  "read1": {
-   "gemma-4-31b-it": 2
-  },
+  "read1": {},
   "read2": {},
   "settle": {}
  },
  "book": "كتاب الإكسير",
  "epub": "كتاب الإكسير.epub",
- "updated_at": "2026-11-15T14:57:04Z",
- "quota_day": "2026-11-15",
- "waiting_for": "helper",
- "run_id": 43723197034,
- "run_number": 486
+ "updated_at": "2026-11-15T15:51:26Z",
+ "run_id": 43727735392,
+ "run_number": 487
 }
