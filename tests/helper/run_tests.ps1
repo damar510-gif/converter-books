@@ -245,6 +245,17 @@ Test 'transcription: a page this computer read first (ha) and the free models se
   Same $f.b_sha (Text-Sha $RIGHT) 'and the free second reading'
 }
 
+Test 'transcription: an empty second reading from this computer does not hide the free one (b)' {
+  Set-Boxes @() @() @($GEMINI)
+  $dir = Make-Book 'book1' @(4) @() $false @{ 4 = $WRONG }
+  Write-Utf8 (Join-Path $dir (Page-Name 4 'hb.json')) (@{ page = 4; model = 'claude|haiku'; text = '[[EMPTY]]' } | ConvertTo-Json)
+  Write-Utf8 (Join-Path $dir (Page-Name 4 'b.json')) (@{ page = 4; model = 'gemma-4-31b-it'; text = $RIGHT } | ConvertTo-Json)
+  $script:Answer = { param($tool, $model, $kind, $task) @{ text = $RIGHT } }
+  $job = Work 'agy'
+  Same $job.kind 'settle' 'settled on the free second reading'
+  Same (Read-PageFile $dir 4 'final').b_sha (Text-Sha $RIGHT) 'b, not the empty hb'
+}
+
 Test 'transcription: a page every model now in the box refused goes back, even when the box changed after the refusals' {
   Set-Boxes @($CLAUDE, $GEMINI, $GROK) @()
   $dir = Make-Book 'book1' @(5) @() $false @{ 5 = $RIGHT }

@@ -1757,10 +1757,17 @@ def book_needs(pool, records, dual):
             add("read1", pool.reading("a"))
             if dual:
                 add("read2", pool.reading("b"))
+        elif (r.get("check") or {}).get("v") == CHECK_VERSION:
+            # Checked already (settled, one reading kept, or left for review): no run takes it
+            # again (Book.next_steps). Counted, it started a run every ten minutes for nothing
+            # (2026-11-14: 28 runs for 19 such pages "waiting for Gemma").
+            continue
         elif dual and (r.get("b") or {}).get("status") != "ok":
+            if (r.get("b") or {}).get("status") not in (None, "failed", "suspicious"):
+                continue
             k = owed_step(r)
             add(KIND_BOX[k], [m for m in pool.reading(k) if m != (r.get("a") or {}).get("model")])
-        elif (r.get("check") or {}).get("v") != CHECK_VERSION:
+        else:
             add("settle", pool.boxes.get("settle") or [] if pool.strict else pool.settlers())
     return n
 
