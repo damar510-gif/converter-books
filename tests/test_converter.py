@@ -926,6 +926,22 @@ class Needs(unittest.TestCase):
         self.assertEqual(n["read2"], {lites: 2})
         self.assertEqual(n["settle"], {}, "an empty settling box: nobody")
 
+    def test_a_page_checked_already_waits_for_nobody(self):
+        # 2026-11-14: pages kept with one reading counted as waiting for Gemma, and the Drive
+        # inbox started a run every ten minutes that gave Gemma nothing.
+        pool = c.ModelPool("gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemma-4-26b-a4b-it", 10)
+        pool.set_boxes({"read1": ["gemma-4-31b-it"], "read2": ["gemini-3.1-flash-lite"], "settle": ["gemini-3.8-flash"]})
+        ok = {"status": "ok", "text": "x"}
+        checked = {"v": c.CHECK_VERSION, "state": "single"}
+        recs = [{"page": 1, "status": "ok", "a": dict(ok, model="gemini-3.1-flash-lite", box="read2"),
+                 "b": {"status": "failed", "model": ""}, "check": checked},
+                {"page": 2, "status": "ok", "a": dict(ok, model="gemma-4-31b-it"), "b": dict(ok, model="gemini-3.1-flash-lite"),
+                 "check": dict(checked, state="unsure")},
+                {"page": 3, "status": "ok", "a": dict(ok, model="gemini-3.1-flash-lite", box="read2"),
+                 "b": {"status": "failed", "model": ""}}]
+        n = c.book_needs(pool, recs, True)
+        self.assertEqual(n, {"read1": {"gemma-4-31b-it": 1}, "read2": {}, "settle": {}}, "page 3 only")
+
 
 class StepQueues(unittest.TestCase):
     def test_oldest_book_first_and_a_page_at_work_is_never_queued_twice(self):
