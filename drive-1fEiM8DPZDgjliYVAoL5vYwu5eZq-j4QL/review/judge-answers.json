@@ -1,0 +1,3228 @@
+{
+  "v": 1,
+  "answers": {
+    "p210-22cada85c3": {
+      "kind": "diff",
+      "page": 210,
+      "verdict": "fix",
+      "fp": "diff|يبددون هذه الطاقه الروعيه|يبيدون هذه الطاقات الروحيه",
+      "before": "من الشعوب من ",
+      "core": "يبددون هذه الطاقة . الروعية",
+      "after": " الأصيلة ، لأنهم",
+      "pos": 2210,
+      "base": "6a53e913bea1",
+      "place": "",
+      "at": "2026-11-15T12:07:27Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "يبددون هذه الطاقات الروحية"
+    },
+    "p210-149cded47d": {
+      "kind": "diff",
+      "page": 210,
+      "verdict": "fix",
+      "fp": "diff|يحbون|يحبون",
+      "before": ". وهؤلاء لا ",
+      "core": "يحbون",
+      "after": " في الحقيقة إلا",
+      "pos": 2334,
+      "base": "6a53e913bea1",
+      "place": "",
+      "at": "2026-11-15T12:07:27Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "يحيون"
+    },
+    "p210-5150dc0c7e": {
+      "kind": "diff",
+      "page": 210,
+      "verdict": "fix",
+      "fp": "diff|فاصبحوا|فاضحوا",
+      "before": "المنابع الأصيلة ، ",
+      "core": "فأصبحوا",
+      "after": " أشبه بملحق للإنسانية",
+      "pos": 2418,
+      "base": "6a53e913bea1",
+      "place": "",
+      "at": "2026-11-15T12:07:27Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "فأضحوا"
+    },
+    "p210-08dfb7f9db": {
+      "kind": "diff",
+      "page": 210,
+      "verdict": "fix",
+      "fp": "diff|حيا|حينا",
+      "before": "يستطيعون أن يتبينوها ",
+      "core": "حياً",
+      "after": " تجلت ، وسيكونون",
+      "pos": 2518,
+      "base": "6a53e913bea1",
+      "place": "",
+      "at": "2026-11-15T12:07:27Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "حيثما"
+    },
+    "p210-093e937dc7": {
+      "kind": "diff",
+      "page": 210,
+      "verdict": "keep",
+      "fp": "diff|للانسانيه|",
+      "before": "اتصاله بالمنابع الأصيلة ",
+      "core": "للإنسانية",
+      "after": " ، والذي هو",
+      "pos": 2661,
+      "base": "6a53e913bea1",
+      "place": "",
+      "at": "2026-11-15T12:07:27Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ]
+    },
+    "p210-ebabb49208": {
+      "kind": "diff",
+      "page": 210,
+      "verdict": "fix",
+      "fp": "diff|التدبير|التدبر",
+      "before": "سرى في كيانها ",
+      "core": "التدبير",
+      "after": " والتفكير ، فتقدم",
+      "pos": 2814,
+      "base": "6a53e913bea1",
+      "place": "",
+      "at": "2026-11-15T12:07:27Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "التدبر"
+    },
+    "p210-d60417d73f": {
+      "kind": "diff",
+      "page": 210,
+      "verdict": "keep",
+      "fp": "diff|تتبين|تبين",
+      "before": "الأمة المراة التى ",
+      "core": "تتبين",
+      "after": " فيها بمعرفة نيرة",
+      "pos": 2858,
+      "base": "6a53e913bea1",
+      "place": "",
+      "at": "2026-11-15T12:07:27Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ]
+    },
+    "p210-837729dea5": {
+      "kind": "diff",
+      "page": 210,
+      "verdict": "fix",
+      "fp": "diff|تدوكها|تدركها",
+      "before": "التي لم تكن ",
+      "core": "تدوكها",
+      "after": " إلا في غموض",
+      "pos": 2953,
+      "base": "6a53e913bea1",
+      "place": "",
+      "at": "2026-11-15T12:07:27Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "تدركها"
+    },
+    "p210-6517c57b5f": {
+      "kind": "diff",
+      "page": 210,
+      "verdict": "fix",
+      "fp": "diff|لاداتها|لادايها",
+      "before": "العناية قد ندبتها ",
+      "core": "لأداتها",
+      "after": " . إن نداءً",
+      "pos": 2996,
+      "base": "6a53e913bea1",
+      "place": "",
+      "at": "2026-11-15T12:07:27Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "لأدائها"
+    },
+    "p210-da2b7d33cc": {
+      "kind": "diff",
+      "page": 210,
+      "verdict": "fix",
+      "fp": "diff|الشواء في الروح الكليه وليس كلها علي سواء|السواء",
+      "before": "لا تشارك على ",
+      "core": "الشواء في الروح الكلية ، وليس كلها على سواء",
+      "after": " في القدرة على",
+      "pos": 2110,
+      "base": "6a53e913bea1",
+      "place": "",
+      "at": "2026-11-15T12:07:27Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "السواء في الروح الكلية ، وليست كلها على سواء"
+    },
+    "p316-b4f494a3c2": {
+      "kind": "diff",
+      "page": 316,
+      "verdict": "keep",
+      "fp": "diff|ميلتون|ميلون",
+      "before": "الرغم من أن ",
+      "core": "ميلتون",
+      "after": " أدرك مغزاها وضرب",
+      "pos": 81,
+      "base": "fe59639cfd6c",
+      "place": "",
+      "at": "2026-11-15T12:07:27Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ]
+    },
+    "p316-8030ab96aa": {
+      "kind": "diff",
+      "page": 316,
+      "verdict": "fix",
+      "fp": "diff|الاظهار الي|ارتفعت بين",
+      "before": "أن أصوات احتجاج ",
+      "core": "الأظهار إلى",
+      "after": " حين وآخر ،",
+      "pos": 167,
+      "base": "fe59639cfd6c",
+      "place": "",
+      "at": "2026-11-15T12:07:27Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "ارتفعت بين"
+    },
+    "p316-ed60e5b1e5": {
+      "kind": "diff",
+      "page": 316,
+      "verdict": "fix",
+      "fp": "diff|برينس|برنيس",
+      "before": "التقليدي هو جاكوب ",
+      "core": "برينس",
+      "after": " في مقال نشرة",
+      "pos": 255,
+      "base": "fe59639cfd6c",
+      "place": "",
+      "at": "2026-11-15T12:07:27Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "برنيس"
+    },
+    "p316-7e904e4e89": {
+      "kind": "diff",
+      "page": 316,
+      "verdict": "fix",
+      "fp": "diff|برينس ان كلمه كاثارسيس|برنيس ان كلمه كاتارسيس",
+      "before": ". وقد بين ",
+      "core": "برينس أن كلمة كاثارسيس",
+      "after": " معنى طبياً ،",
+      "pos": 304,
+      "base": "fe59639cfd6c",
+      "place": "",
+      "at": "2026-11-15T12:07:27Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "برنيس أن لكلمة كاثارسيس"
+    },
+    "p316-d5e5712331": {
+      "kind": "diff",
+      "page": 316,
+      "verdict": "fix",
+      "fp": "diff|فالراجيديا تثير انفعالين وتهبتهما|فالتراجيديا تثير انفعالين وتستهل",
+      "before": "على البدن ، ",
+      "core": "فالراجيديا تثير انفعالين وتهبتهما",
+      "after": " وهما الشفقة والخوف",
+      "pos": 388,
+      "base": "fe59639cfd6c",
+      "place": "",
+      "at": "2026-11-15T12:07:27Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "فالتراجيديا تثير انفعالين وتهدئهما"
+    },
+    "p316-8fdf68f75c": {
+      "kind": "diff",
+      "page": 316,
+      "verdict": "keep",
+      "fp": "diff|يوجدان|يوجد ان",
+      "before": "، وهما انفعالان ",
+      "core": "يوجدان",
+      "after": " في جميع أفئدة",
+      "pos": 453,
+      "base": "fe59639cfd6c",
+      "place": "",
+      "at": "2026-11-15T12:07:27Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ]
+    },
+    "p316-4e3a6d8802": {
+      "kind": "diff",
+      "page": 316,
+      "verdict": "fix",
+      "fp": "diff|بينهما|وبينهما",
+      "before": "أفئدة البشر ، ",
+      "core": "بينهما",
+      "after": " ارتباط . فهناك",
+      "pos": 484,
+      "base": "fe59639cfd6c",
+      "place": "",
+      "at": "2026-11-15T12:07:27Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "وبينهما"
+    },
+    "p316-0c2ae949b6": {
+      "kind": "diff",
+      "page": 316,
+      "verdict": "fix",
+      "fp": "diff|يحتمي|يختبي",
+      "before": ". فهناك خوف ",
+      "core": "يحتمي",
+      "after": " تحت الشفقة .",
+      "pos": 512,
+      "base": "fe59639cfd6c",
+      "place": "",
+      "at": "2026-11-15T12:07:27Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "يختبئ"
+    },
+    "p316-a48b6c74e7": {
+      "kind": "diff",
+      "page": 316,
+      "verdict": "fix",
+      "fp": "diff|فالشعير|فالشعر",
+      "before": "في الشعر . ",
+      "core": "فالشعير",
+      "after": " ، في نظر",
+      "pos": 678,
+      "base": "fe59639cfd6c",
+      "place": "",
+      "at": "2026-11-15T12:07:27Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "فالشعر"
+    },
+    "p316-f00835f915": {
+      "kind": "diff",
+      "page": 316,
+      "verdict": "keep",
+      "fp": "diff|ويسقي|ويستقي",
+      "before": "أفلاطون ، يغذى ",
+      "core": "ويسقي",
+      "after": " الأهواء بدلا من",
+      "pos": 706,
+      "base": "fe59639cfd6c",
+      "place": "",
+      "at": "2026-11-15T12:07:27Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ]
+    },
+    "p316-b5ddea1946": {
+      "kind": "diff",
+      "page": 316,
+      "verdict": "fix",
+      "fp": "diff|ومحياه|ومجانبه",
+      "before": "الأهواء وعزل العقل ",
+      "core": "ومحياة",
+      "after": " الشعور .\n\nوقد",
+      "pos": 805,
+      "base": "fe59639cfd6c",
+      "place": "",
+      "at": "2026-11-15T12:07:27Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "ومحاباة"
+    },
+    "p316-86da7bf411": {
+      "kind": "diff",
+      "page": 316,
+      "verdict": "fix",
+      "fp": "diff|فالراجيديا|فالتراجيديا",
+      "before": "التحكم فيها . ",
+      "core": "فالراجيديا",
+      "after": " تطلق الشفقة والخوف",
+      "pos": 933,
+      "base": "fe59639cfd6c",
+      "place": "",
+      "at": "2026-11-15T12:07:27Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "فالتراجيديا"
+    },
+    "p316-554f8dbc8a": {
+      "kind": "diff",
+      "page": 316,
+      "verdict": "fix",
+      "fp": "diff|فالراجيديا|فالتراجيديا",
+      "before": "يتم التطهير . ",
+      "core": "فالراجيديا",
+      "after": " علاج من جنس",
+      "pos": 1049,
+      "base": "fe59639cfd6c",
+      "place": "",
+      "at": "2026-11-15T12:07:27Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "فالتراجيديا"
+    },
+    "p316-993897150c": {
+      "kind": "diff",
+      "page": 316,
+      "verdict": "fix",
+      "fp": "diff|الاضطراب|الاضطرابات",
+      "before": "في شفاء بعض ",
+      "core": "الاضطراب",
+      "after": " النفسية ولا سيما",
+      "pos": 1163,
+      "base": "fe59639cfd6c",
+      "place": "",
+      "at": "2026-11-15T12:07:27Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "الاضطرابات"
+    },
+    "p316-2b30adaa22": {
+      "kind": "diff",
+      "page": 316,
+      "verdict": "fix",
+      "fp": "diff|كذلت|كذلك",
+      "before": "أفلاطون أن يلاحظ ",
+      "core": "كذلت",
+      "after": " أثر الموسيقى على",
+      "pos": 1396,
+      "base": "fe59639cfd6c",
+      "place": "",
+      "at": "2026-11-15T12:07:27Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "كذلك"
+    },
+    "p316-ccf8ff3127": {
+      "kind": "diff",
+      "page": 316,
+      "verdict": "fix",
+      "fp": "diff|ليام|لينام",
+      "before": "للطفل وهو مهدء ",
+      "core": "ليام",
+      "after": " .\n\nولما كانت",
+      "pos": 1482,
+      "base": "fe59639cfd6c",
+      "place": "",
+      "at": "2026-11-15T12:07:27Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "لينام"
+    },
+    "p316-d6041bced1": {
+      "kind": "diff",
+      "page": 316,
+      "verdict": "keep",
+      "fp": "diff|ابقراط|اطراط",
+      "before": "ولما كانت مدرسة ",
+      "core": "أبقراط",
+      "after": " تستعمل كلمة تطهير",
+      "pos": 1505,
+      "base": "fe59639cfd6c",
+      "place": "",
+      "at": "2026-11-15T12:07:27Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ]
+    },
+    "p316-bf8ac95bb4": {
+      "kind": "diff",
+      "page": 316,
+      "verdict": "keep",
+      "fp": "diff|في اخراج الم من|لاخراج الم",
+      "before": "كلمة تطهير Katharsis ",
+      "core": "في إخراج ألم من",
+      "after": " البدن ، فهناك",
+      "pos": 1535,
+      "base": "fe59639cfd6c",
+      "place": "",
+      "at": "2026-11-15T12:07:27Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ]
+    },
+    "p316-f1d067b325": {
+      "kind": "diff",
+      "page": 316,
+      "verdict": "fix",
+      "fp": "diff|خارج|يخرج",
+      "before": "ريطوريقا بما لا ",
+      "core": "خارج",
+      "after": " عن هذا الرأي",
+      "pos": 1694,
+      "base": "fe59639cfd6c",
+      "place": "",
+      "at": "2026-11-15T12:07:27Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "يخرج"
+    },
+    "p316-b3508d9924": {
+      "kind": "diff",
+      "page": 316,
+      "verdict": "fix",
+      "fp": "diff|يطل|يظن",
+      "before": "والشفقة حزن لشر ",
+      "core": "يطل",
+      "after": " مفسداً يعرض لأمري",
+      "pos": 1795,
+      "base": "fe59639cfd6c",
+      "place": "",
+      "at": "2026-11-15T12:07:27Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "يظن"
+    },
+    "p316-ee983f5ea3": {
+      "kind": "diff",
+      "page": 316,
+      "verdict": "keep",
+      "fp": "diff|استجاب|استحقاق",
+      "before": "يعرض لأمري بلا ",
+      "core": "استجاب",
+      "after": " .\n\nالوحدات الثلاث",
+      "pos": 1822,
+      "base": "fe59639cfd6c",
+      "place": "",
+      "at": "2026-11-15T12:07:27Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ]
+    },
+    "p316-d87a1574ab": {
+      "kind": "diff",
+      "page": 316,
+      "verdict": "keep",
+      "fp": "diff|لارسطو|وحاولوا ان يجدوا لها مبررا في روايه القصص",
+      "before": "كتاب فن الشعر ",
+      "core": "لأرسطو",
+      "after": " . والوحدة الوحيدة",
+      "pos": 2009,
+      "base": "fe59639cfd6c",
+      "place": "",
+      "at": "2026-11-15T12:07:27Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ]
+    },
+    "p316-6bd40e466f": {
+      "kind": "diff",
+      "page": 316,
+      "verdict": "fix",
+      "fp": "diff|يسببها روح القصه ويررد|يسميها روح القصه ويرد",
+      "before": "الموضوع وهي التي ",
+      "core": "يسببها روح القصة . ويررد",
+      "after": " أرسطو في الفصل",
+      "pos": 2074,
+      "base": "fe59639cfd6c",
+      "place": "",
+      "at": "2026-11-15T12:07:27Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "يسميها روح القصة . ويرد"
+    },
+    "p316-c8ef920e38": {
+      "kind": "diff",
+      "page": 316,
+      "verdict": "fix",
+      "fp": "diff|والاياذه وكلما|والالياذه وكما",
+      "before": "عندما كتب الأوديسة ",
+      "core": "والإياذة . وكلما",
+      "after": " كانت الوحدة أعظم",
+      "pos": 2441,
+      "base": "fe59639cfd6c",
+      "place": "",
+      "at": "2026-11-15T12:07:27Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "والإلياذة . وكلما"
+    },
+    "p316-b6a3c54433": {
+      "kind": "diff",
+      "page": 316,
+      "verdict": "fix",
+      "fp": "diff|تبثر دون ان ينفرط|تبتر دون ان يفرط",
+      "before": "أن تنقل أو ",
+      "core": "تبثر دون أن ينفرط",
+      "after": " عقد الكل .",
+      "pos": 2556,
+      "base": "fe59639cfd6c",
+      "place": "",
+      "at": "2026-11-15T12:07:27Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "تبتر دون أن ينفرط"
+    },
+    "p317-04eae484f2": {
+      "kind": "diff",
+      "page": 317,
+      "verdict": "fix",
+      "fp": "diff|الافه|الالهه",
+      "before": "إلى إله من ",
+      "core": "الآفة",
+      "after": " .\n\nويرتكز الرأى",
+      "pos": 160,
+      "base": "e94f82258754",
+      "place": "",
+      "at": "2026-11-15T12:08:27Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "الآلهة"
+    },
+    "p317-f8b4d8c0f3": {
+      "kind": "diff",
+      "page": 317,
+      "verdict": "fix",
+      "fp": "diff|المسرح|المسارح",
+      "before": "تغيير المناظر في ",
+      "core": "المسرح",
+      "after": " اليونانية ومن افتراض",
+      "pos": 548,
+      "base": "e94f82258754",
+      "place": "",
+      "at": "2026-11-15T12:08:27Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "المسارح"
+    },
+    "p317-870ad80276": {
+      "kind": "diff",
+      "page": 317,
+      "verdict": "fix",
+      "fp": "diff|الجوققه|الجوقه",
+      "before": "ومن افتراض بقاء ",
+      "core": "الجوققة",
+      "after": " في مكان واحد",
+      "pos": 582,
+      "base": "e94f82258754",
+      "place": "",
+      "at": "2026-11-15T12:08:27Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "الجوقة"
+    },
+    "p317-e29f1c7ecd": {
+      "kind": "diff",
+      "page": 317,
+      "verdict": "fix",
+      "fp": "diff|بينا|بينما",
+      "before": "على مسرحياتهم إذ ",
+      "core": "بينا",
+      "after": " نرى أورستيس في",
+      "pos": 700,
+      "base": "e94f82258754",
+      "place": "",
+      "at": "2026-11-15T12:08:27Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "بينما"
+    },
+    "p317-2532827ff8": {
+      "kind": "diff",
+      "page": 317,
+      "verdict": "fix",
+      "fp": "diff|الاهات|الالهات",
+      "before": "أورستيس في قصة ",
+      "core": "الإهات",
+      "after": " الرحمة Eumenides لأيسخيلوس",
+      "pos": 726,
+      "base": "e94f82258754",
+      "place": "",
+      "at": "2026-11-15T12:08:27Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "إلاهات"
+    },
+    "p317-683753a455": {
+      "kind": "diff",
+      "page": 317,
+      "verdict": "fix",
+      "fp": "diff|لابولon تحيط به الجوققه|لابولون تحيط به الجوقه",
+      "before": "حجر الأومفالوس المقدس ",
+      "core": "لأبولon تحيط به الجوققة",
+      "after": " المؤلفة من إلهات",
+      "pos": 794,
+      "base": "e94f82258754",
+      "place": "",
+      "at": "2026-11-15T12:08:27Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "لأبولون تحيط به الجوقة"
+    },
+    "p317-848c298889": {
+      "kind": "diff",
+      "page": 317,
+      "verdict": "fix",
+      "fp": "diff|التغر|التغير",
+      "before": "، كما أن ",
+      "core": "التغر",
+      "after": " peripeteia والتعرف anagnorisis",
+      "pos": 1520,
+      "base": "e94f82258754",
+      "place": "",
+      "at": "2026-11-15T12:08:27Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "التغير"
+    },
+    "p317-95d18dbe08": {
+      "kind": "diff",
+      "page": 317,
+      "verdict": "fix",
+      "fp": "diff|التطهر|التطهير",
+      "before": "وظيفة التراجيديا هي ",
+      "core": "التطهر",
+      "after": " بإثارة الشفقة والخوف",
+      "pos": 1710,
+      "base": "e94f82258754",
+      "place": "",
+      "at": "2026-11-15T12:08:27Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "التطهير"
+    },
+    "p317-db6d3ad93c": {
+      "kind": "diff",
+      "page": 317,
+      "verdict": "keep",
+      "fp": "diff|من|",
+      "before": "تكون إلا على ",
+      "core": "من",
+      "after": " تردى في الهاوية",
+      "pos": 1771,
+      "base": "e94f82258754",
+      "place": "",
+      "at": "2026-11-15T12:08:27Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ]
+    },
+    "p317-9aef902cbe": {
+      "kind": "diff",
+      "page": 317,
+      "verdict": "fix",
+      "fp": "diff|وهذا كان سقوط الشرير الذي لا يثير خوفا او شفقه وكذلك|ولهذا كان",
+      "before": "على الشبيه . ",
+      "core": "وهذا كان سقوط الشرير الذي لا يثير خوفاً أو شفقة ، وكذلك",
+      "after": " سقوط الشرير الذي",
+      "pos": 1836,
+      "base": "e94f82258754",
+      "place": "",
+      "at": "2026-11-15T12:08:27Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "ولهذا كان سقوط من لا عيب فيه لا يثير خوفاً أو شفقة ، وكذلك"
+    },
+    "p317-3c54f7d682": {
+      "kind": "diff",
+      "page": 317,
+      "verdict": "fix",
+      "fp": "diff|مبال|ميال",
+      "before": "الكمال ، ولكنه ",
+      "core": "مبال",
+      "after": " إلى الخير ،",
+      "pos": 2042,
+      "base": "e94f82258754",
+      "place": "",
+      "at": "2026-11-15T12:08:27Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "ميال"
+    },
+    "p317-e3f265dbdb": {
+      "kind": "diff",
+      "page": 317,
+      "verdict": "fix",
+      "fp": "diff|خطوه|خطيه",
+      "before": "أن يسقط بسبب ",
+      "core": "خطؤه",
+      "after": " . فالتحول عند",
+      "pos": 2289,
+      "base": "e94f82258754",
+      "place": "",
+      "at": "2026-11-15T12:08:27Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "خطئه"
+    },
+    "p317-32ae3c16ad": {
+      "kind": "diff",
+      "page": 317,
+      "verdict": "fix",
+      "fp": "diff|انتاج من تطور|اطاعه لقانون",
+      "before": "الفعل إلى ضده ",
+      "core": "إنتاج من تطور",
+      "after": " الاحتمال أو الضرورة",
+      "pos": 2361,
+      "base": "e94f82258754",
+      "place": "",
+      "at": "2026-11-15T12:08:27Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "إطاعة لقانون"
+    },
+    "p317-7349662099": {
+      "kind": "diff",
+      "page": 317,
+      "verdict": "keep",
+      "fp": "diff|الكافي|",
+      "before": "يهتم بطول القصة ",
+      "core": "الكافي",
+      "after": " الذي يسمح للحوادث",
+      "pos": 2507,
+      "base": "e94f82258754",
+      "place": "",
+      "at": "2026-11-15T12:08:27Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ]
+    },
+    "p327-8d0507035e": {
+      "kind": "diff",
+      "page": 327,
+      "verdict": "fix",
+      "fp": "diff|اذاتها|اذاها",
+      "before": ": طش ! ",
+      "core": "إذاتها",
+      "after": " غارقة إلى ذقنها",
+      "pos": 5,
+      "base": "0fea7ad1c2fd",
+      "place": "",
+      "at": "2026-11-15T12:10:29Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "إذا بها"
+    },
+    "p327-5fe8ac7bad": {
+      "kind": "diff",
+      "page": 327,
+      "verdict": "fix",
+      "fp": "diff|سبحتها|سفحتها",
+      "before": "بركة الدموع التي ",
+      "core": "سبحتها",
+      "after": " عندما كان طولها",
+      "pos": 175,
+      "base": "0fea7ad1c2fd",
+      "place": "",
+      "at": "2026-11-15T12:10:29Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "سفحتها"
+    },
+    "p327-3368af96a1": {
+      "kind": "diff",
+      "page": 327,
+      "verdict": "fix",
+      "fp": "diff|ساال|سانال",
+      "before": "البكاء ! وأحسبني ",
+      "core": "سأال",
+      "after": " عقابي على كثرة",
+      "pos": 314,
+      "base": "0fea7ad1c2fd",
+      "place": "",
+      "at": "2026-11-15T12:10:29Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "سأنال"
+    },
+    "p327-5da9e2f548": {
+      "kind": "diff",
+      "page": 327,
+      "verdict": "keep",
+      "fp": "diff|في|الي",
+      "before": "وجعلت ألس تنظر ",
+      "core": "في",
+      "after": " كل ما حولها",
+      "pos": 585,
+      "base": "0fea7ad1c2fd",
+      "place": "",
+      "at": "2026-11-15T12:10:29Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ]
+    },
+    "p327-8f9c9c2f38": {
+      "kind": "diff",
+      "page": 327,
+      "verdict": "keep",
+      "fp": "diff|وعن|عن",
+      "before": "ولما نظرت تحته ",
+      "core": "وعن",
+      "after": " جانبيه وخلفه ،",
+      "pos": 792,
+      "base": "0fea7ad1c2fd",
+      "place": "",
+      "at": "2026-11-15T12:10:29Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ]
+    },
+    "p327-fb65c117ce": {
+      "kind": "diff",
+      "page": 327,
+      "verdict": "fix",
+      "fp": "diff|فالتفت|فالتقت",
+      "before": "عيش الغراب ، ",
+      "core": "فالتفت",
+      "after": " عيناها على الفور",
+      "pos": 927,
+      "base": "0fea7ad1c2fd",
+      "place": "",
+      "at": "2026-11-15T12:10:29Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "فالتقت"
+    },
+    "p327-6a3e81d4c9": {
+      "kind": "diff",
+      "page": 327,
+      "verdict": "fix",
+      "fp": "diff|جايمه|جالسه",
+      "before": "كبيرة زرقاء كانت ",
+      "core": "جائمة",
+      "after": " فوق قمة ذلك",
+      "pos": 975,
+      "base": "0fea7ad1c2fd",
+      "place": "",
+      "at": "2026-11-15T12:10:29Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "جالسة"
+    },
+    "p327-eabd69cafb": {
+      "kind": "diff",
+      "page": 327,
+      "verdict": "fix",
+      "fp": "diff|النعass|النعاس",
+      "before": "في صوت يداعبه ",
+      "core": "النعass",
+      "after": " ؟ من أنت",
+      "pos": 1240,
+      "base": "0fea7ad1c2fd",
+      "place": "",
+      "at": "2026-11-15T12:10:29Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "النعاس"
+    },
+    "p327-0a394e2a23": {
+      "kind": "diff",
+      "page": 327,
+      "verdict": "keep",
+      "fp": "diff|علي|",
+      "before": "، فأجابتها ألس ",
+      "core": "على",
+      "after": " استحياء : «",
+      "pos": 1310,
+      "base": "0fea7ad1c2fd",
+      "place": "",
+      "at": "2026-11-15T12:10:29Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ]
+    },
+    "p327-8363b85403": {
+      "kind": "diff",
+      "page": 327,
+      "verdict": "fix",
+      "fp": "diff|اكad|اكاد",
+      "before": ". . لا ",
+      "core": "أكad",
+      "after": " أدرى يا سيدى",
+      "pos": 1347,
+      "base": "0fea7ad1c2fd",
+      "place": "",
+      "at": "2026-11-15T12:10:29Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "أكاد"
+    },
+    "p327-bc0fbba9c5": {
+      "kind": "diff",
+      "page": 327,
+      "verdict": "fix",
+      "fp": "diff|احتقد|اعتقد",
+      "before": ". وان كنت ",
+      "core": "أحتَقَد",
+      "after": " أني لا بد",
+      "pos": 1451,
+      "base": "0fea7ad1c2fd",
+      "place": "",
+      "at": "2026-11-15T12:10:29Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "أعتقد"
+    },
+    "p327-7f7c4598b9": {
+      "kind": "diff",
+      "page": 327,
+      "verdict": "keep",
+      "fp": "diff|يحير|حير",
+      "before": "في هذا ما ",
+      "core": "يحير",
+      "after": " » فقالت ألس",
+      "pos": 1893,
+      "base": "0fea7ad1c2fd",
+      "place": "",
+      "at": "2026-11-15T12:10:29Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ]
+    },
+    "p327-1367b9f875": {
+      "kind": "diff",
+      "page": 327,
+      "verdict": "fix",
+      "fp": "diff|وثبتت علي اخمص قدميها|وشبت علي اخمص قدمها",
+      "before": "، فبسطت قامتها ",
+      "core": "وثبتت على إخمص قدميها",
+      "after": " وقالت بكل جد",
+      "pos": 2376,
+      "base": "0fea7ad1c2fd",
+      "place": "",
+      "at": "2026-11-15T12:10:29Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "وشبت على أخمص قدميها"
+    },
+    "p327-6718029584": {
+      "kind": "diff",
+      "page": 327,
+      "verdict": "fix",
+      "fp": "diff|اتقصد|اعتقد",
+      "before": "جد : « ",
+      "core": "أتقصد",
+      "after": " أنك ينبغي أن",
+      "pos": 2423,
+      "base": "0fea7ad1c2fd",
+      "place": "",
+      "at": "2026-11-15T12:10:29Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "أعتقد"
+    },
+    "p327-83c9c8f82a": {
+      "kind": "diff",
+      "page": 327,
+      "verdict": "fix",
+      "fp": "diff|تخبرني|تخبريني",
+      "before": "أنك ينبغي أن ",
+      "core": "تخبرني",
+      "after": " أولا من أنت",
+      "pos": 2436,
+      "base": "0fea7ad1c2fd",
+      "place": "",
+      "at": "2026-11-15T12:10:29Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "تخبريني"
+    },
+    "p327-af463432ea": {
+      "kind": "diff",
+      "page": 327,
+      "verdict": "keep",
+      "fp": "diff|من|عن",
+      "before": "لتنصرف ، فنادتها ",
+      "core": "من",
+      "after": " خلفها : «",
+      "pos": 2632,
+      "base": "0fea7ad1c2fd",
+      "place": "",
+      "at": "2026-11-15T12:10:29Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ]
+    },
+    "p327-e409103c62": {
+      "kind": "diff",
+      "page": 327,
+      "verdict": "keep",
+      "fp": "diff|تقوليه|تقوله",
+      "before": "ما أردت أن ",
+      "core": "تقوليه",
+      "after": " لى » فقالت",
+      "pos": 2832,
+      "base": "0fea7ad1c2fd",
+      "place": "",
+      "at": "2026-11-15T12:10:29Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ]
+    },
+    "p327-d7036dc90f": {
+      "kind": "diff",
+      "page": 327,
+      "verdict": "keep",
+      "fp": "diff|من|فوق صدرها ولكنها اخيرا بسطت ذراعيها المطويتين عن",
+      "before": "دقائق تنفث الدخان ",
+      "core": "من",
+      "after": " غير أن تتكلم",
+      "pos": 2888,
+      "base": "0fea7ad1c2fd",
+      "place": "",
+      "at": "2026-11-15T12:10:29Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ]
+    },
+    "p327-dc3ea80029": {
+      "kind": "diff",
+      "page": 327,
+      "verdict": "fix",
+      "fp": "diff|ولكنها اخيرا بسطت ذراعها الملتوبين فوق صدرها|",
+      "before": "أن تتكلم ، ",
+      "core": "ولكنها أخيراً بسطت ذراعها الملتوبين فوق صدرها",
+      "after": " وأخرجت الغليون الطويل",
+      "pos": 2913,
+      "base": "0fea7ad1c2fd",
+      "place": "",
+      "at": "2026-11-15T12:10:29Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "ولكنها أخيراً بسطت ذراعيها المطويتين فوق صدرها"
+    },
+    "p355-ac0fdd7fa7": {
+      "kind": "diff",
+      "page": 355,
+      "verdict": "keep",
+      "fp": "diff|انواع|",
+      "before": "إلى نوع من ",
+      "core": "أنواع",
+      "after": " النبات من فصيلة",
+      "pos": 387,
+      "base": "950304307684",
+      "place": "",
+      "at": "2026-11-15T12:12:30Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ]
+    },
+    "p355-cc7d86c299": {
+      "kind": "diff",
+      "page": 355,
+      "verdict": "fix",
+      "fp": "diff|منكي|منكبي",
+      "before": "ستمد مصاصاتها إلى ",
+      "core": "منكي",
+      "after": " وتطول جذورها .",
+      "pos": 542,
+      "base": "950304307684",
+      "place": "",
+      "at": "2026-11-15T12:12:30Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "منكبي"
+    },
+    "p355-ae9cb3178e": {
+      "kind": "diff",
+      "page": 355,
+      "verdict": "keep",
+      "fp": "diff|قد|",
+      "before": "أنا فأرى أنها ",
+      "core": "قد",
+      "after": " أخذتها سنة من",
+      "pos": 591,
+      "base": "950304307684",
+      "place": "",
+      "at": "2026-11-15T12:12:30Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ]
+    },
+    "p355-fe36d9fbae": {
+      "kind": "diff",
+      "page": 355,
+      "verdict": "fix",
+      "fp": "diff|ايمييندنزل1|ايبيمينذز 1",
+      "before": "النوم شبيه بنوم ",
+      "core": "إيمييندنزل[^1]",
+      "after": " الذي استمر نصف",
+      "pos": 638,
+      "base": "950304307684",
+      "place": "",
+      "at": "2026-11-15T12:12:30Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "ايبيمينذز[^1]"
+    },
+    "p355-d509983714": {
+      "kind": "diff",
+      "page": 355,
+      "verdict": "fix",
+      "fp": "diff|بحاله هيرموتياس|شبيهه بحاله هيرمتياس",
+      "before": "وقد تكون حالتها ",
+      "core": "بحالة هيرموتياس",
+      "after": " الذي كانت روحه",
+      "pos": 698,
+      "base": "950304307684",
+      "place": "",
+      "at": "2026-11-15T12:12:30Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "شبيهة بحالة هيرموتياس"
+    },
+    "p355-f742f6a7b5": {
+      "kind": "diff",
+      "page": 355,
+      "verdict": "fix",
+      "fp": "diff|ترك|تترك",
+      "before": "الذي كانت روحه ",
+      "core": "ترك",
+      "after": " جسده حينما تشاء",
+      "pos": 730,
+      "base": "950304307684",
+      "place": "",
+      "at": "2026-11-15T12:12:30Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "تترك"
+    },
+    "p355-dcabd8bcb5": {
+      "kind": "diff",
+      "page": 355,
+      "verdict": "fix",
+      "fp": "diff|تنسلي|تتسلي",
+      "before": "بعض الأوقات هائمة ",
+      "core": "تنسلى",
+      "after": " ثم تعود إليه",
+      "pos": 791,
+      "base": "950304307684",
+      "place": "",
+      "at": "2026-11-15T12:12:30Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "تتسلى"
+    },
+    "p355-880e745129": {
+      "kind": "diff",
+      "page": 355,
+      "verdict": "fix",
+      "fp": "diff|حينا|حينما",
+      "before": "ثم تعود إليه ",
+      "core": "حينا",
+      "after": " يروقها ذلك ،",
+      "pos": 815,
+      "base": "950304307684",
+      "place": "",
+      "at": "2026-11-15T12:12:30Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "حينما"
+    },
+    "p355-225dd59a57": {
+      "kind": "diff",
+      "page": 355,
+      "verdict": "keep",
+      "fp": "diff|فحرقوا|فاحرقوا",
+      "before": "حداً لهذا العبث ",
+      "core": "فحرقوا",
+      "after": " الجثة في يوم",
+      "pos": 882,
+      "base": "950304307684",
+      "place": "",
+      "at": "2026-11-15T12:12:30Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ]
+    },
+    "p355-f31a526225": {
+      "kind": "diff",
+      "page": 355,
+      "verdict": "keep",
+      "fp": "diff|اضحيان|اضحيات",
+      "before": "الجثة في يوم ",
+      "core": "أضحيان",
+      "after": " ، فلما عادت",
+      "pos": 905,
+      "base": "950304307684",
+      "place": "",
+      "at": "2026-11-15T12:12:30Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ]
+    },
+    "p355-4910e4a98f": {
+      "kind": "diff",
+      "page": 355,
+      "verdict": "keep",
+      "fp": "diff|انها|امها",
+      "before": "الجسدي محطماً رأت ",
+      "core": "أنها",
+      "after": " إذا أرادت أن",
+      "pos": 954,
+      "base": "950304307684",
+      "place": "",
+      "at": "2026-11-15T12:12:30Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ]
+    },
+    "p355-93dc3fc1d0": {
+      "kind": "diff",
+      "page": 355,
+      "verdict": "keep",
+      "fp": "diff|العاطفين|العاطفيين",
+      "before": "يظن بعض الأصدقاء ",
+      "core": "العاطفين",
+      "after": " عليها أنها ماتت",
+      "pos": 1094,
+      "base": "950304307684",
+      "place": "",
+      "at": "2026-11-15T12:12:30Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ]
+    },
+    "p355-35166d7005": {
+      "kind": "diff",
+      "page": 355,
+      "verdict": "fix",
+      "fp": "diff|ايقافها اطلس|ايقاظها حسن",
+      "before": "ولذلك دعنا نحاول ",
+      "core": "إيقافها .\nأطلس",
+      "after": " : حسن .",
+      "pos": 1154,
+      "base": "950304307684",
+      "place": "",
+      "at": "2026-11-15T12:12:30Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "إيقاظها .\nأطلس"
+    },
+    "p355-6b3e330d7e": {
+      "kind": "diff",
+      "page": 355,
+      "verdict": "fix",
+      "fp": "diff|اطلس هرقل اطلس هرقل اطلس هرقل|",
+      "before": "في ذلك ؟\n",
+      "core": "أطلس\nهرقل\nأطلس\nهرقل\nأطلس\nهرقل",
+      "after": " : لوددت أن",
+      "pos": 1208,
+      "base": "950304307684",
+      "place": "",
+      "at": "2026-11-15T12:12:30Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "هرقل"
+    },
+    "p355-89c6587bd5": {
+      "kind": "diff",
+      "page": 355,
+      "verdict": "fix",
+      "fp": "diff|بهراوه|بهراوتي ضربه",
+      "before": "لوددت أن أضربها ",
+      "core": "بهراوة",
+      "after": " شديدة ، لولا",
+      "pos": 1249,
+      "base": "950304307684",
+      "place": "",
+      "at": "2026-11-15T12:12:30Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "بهراوتى ضربة"
+    },
+    "p355-081322539d": {
+      "kind": "diff",
+      "page": 355,
+      "verdict": "fix",
+      "fp": "diff|فانني|فاني",
+      "before": "وعلاوة على ذلك ",
+      "core": "فإنني",
+      "after": " أخشى أن المخلوقات",
+      "pos": 1453,
+      "base": "950304307684",
+      "place": "",
+      "at": "2026-11-15T12:12:30Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "فإني"
+    },
+    "p355-35bc9fa044": {
+      "kind": "diff",
+      "page": 355,
+      "verdict": "fix",
+      "fp": "diff|اعماء|اغماء",
+      "before": "البراغيث قد يصيبها ",
+      "core": "إعماء",
+      "after": " مفاجيء من أثر",
+      "pos": 1564,
+      "base": "950304307684",
+      "place": "",
+      "at": "2026-11-15T12:12:30Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "إغماء"
+    },
+    "p355-30673aea0e": {
+      "kind": "diff",
+      "page": 355,
+      "verdict": "fix",
+      "fp": "diff|واساضع هراوقي جانبا واخلع انت|وساضع هراوتي جانبا واخلع",
+      "before": "أثر الصدمة ، ",
+      "core": "وأسأضع هراوقى جانبا واخلع أنت",
+      "after": " عباءتك ودعنا نلعب",
+      "pos": 1599,
+      "base": "950304307684",
+      "place": "",
+      "at": "2026-11-15T12:12:30Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "وسأضع هراوتى جانبا واخلع أنت"
+    },
+    "p355-88568242d1": {
+      "kind": "diff",
+      "page": 355,
+      "verdict": "fix",
+      "fp": "diff|وبتبر|جوبيتر",
+      "before": "في حديقة منزل ",
+      "core": "چوبتبر",
+      "after": " ، ومع ذلك",
+      "pos": 1795,
+      "base": "950304307684",
+      "place": "",
+      "at": "2026-11-15T12:12:30Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "چوبيتر"
+    },
+    "p355-a6507e58f0": {
+      "kind": "diff",
+      "page": 355,
+      "verdict": "keep",
+      "fp": "diff|اطلس|",
+      "before": "بجماع أكفنا .\n",
+      "core": "أطلس",
+      "after": " : لا أوافق",
+      "pos": 1872,
+      "base": "950304307684",
+      "place": "",
+      "at": "2026-11-15T12:12:30Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ]
+    },
+    "p355-6d02da80b6": {
+      "kind": "diff",
+      "page": 355,
+      "verdict": "fix",
+      "fp": "diff|بفيتيون|بفيتون",
+      "before": "ندرى كما طوح ",
+      "core": "بفيتيون",
+      "after": " في نهر ألبو",
+      "pos": 2013,
+      "base": "950304307684",
+      "place": "",
+      "at": "2026-11-15T12:12:30Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "بفيتون"
+    },
+    "p355-570b594886": {
+      "kind": "diff",
+      "page": 355,
+      "verdict": "keep",
+      "fp": "diff|هرقل|",
+      "before": "نهر ألبو .\n",
+      "core": "هرقل",
+      "after": " : لن يحدث",
+      "pos": 2037,
+      "base": "950304307684",
+      "place": "",
+      "at": "2026-11-15T12:12:30Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ]
+    },
+    "p355-f2703c90c7": {
+      "kind": "diff",
+      "page": 355,
+      "verdict": "fix",
+      "fp": "diff|ايمييندنزل|ايبيمينذز",
+      "before": "الشعراء .\n\n[^1]: ",
+      "core": "أيمييندنزل",
+      "after": " مثل ريب فان",
+      "pos": 2085,
+      "base": "950304307684",
+      "place": "",
+      "at": "2026-11-15T12:12:30Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "أيبيمينذز"
+    },
+    "p355-173135f4b1": {
+      "kind": "diff",
+      "page": 355,
+      "verdict": "keep",
+      "fp": "diff|يرعي غنمه وظل نايما|رعي غنمه وظل نايم",
+      "before": "من النوم ودو ",
+      "core": "يرعى غنمه وظل نائماً",
+      "after": " في غابة ما",
+      "pos": 2153,
+      "base": "950304307684",
+      "place": "",
+      "at": "2026-11-15T12:12:30Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ]
+    },
+    "p355-acffa00919": {
+      "kind": "diff",
+      "page": 355,
+      "verdict": "fix",
+      "fp": "diff|العام|العالم",
+      "before": "بطبيعة الحال أن ",
+      "core": "العام",
+      "after": " قد تغير .",
+      "pos": 2234,
+      "base": "950304307684",
+      "place": "",
+      "at": "2026-11-15T12:12:30Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "العالم"
+    },
+    "p391-41f44a582e": {
+      "kind": "diff",
+      "page": 391,
+      "verdict": "keep",
+      "fp": "diff|المنطوين|المنطويين",
+      "before": "إن هذين القبرين ",
+      "core": "المنطوين",
+      "after": " على قلب واحد",
+      "pos": 485,
+      "base": "f5d8ee55e520",
+      "place": "",
+      "at": "2026-11-15T12:14:31Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ]
+    },
+    "p391-5aaf0706bf": {
+      "kind": "diff",
+      "page": 391,
+      "verdict": "fix",
+      "fp": "diff|اهراء|اثرياء",
+      "before": "مشاعر الجميع من ",
+      "core": "أهراء",
+      "after": " وفقراء ، فلماذا",
+      "pos": 558,
+      "base": "f5d8ee55e520",
+      "place": "",
+      "at": "2026-11-15T12:14:31Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "أثرياء"
+    },
+    "p391-e3b96b1c1a": {
+      "kind": "diff",
+      "page": 391,
+      "verdict": "fix",
+      "fp": "diff|القشاره الداليه|القيثاره الالهيه",
+      "before": "أن تهز هذه ",
+      "core": "القشارة الدالية",
+      "after": " عفواً ببعض النغم",
+      "pos": 668,
+      "base": "f5d8ee55e520",
+      "place": "",
+      "at": "2026-11-15T12:14:31Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "القيثارة الالهية"
+    },
+    "p391-4f49073b6b": {
+      "kind": "diff",
+      "page": 391,
+      "verdict": "fix",
+      "fp": "diff|المشاحل|المشاعل",
+      "before": "وكانت مشعلا من ",
+      "core": "المشاحل",
+      "after": " الرائدة للحركة الأدبية",
+      "pos": 827,
+      "base": "f5d8ee55e520",
+      "place": "",
+      "at": "2026-11-15T12:14:31Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "المشاعل"
+    },
+    "p391-6315046f68": {
+      "kind": "diff",
+      "page": 391,
+      "verdict": "fix",
+      "fp": "diff|بالبال الكثيرين ان يقارنوها بالنص الاصل الفرنسي|ببال الكثيرين ان يقارنوا بالنص الفرنسي الاصلي",
+      "before": "ولكن لم يخطر ",
+      "core": "بالبال الكثيرين أن يقارنوها بالنص الأصل الفرنسى",
+      "after": " « بول وفرجيني",
+      "pos": 1128,
+      "base": "f5d8ee55e520",
+      "place": "",
+      "at": "2026-11-15T12:14:31Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "ببال الكثيرين أن يقارنوها بالنص الأصلى الفرنسى"
+    },
+    "p391-44f6ec0df9": {
+      "kind": "diff",
+      "page": 391,
+      "verdict": "fix",
+      "fp": "diff|من|عن",
+      "before": "أبداً أنها منقولة ",
+      "core": "من",
+      "after": " نص أجنبي .",
+      "pos": 1253,
+      "base": "f5d8ee55e520",
+      "place": "",
+      "at": "2026-11-15T12:14:31Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "عن"
+    },
+    "p391-8474ebbbf2": {
+      "kind": "diff",
+      "page": 391,
+      "verdict": "fix",
+      "fp": "diff|يسلس لغيره التعبير|يلس لغيره للتعبير",
+      "before": "نقى ما كان ",
+      "core": "يسلس لغيره التعبير",
+      "after": " عن أدق المعاني",
+      "pos": 1468,
+      "base": "f5d8ee55e520",
+      "place": "",
+      "at": "2026-11-15T12:14:31Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "يسلس لغيره للتعبير"
+    },
+    "p391-172d102dc4": {
+      "kind": "diff",
+      "page": 391,
+      "verdict": "fix",
+      "fp": "diff|شيي|شيء",
+      "before": "وتعليق فلسفى على ",
+      "core": "شئى",
+      "after": " .\n\nالموضوعات كالحياة",
+      "pos": 1568,
+      "base": "f5d8ee55e520",
+      "place": "",
+      "at": "2026-11-15T12:14:31Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "شتى"
+    },
+    "p391-190328830d": {
+      "kind": "diff",
+      "page": 391,
+      "verdict": "keep",
+      "fp": "diff|فالمنفلوطي|فبالمنفلوطي",
+      "before": "وتسلسل العبارة ، ",
+      "core": "فالمنفلوطى",
+      "after": " فى وصف المشاهد",
+      "pos": 1742,
+      "base": "f5d8ee55e520",
+      "place": "",
+      "at": "2026-11-15T12:14:31Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ]
+    },
+    "p391-f66ee65ef2": {
+      "kind": "diff",
+      "page": 391,
+      "verdict": "fix",
+      "fp": "diff|فبينا|فبينما",
+      "before": "مجالات الوعظ ، ",
+      "core": "فبينا",
+      "after": " يكتفي المؤلف بفقرة",
+      "pos": 1939,
+      "base": "f5d8ee55e520",
+      "place": "",
+      "at": "2026-11-15T12:14:31Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "فبينما"
+    },
+    "p391-1078d48127": {
+      "kind": "diff",
+      "page": 391,
+      "verdict": "fix",
+      "fp": "diff|الامله|الامثله",
+      "before": "المقام هنا لتقديم ",
+      "core": "الأملة",
+      "after": " على ذلك فهى",
+      "pos": 2131,
+      "base": "f5d8ee55e520",
+      "place": "",
+      "at": "2026-11-15T12:14:31Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "الأمثلة"
+    },
+    "p391-db5907a58f": {
+      "kind": "diff",
+      "page": 391,
+      "verdict": "fix",
+      "fp": "diff|حروت|حاولت",
+      "before": "تحصى . وقد ",
+      "core": "حروت",
+      "after": " أن أستشهد في",
+      "pos": 2179,
+      "base": "f5d8ee55e520",
+      "place": "",
+      "at": "2026-11-15T12:14:31Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "حاولت"
+    },
+    "p391-5080cc01c9": {
+      "kind": "diff",
+      "page": 391,
+      "verdict": "fix",
+      "fp": "diff|عرفت|عزفت",
+      "before": "العربي ، ولكني ",
+      "core": "عرفت",
+      "after": " عن ذلك بعد",
+      "pos": 2264,
+      "base": "f5d8ee55e520",
+      "place": "",
+      "at": "2026-11-15T12:14:31Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "عزفت"
+    },
+    "p391-b70fecbe7a": {
+      "kind": "diff",
+      "page": 391,
+      "verdict": "fix",
+      "fp": "diff|و ترجمت|وترجمت",
+      "before": "بين النصين ، ",
+      "core": "و ترجمت",
+      "after": " بنفسي ما أردت",
+      "pos": 2315,
+      "base": "f5d8ee55e520",
+      "place": "",
+      "at": "2026-11-15T12:14:31Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "وترجمت"
+    },
+    "p391-8b37bbe179": {
+      "kind": "diff",
+      "page": 391,
+      "verdict": "fix",
+      "fp": "diff|طابع|طامع",
+      "before": "مقتطفات ، غير ",
+      "core": "طابع",
+      "after": " بالطبع في بلوغ",
+      "pos": 2353,
+      "base": "f5d8ee55e520",
+      "place": "",
+      "at": "2026-11-15T12:14:31Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "طامع"
+    },
+    "p391-e0c442e7b9": {
+      "kind": "diff",
+      "page": 391,
+      "verdict": "keep",
+      "fp": "diff|واتبعتها|واتبعها",
+      "before": "حرفياً إلى العربية ",
+      "core": "وأتبعتها",
+      "after": " بالنص الذي يقابلها",
+      "pos": 2458,
+      "base": "f5d8ee55e520",
+      "place": "",
+      "at": "2026-11-15T12:14:31Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ]
+    },
+    "p391-33ce9dce9c": {
+      "kind": "diff",
+      "page": 391,
+      "verdict": "fix",
+      "fp": "diff|ينبء|ينبي",
+      "before": "كان كل شيء ",
+      "core": "ينبء",
+      "after": " باقتراب العاصفة ،",
+      "pos": 2563,
+      "base": "f5d8ee55e520",
+      "place": "",
+      "at": "2026-11-15T12:14:31Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "ينبئ"
+    },
+    "p391-17cd8e74ed": {
+      "kind": "diff",
+      "page": 391,
+      "verdict": "fix",
+      "fp": "diff|سمث|سمت",
+      "before": "كانت السحب في ",
+      "core": "سمث",
+      "after": " السماء حمراء عند",
+      "pos": 2597,
+      "base": "f5d8ee55e520",
+      "place": "",
+      "at": "2026-11-15T12:14:31Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "سمت"
+    },
+    "p391-89668a03e1": {
+      "kind": "diff",
+      "page": 391,
+      "verdict": "keep",
+      "fp": "diff|مخيفه|",
+      "before": "أطرافها ، قائمة ",
+      "core": "مخيفة",
+      "after": " عند الوسط ،",
+      "pos": 2632,
+      "base": "f5d8ee55e520",
+      "place": "",
+      "at": "2026-11-15T12:14:31Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ]
+    },
+    "p391-29021c2493": {
+      "kind": "diff",
+      "page": 391,
+      "verdict": "fix",
+      "fp": "diff|الرعدود|الرعود",
+      "before": "الجبال مختلطة بقصف ",
+      "core": "الرعدود",
+      "after": " ، وصاح الجميع",
+      "pos": 2860,
+      "base": "f5d8ee55e520",
+      "place": "",
+      "at": "2026-11-15T12:14:31Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "الرعود"
+    },
+    "p391-0902326e00": {
+      "kind": "diff",
+      "page": 391,
+      "verdict": "fix",
+      "fp": "diff|رخصه|رعشه",
+      "before": "فى جميع أوصاله ",
+      "core": "رخصة",
+      "after": " شديدة كتلك الرعشة",
+      "pos": 3097,
+      "base": "f5d8ee55e520",
+      "place": "",
+      "at": "2026-11-15T12:14:31Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "رعشة"
+    },
+    "p391-f292c65047": {
+      "kind": "diff",
+      "page": 391,
+      "verdict": "fix",
+      "fp": "diff|هاريه|هاربه",
+      "before": "من كل صوب ",
+      "core": "هارية",
+      "after": " إلى البر كأن",
+      "pos": 3179,
+      "base": "f5d8ee55e520",
+      "place": "",
+      "at": "2026-11-15T12:14:31Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "هاربة"
+    },
+    "p391-ae1e29fa53": {
+      "kind": "diff",
+      "page": 391,
+      "verdict": "fix",
+      "fp": "diff|راديه حمراء كما|ناريه حمراء كانه",
+      "before": "في خلال نقط ",
+      "core": "رادية حمراء كما",
+      "after": " يلمع بصيص النار",
+      "pos": 3281,
+      "base": "f5d8ee55e520",
+      "place": "",
+      "at": "2026-11-15T12:14:31Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "نارية حمراء كما"
+    },
+    "p391-db5ffeda54": {
+      "kind": "diff",
+      "page": 391,
+      "verdict": "fix",
+      "fp": "diff|وامتازا الججو|وامتاز الجو",
+      "before": "النار خلال الرماد ",
+      "core": "وامتازأ الججو",
+      "after": " بفحيح الأفاعي وطنين",
+      "pos": 3319,
+      "base": "f5d8ee55e520",
+      "place": "",
+      "at": "2026-11-15T12:14:31Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "وامتلأ الجو"
+    },
+    "p411-50184196bd": {
+      "kind": "diff",
+      "page": 411,
+      "verdict": "fix",
+      "fp": "diff|الفترات متساويه ا الا ان فرود|الفقرات متساويه 1 الا ان فروق",
+      "before": "، ومع أن ",
+      "core": "الفترات متساوية (= أ) إلا أن فرود",
+      "after": " الجيوب (جـ2 -",
+      "pos": 25,
+      "base": "5b99e681a884",
+      "place": "",
+      "at": "2026-11-15T12:20:35Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "الفترات متساوية (= أ) إلا أن فروق"
+    },
+    "p411-5a48d04a8a": {
+      "kind": "diff",
+      "page": 411,
+      "verdict": "fix",
+      "fp": "diff|الواقعه|واقعه",
+      "before": "أ + ب) ",
+      "core": "الواقعة",
+      "after": " بين (س +",
+      "pos": 151,
+      "base": "5b99e681a884",
+      "place": "",
+      "at": "2026-11-15T12:20:35Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "واقعة"
+    },
+    "p411-33ecda9db6": {
+      "kind": "diff",
+      "page": 411,
+      "verdict": "fix",
+      "fp": "diff|ا2|12",
+      "before": "، (س + ",
+      "core": "أ2)",
+      "after": " بالطريقة العادية الشائعة",
+      "pos": 178,
+      "base": "5b99e681a884",
+      "place": "",
+      "at": "2026-11-15T12:20:35Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "2أ)"
+    },
+    "p411-9c25449685": {
+      "kind": "diff",
+      "page": 411,
+      "verdict": "fix",
+      "fp": "diff|ا مساويه نسبه الزياده ج ج2|1 مساويه لنسبه الزياده ج ج1",
+      "before": "(ب) إلى الفترة ",
+      "core": "(أ) مساوية نسبة الزيادة (ج - جـ2)",
+      "after": " إلى الفرق (جـ2",
+      "pos": 230,
+      "base": "5b99e681a884",
+      "place": "",
+      "at": "2026-11-15T12:20:35Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "(أ) مساوية لنسبة الزيادة (ج - جـ1)"
+    },
+    "p411-0f3e13e589": {
+      "kind": "diff",
+      "page": 411,
+      "verdict": "fix",
+      "fp": "diff|ا الي س ا2|1 الي س 12",
+      "before": "من (س + ",
+      "core": "أ) إلى (س + أ2)",
+      "after": " صاحبه تغير تدريجي",
+      "pos": 419,
+      "base": "5b99e681a884",
+      "place": "",
+      "at": "2026-11-15T12:20:35Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "أ) إلى (س + 2أ)"
+    },
+    "p411-c921a18859": {
+      "kind": "diff",
+      "page": 411,
+      "verdict": "fix",
+      "fp": "diff|ا مساويه نسبه|1 مساويه لنسبه",
+      "before": "(ب) إلى الفترة ",
+      "core": "(أ) مساوية نسبة",
+      "after": " فرق الجيوب المناسب",
+      "pos": 553,
+      "base": "5b99e681a884",
+      "place": "",
+      "at": "2026-11-15T12:20:35Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "(أ) مساوية لنسبة"
+    },
+    "p411-60a90efeda": {
+      "kind": "diff",
+      "page": 411,
+      "verdict": "fix",
+      "fp": "diff|المفهموم|المفهوم",
+      "before": "أو ظلالا بالمعنى ",
+      "core": "المفهموم",
+      "after": " ، بل مضروبة",
+      "pos": 899,
+      "base": "5b99e681a884",
+      "place": "",
+      "at": "2026-11-15T12:20:35Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "المفهوم"
+    },
+    "p411-55b11c2276": {
+      "kind": "diff",
+      "page": 411,
+      "verdict": "fix",
+      "fp": "diff|وذللك|وذلك",
+      "before": "مصدر الجدول ، ",
+      "core": "وذللك",
+      "after": " المعامل الثابت قيمته",
+      "pos": 965,
+      "base": "5b99e681a884",
+      "place": "",
+      "at": "2026-11-15T12:20:35Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "وذلك"
+    },
+    "p411-9274d25130": {
+      "kind": "diff",
+      "page": 411,
+      "verdict": "fix",
+      "fp": "diff|الفارس|الفارسي",
+      "before": "60 طبقاً للنظام ",
+      "core": "الفارس",
+      "after": " أو اليوناني .",
+      "pos": 1032,
+      "base": "5b99e681a884",
+      "place": "",
+      "at": "2026-11-15T12:20:35Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "الفارسي"
+    },
+    "p411-72d1832c5f": {
+      "kind": "diff",
+      "page": 411,
+      "verdict": "keep",
+      "fp": "diff|والقطر مثلا بل|والوتر مثلا بل رسم توضيحي لمثلث قايم الزاويه مكتوب عليه الوتر المقابل المجاور",
+      "before": "نسباً بين المقابل ",
+      "core": "والقطر مثلا ، بل",
+      "after": "\n\nأطوالا مطلقة للمقابل",
+      "pos": 1114,
+      "base": "5b99e681a884",
+      "place": "",
+      "at": "2026-11-15T12:20:35Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ]
+    },
+    "p411-1f516bb046": {
+      "kind": "diff",
+      "page": 411,
+      "verdict": "fix",
+      "fp": "diff|32|12",
+      "before": "وبعض علماء الهند ",
+      "core": "32",
+      "after": " . وكان البيروني",
+      "pos": 1237,
+      "base": "5b99e681a884",
+      "place": "",
+      "at": "2026-11-15T12:20:35Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "2 1/2"
+    },
+    "p411-140a0ecce3": {
+      "kind": "diff",
+      "page": 411,
+      "verdict": "fix",
+      "fp": "diff|المتابع|المتتابع",
+      "before": "إلى طريقة التقريب ",
+      "core": "المتابع",
+      "after": " المعروفة للرياضيين فى",
+      "pos": 1408,
+      "base": "5b99e681a884",
+      "place": "",
+      "at": "2026-11-15T12:20:35Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "المتتابع"
+    },
+    "p411-960dfd718c": {
+      "kind": "diff",
+      "page": 411,
+      "verdict": "keep",
+      "fp": "diff|14|41",
+      "before": "المركز ( أى ",
+      "core": "1/4",
+      "after": " الدورة الكاملة )",
+      "pos": 1543,
+      "base": "5b99e681a884",
+      "place": "",
+      "at": "2026-11-15T12:20:35Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ]
+    },
+    "p411-e824bc4b4d": {
+      "kind": "diff",
+      "page": 411,
+      "verdict": "keep",
+      "fp": "diff|وتري|وتر",
+      "before": "الأوتار فيما عدا ",
+      "core": "وترى",
+      "after": " السبع والتسع كما",
+      "pos": 1740,
+      "base": "5b99e681a884",
+      "place": "",
+      "at": "2026-11-15T12:20:35Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ]
+    },
+    "p411-77f0fee0a2": {
+      "kind": "diff",
+      "page": 411,
+      "verdict": "fix",
+      "fp": "diff|المتابع فاخذ وتري الخمس والسادس|المتتابع فاخذ وتر الخمس والسدس",
+      "before": "البيروني طريقة التقريب ",
+      "core": "المتابع فأخذ وترى الخمس والسادس",
+      "after": " ( يقابلان 72°",
+      "pos": 1855,
+      "base": "5b99e681a884",
+      "place": "",
+      "at": "2026-11-15T12:20:35Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "المتتابع فأخذ وترى الخمس والسدس"
+    },
+    "p411-289d0d3c7a": {
+      "kind": "diff",
+      "page": 411,
+      "verdict": "fix",
+      "fp": "diff|السادس|السدس",
+      "before": "، ومن وتر ",
+      "core": "السادس",
+      "after": " أيضاً باستعمال قانون",
+      "pos": 1967,
+      "base": "5b99e681a884",
+      "place": "",
+      "at": "2026-11-15T12:20:35Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "السدس"
+    },
+    "p411-9817b9314f": {
+      "kind": "diff",
+      "page": 411,
+      "verdict": "fix",
+      "fp": "diff|التنصف|التنصيف",
+      "before": "أيضاً باستعمال قانون ",
+      "core": "التنصف",
+      "after": " وصل إلى وتر",
+      "pos": 1984,
+      "base": "5b99e681a884",
+      "place": "",
+      "at": "2026-11-15T12:20:35Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "التنصيف"
+    },
+    "p411-88bdbc8d1f": {
+      "kind": "diff",
+      "page": 411,
+      "verdict": "fix",
+      "fp": "diff|اممكن|امكن",
+      "before": "هذه الخطوات الأخيرة ",
+      "core": "أممكن",
+      "after": " الاقتراب قدر الإمكان",
+      "pos": 2248,
+      "base": "5b99e681a884",
+      "place": "",
+      "at": "2026-11-15T12:20:35Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "أمكن"
+    },
+    "p411-8b89e3d656": {
+      "kind": "diff",
+      "page": 411,
+      "verdict": "fix",
+      "fp": "diff|طريقه|طرقه",
+      "before": "ولن نشير إلى ",
+      "core": "طريقة",
+      "after": " الأخرى التى أوصلته",
+      "pos": 2467,
+      "base": "5b99e681a884",
+      "place": "",
+      "at": "2026-11-15T12:20:35Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "طرقه"
+    },
+    "p424-78f1809956": {
+      "kind": "diff",
+      "page": 424,
+      "verdict": "fix",
+      "fp": "diff|من|عن",
+      "before": "نخرج بأن المعروف ",
+      "core": "من",
+      "after": " الغفران ، إلى",
+      "pos": 452,
+      "base": "f050dae5e677",
+      "place": "",
+      "at": "2026-11-15T12:22:36Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "عن"
+    },
+    "p424-6bc71fc781": {
+      "kind": "diff",
+      "page": 424,
+      "verdict": "fix",
+      "fp": "diff|مزذكه|مزدكه",
+      "before": "وقد احتوت على ",
+      "core": "مزذكة",
+      "after": " واستخفاف ، وفيها",
+      "pos": 595,
+      "base": "f050dae5e677",
+      "place": "",
+      "at": "2026-11-15T12:22:36Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "مزدكة"
+    },
+    "p424-4ded8fa396": {
+      "kind": "diff",
+      "page": 424,
+      "verdict": "fix",
+      "fp": "diff|هجاء|هجاءه",
+      "before": "فيها أنه ذكر ",
+      "core": "هجاء",
+      "after": " لأبي القاسم ابن",
+      "pos": 809,
+      "base": "f050dae5e677",
+      "place": "",
+      "at": "2026-11-15T12:22:36Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "هجاءه"
+    },
+    "p424-3d329fd382": {
+      "kind": "diff",
+      "page": 424,
+      "verdict": "fix",
+      "fp": "diff|لداني|لدانتي",
+      "before": "مقترناً بالكوميديا الإلهية ",
+      "core": "لداني",
+      "after": " ، على سبيل",
+      "pos": 934,
+      "base": "f050dae5e677",
+      "place": "",
+      "at": "2026-11-15T12:22:36Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "لدانتي"
+    },
+    "p424-4cd4fde378": {
+      "kind": "diff",
+      "page": 424,
+      "verdict": "fix",
+      "fp": "diff|المنهيه|المنتهيه",
+      "before": "على سبيل المقارنة ",
+      "core": "المنهية",
+      "after": " إلى أن دانتي",
+      "pos": 1003,
+      "base": "f050dae5e677",
+      "place": "",
+      "at": "2026-11-15T12:22:36Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "المنتهية"
+    },
+    "p424-be3865335a": {
+      "kind": "diff",
+      "page": 424,
+      "verdict": "fix",
+      "fp": "diff|المعجم|الهجاء",
+      "before": "عن بيتي النمر ، وصنيع أبي العلاء في تغيير قافيتهما متتبعاً حروف ",
+      "core": "المعجم",
+      "after": " . ص ١٥٤ من الطبعة 3 ذخائر . ويلا - حفظ أن",
+      "pos": 1200,
+      "base": "f050dae5e677",
+      "place": "",
+      "at": "2026-11-15T12:22:36Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "الهجاء"
+    },
+    "p424-57e84fb5d2": {
+      "kind": "diff",
+      "page": 424,
+      "verdict": "fix",
+      "fp": "diff|ويلا حفظ|ويلاحظ",
+      "before": "قافيتهما متتبعاً حروف المعجم . ص ١٥٤ من الطبعة 3 ذخائر . ",
+      "core": "ويلا - حفظ",
+      "after": " أن نسختنا لا تخلو من حرف الطاء ، كما ذكر الصفدى «",
+      "pos": 1242,
+      "base": "f050dae5e677",
+      "place": "",
+      "at": "2026-11-15T12:22:36Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "ويلاحظ"
+    },
+    "p424-3777a7c079": {
+      "kind": "diff",
+      "page": 424,
+      "verdict": "fix",
+      "fp": "diff|للمخطوطات|للمخطوط",
+      "before": "١٩٠٠ ، وصفا ",
+      "core": "للمخطوطات",
+      "after": " ، وترجمة ملخصة",
+      "pos": 1516,
+      "base": "f050dae5e677",
+      "place": "",
+      "at": "2026-11-15T12:22:36Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "للمخطوط"
+    },
+    "p424-ffcddc32ad": {
+      "kind": "diff",
+      "page": 424,
+      "verdict": "fix",
+      "fp": "diff|بلاسيبوس M Asin Placios|بلاسيوس M Asin Palacios",
+      "before": "« ميجويل أسين ",
+      "core": "بلاسيبوس : M. Asin Placios",
+      "after": " » في دراسته",
+      "pos": 1765,
+      "base": "f050dae5e677",
+      "place": "",
+      "at": "2026-11-15T12:22:36Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "بلاسيوس : M. Asin Placios"
+    },
+    "p424-f0cf1bbd68": {
+      "kind": "diff",
+      "page": 424,
+      "verdict": "keep",
+      "fp": "diff|سندرلاند|سنذرلاند",
+      "before": "Comedia . وترجمه ",
+      "core": "سندرلاند",
+      "after": " H. Sunderland إلى",
+      "pos": 1953,
+      "base": "f050dae5e677",
+      "place": "",
+      "at": "2026-11-15T12:22:36Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ]
+    },
+    "p424-ae8f9cbc90": {
+      "kind": "diff",
+      "page": 424,
+      "verdict": "fix",
+      "fp": "diff|بلاسيبوس|بلاسيوس",
+      "before": "الكتاب ، قرر ",
+      "core": "بلاسيبوس",
+      "after": " ، بعد دراسة",
+      "pos": 2109,
+      "base": "f050dae5e677",
+      "place": "",
+      "at": "2026-11-15T12:22:36Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "بلاسيوس"
+    },
+    "p424-6d4a92119d": {
+      "kind": "diff",
+      "page": 424,
+      "verdict": "fix",
+      "fp": "diff|كانت|كونت",
+      "before": "الغفران ، قد ",
+      "core": "كانت",
+      "after": " أسس الكوميديا الإلهية",
+      "pos": 2210,
+      "base": "f050dae5e677",
+      "place": "",
+      "at": "2026-11-15T12:22:36Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "كونت"
+    },
+    "p424-cbede1a8d1": {
+      "kind": "diff",
+      "page": 424,
+      "verdict": "fix",
+      "fp": "diff|بلاسيبوس|بلاسيوس",
+      "before": ". وقد ترجم ",
+      "core": "بلاسيبوس",
+      "after": " فصولا من الغفران",
+      "pos": 2252,
+      "base": "f050dae5e677",
+      "place": "",
+      "at": "2026-11-15T12:22:36Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "بلاسيوس"
+    },
+    "p424-42111df27e": {
+      "kind": "diff",
+      "page": 424,
+      "verdict": "fix",
+      "fp": "diff|مكانتها|مكانها",
+      "before": "ذلك الحين ، ",
+      "core": "مكانتها",
+      "after": " في دراسات المستشرقين",
+      "pos": 2395,
+      "base": "f050dae5e677",
+      "place": "",
+      "at": "2026-11-15T12:22:36Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "مكانها"
+    },
+    "p424-154dd8e187": {
+      "kind": "diff",
+      "page": 424,
+      "verdict": "fix",
+      "fp": "diff|بلاسيبوس|بلاسيوس",
+      "before": "تأييداً لنظرية أسين ",
+      "core": "بلاسيبوس",
+      "after": " أو معارضة لها",
+      "pos": 2476,
+      "base": "f050dae5e677",
+      "place": "",
+      "at": "2026-11-15T12:22:36Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "بلاسيوس"
+    },
+    "p424-d8e5bbc359": {
+      "kind": "diff",
+      "page": 424,
+      "verdict": "fix",
+      "fp": "diff|بالواتيكان|بالفاتيكان",
+      "before": "نشرت مكتبة الرسل ",
+      "core": "بالواتيكان",
+      "after": " في روما ،",
+      "pos": 2534,
+      "base": "f050dae5e677",
+      "place": "",
+      "at": "2026-11-15T12:22:36Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "بالفاتيكان"
+    },
+    "p424-463d3f2294": {
+      "kind": "diff",
+      "page": 424,
+      "verdict": "fix",
+      "fp": "diff|تشيرولي|تشيروللي",
+      "before": "للمستشرق الإيطالي « ",
+      "core": "تشيرولى",
+      "after": " » عنوانه :",
+      "pos": 2579,
+      "base": "f050dae5e677",
+      "place": "",
+      "at": "2026-11-15T12:22:36Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "تشيروللي"
+    },
+    "p440-4961ce64bd": {
+      "kind": "diff",
+      "page": 440,
+      "verdict": "keep",
+      "fp": "diff|Ed Le Roy|",
+      "before": "",
+      "core": "Ed. Le Roy",
+      "after": " . وفي سنة",
+      "pos": 0,
+      "base": "a1169f8bc260",
+      "place": "",
+      "at": "2026-11-15T12:23:36Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ]
+    },
+    "p440-4a3622bf91": {
+      "kind": "diff",
+      "page": 440,
+      "verdict": "keep",
+      "fp": "diff||Ed Le Roy",
+      "before": "۱۹۲۸ حصل برجسون",
+      "core": " ",
+      "after": "على جائزة نوبل",
+      "pos": 21,
+      "base": "a1169f8bc260",
+      "place": "",
+      "at": "2026-11-15T12:23:36Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ]
+    },
+    "p440-9c5f334549": {
+      "kind": "diff",
+      "page": 440,
+      "verdict": "fix",
+      "fp": "diff|كتيب|كتب",
+      "before": "أن المذهب قد ",
+      "core": "كُتيَبَ",
+      "after": " عليه أن يظل",
+      "pos": 168,
+      "base": "a1169f8bc260",
+      "place": "",
+      "at": "2026-11-15T12:23:36Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "كُتِبَ"
+    },
+    "p440-c657810085": {
+      "kind": "diff",
+      "page": 440,
+      "verdict": "keep",
+      "fp": "diff|به|",
+      "before": "بكتابه الضخم الذي ",
+      "core": "به",
+      "after": " اكتمل مذهبه ،",
+      "pos": 321,
+      "base": "a1169f8bc260",
+      "place": "",
+      "at": "2026-11-15T12:23:36Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ]
+    },
+    "p440-226eb70f8b": {
+      "kind": "diff",
+      "page": 440,
+      "verdict": "fix",
+      "fp": "diff|ليتبنا|ليتبا",
+      "before": "لم يكن أحد ",
+      "core": "ليتبنأ",
+      "after": " به أو يتوقعه",
+      "pos": 560,
+      "base": "a1169f8bc260",
+      "place": "",
+      "at": "2026-11-15T12:23:36Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "ليتبأ"
+    },
+    "p440-4f3fef4a9d": {
+      "kind": "diff",
+      "page": 440,
+      "verdict": "fix",
+      "fp": "diff|يتققبل|يتقبل",
+      "before": "أن الفيلسوف لم ",
+      "core": "يتققبل",
+      "after": " بالفعل هذا الطقس",
+      "pos": 740,
+      "base": "a1169f8bc260",
+      "place": "",
+      "at": "2026-11-15T12:23:36Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "يتقبل"
+    },
+    "p440-eda280b662": {
+      "kind": "diff",
+      "page": 440,
+      "verdict": "fix",
+      "fp": "diff|الا هكذا في الاصل او|",
+      "before": "في ظل الاحتلال ",
+      "core": "الأドイツ (هكذا في الأصل أو",
+      "after": " الألماني) ، ولم",
+      "pos": 854,
+      "base": "a1169f8bc260",
+      "place": "",
+      "at": "2026-11-15T12:23:36Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": ""
+    },
+    "p440-d581eee302": {
+      "kind": "diff",
+      "page": 440,
+      "verdict": "fix",
+      "fp": "diff|crits|Ecrits",
+      "before": "كتابات وأقاويل » ",
+      "core": "Écrits",
+      "after": " et Paroles لبرجسون",
+      "pos": 1694,
+      "base": "a1169f8bc260",
+      "place": "",
+      "at": "2026-11-15T12:23:36Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "Ecrits"
+    },
+    "p440-02807dc6e2": {
+      "kind": "diff",
+      "page": 440,
+      "verdict": "fix",
+      "fp": "diff|اربعه|اربعمايه",
+      "before": "فيما يزيد عن ",
+      "core": "أربعة",
+      "after": " صفحة ، قسمها",
+      "pos": 1984,
+      "base": "a1169f8bc260",
+      "place": "",
+      "at": "2026-11-15T12:23:36Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "أربعمائة"
+    },
+    "p440-e9f9dca6c2": {
+      "kind": "diff",
+      "page": 440,
+      "verdict": "fix",
+      "fp": "diff|التطويريه|التطوريه",
+      "before": "الدلالة العميقة للحركة ",
+      "core": "التطويرية",
+      "after": " ، من أجل",
+      "pos": 2183,
+      "base": "a1169f8bc260",
+      "place": "",
+      "at": "2026-11-15T12:23:36Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "التطورية"
+    },
+    "p440-aed00cf47d": {
+      "kind": "diff",
+      "page": 440,
+      "verdict": "keep",
+      "fp": "diff|للانطباق|للانطياق",
+      "before": "الخاص الذى يصلح ",
+      "core": "للأنطباق",
+      "after": " على الهندسة ،",
+      "pos": 2346,
+      "base": "a1169f8bc260",
+      "place": "",
+      "at": "2026-11-15T12:23:36Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ]
+    },
+    "p440-4881b355b0": {
+      "kind": "diff",
+      "page": 440,
+      "verdict": "fix",
+      "fp": "diff|ومروعتها|ومرونتها",
+      "before": "بصيرورتها المستمرة ، ",
+      "core": "ومروعتها",
+      "after": " الدائمة ، وديمومتها",
+      "pos": 2741,
+      "base": "a1169f8bc260",
+      "place": "",
+      "at": "2026-11-15T12:23:36Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "ومرونتها"
+    },
+    "p440-a9efd8736f": {
+      "kind": "diff",
+      "page": 440,
+      "verdict": "fix",
+      "fp": "diff|التطويريه|التطوريه",
+      "before": "برجسون على المذاهب ",
+      "core": "التطويرية",
+      "after": " المعروفة سوى مجرد",
+      "pos": 2810,
+      "base": "a1169f8bc260",
+      "place": "",
+      "at": "2026-11-15T12:23:36Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "التطورية"
+    },
+    "p481-1288fbb037": {
+      "kind": "diff",
+      "page": 481,
+      "verdict": "fix",
+      "fp": "diff|الفه|عليه",
+      "before": "من البحر الذي ",
+      "core": "ألفه",
+      "after": " مثنوى ليلى والمجنون،",
+      "pos": 64,
+      "base": "891c60f97207",
+      "place": "",
+      "at": "2026-11-15T12:24:37Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "عليه"
+    },
+    "p481-5d5392f475": {
+      "kind": "diff",
+      "page": 481,
+      "verdict": "keep",
+      "fp": "diff|الفي1|الفي 1",
+      "before": "يعرف باسم «تاريخ ",
+      "core": "ألفي»[^1].",
+      "after": "\n\n# فن النقش",
+      "pos": 356,
+      "base": "891c60f97207",
+      "place": "",
+      "at": "2026-11-15T12:24:37Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ]
+    },
+    "p481-ddd3f0cc6c": {
+      "kind": "diff",
+      "page": 481,
+      "verdict": "fix",
+      "fp": "diff|رسمها بالتصوير|رسمابالتصوير",
+      "before": "تعرف محاكاة الأشياء ",
+      "core": "رسمها بالتصوير،",
+      "after": " وقد أظهر البادشاه",
+      "pos": 397,
+      "base": "891c60f97207",
+      "place": "",
+      "at": "2026-11-15T12:24:37Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "رسما بالتصوير،"
+    },
+    "p481-8284890caf": {
+      "kind": "diff",
+      "page": 481,
+      "verdict": "keep",
+      "fp": "diff|وذاع|اذاع",
+      "before": "الفن في عهده ",
+      "core": "وذاع",
+      "after": " واشتهر. وكانت أعمال",
+      "pos": 557,
+      "base": "891c60f97207",
+      "place": "",
+      "at": "2026-11-15T12:24:37Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ]
+    },
+    "p481-2295de7488": {
+      "kind": "diff",
+      "page": 481,
+      "verdict": "keep",
+      "fp": "diff|فيكافيء المبرزين|فيكافي والمبرزين",
+      "before": "مرة كل أسبوع ",
+      "core": "فيكافىء المبرزين",
+      "after": " منهم أو يزيد",
+      "pos": 646,
+      "base": "891c60f97207",
+      "place": "",
+      "at": "2026-11-15T12:24:37Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ]
+    },
+    "p481-2f1755eae0": {
+      "kind": "diff",
+      "page": 481,
+      "verdict": "keep",
+      "fp": "diff|النقوش|النقشوره",
+      "before": "ملحوظاً حتى بلغت ",
+      "core": "النقوش",
+      "after": " درجة بالغة من",
+      "pos": 827,
+      "base": "891c60f97207",
+      "place": "",
+      "at": "2026-11-15T12:24:37Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ]
+    },
+    "p481-07e70fffa5": {
+      "kind": "diff",
+      "page": 481,
+      "verdict": "keep",
+      "fp": "diff|لتري لوحاتهم الفنيه|تري لوحاتهم",
+      "before": "النقاشين المبدعين حتى ",
+      "core": "لترى لوحاتهم الفنية",
+      "after": " تليق بأن تقف",
+      "pos": 899,
+      "base": "891c60f97207",
+      "place": "",
+      "at": "2026-11-15T12:24:37Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ]
+    },
+    "p481-d5a5ec77e7": {
+      "kind": "diff",
+      "page": 481,
+      "verdict": "keep",
+      "fp": "diff|فارسي|فارس",
+      "before": "[^2]: هو مصور ",
+      "core": "فارسي",
+      "after": " ذائع الصيت عاش",
+      "pos": 2658,
+      "base": "891c60f97207",
+      "place": "",
+      "at": "2026-11-15T12:24:37Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ]
+    },
+    "p481-42cbf322af": {
+      "kind": "diff",
+      "page": 481,
+      "verdict": "fix",
+      "fp": "diff|الاوروبيين|الاوربيين",
+      "before": "الهند يجهلون لوحات ",
+      "core": "الأوروبيين",
+      "after": " إذ كان البرتغاليون",
+      "pos": 2769,
+      "base": "891c60f97207",
+      "place": "",
+      "at": "2026-11-15T12:24:37Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "الأوربيين"
+    },
+    "p481-988ecb2de3": {
+      "kind": "diff",
+      "page": 481,
+      "verdict": "keep",
+      "fp": "diff||3 هكذا في الاصل ولعلها يستلهم",
+      "before": "Monghul. Oxford 1921.",
+      "core": "",
+      "after": "",
+      "pos": 2889,
+      "base": "891c60f97207",
+      "place": "",
+      "at": "2026-11-15T12:24:37Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ]
+    },
+    "p503-cdf1cc0c56": {
+      "kind": "diff",
+      "page": 503,
+      "verdict": "keep",
+      "fp": "diff|كالاسد|كالاسر",
+      "before": ": زيد شديد ",
+      "core": "كالأسد",
+      "after": " فهذا القول الصواب",
+      "pos": 146,
+      "base": "e063cd08e473",
+      "place": "",
+      "at": "2026-11-15T12:27:39Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ]
+    },
+    "p503-a4840b825b": {
+      "kind": "diff",
+      "page": 503,
+      "verdict": "keep",
+      "fp": "diff|كالاسد|كالاسر",
+      "before": "زيد في شدته ",
+      "core": "كالأسد",
+      "after": " على الحقيقة على",
+      "pos": 226,
+      "base": "e063cd08e473",
+      "place": "",
+      "at": "2026-11-15T12:27:39Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ]
+    },
+    "p503-20f817903c": {
+      "kind": "diff",
+      "page": 503,
+      "verdict": "fix",
+      "fp": "diff|مض|محض",
+      "before": "إنساناً قال ! ",
+      "core": "مض",
+      "after": " الشعراء : زعمت",
+      "pos": 275,
+      "base": "e063cd08e473",
+      "place": "",
+      "at": "2026-11-15T12:27:39Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "لبعض"
+    },
+    "p503-cd3ec49d20": {
+      "kind": "diff",
+      "page": 503,
+      "verdict": "keep",
+      "fp": "diff|مجزاه|مجراه",
+      "before": "فأنا قد رأينا ",
+      "core": "مجزأة",
+      "after": " بن ثور فتح",
+      "pos": 414,
+      "base": "e063cd08e473",
+      "place": "",
+      "at": "2026-11-15T12:27:39Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ]
+    },
+    "p503-5d0940b3fc": {
+      "kind": "diff",
+      "page": 503,
+      "verdict": "keep",
+      "fp": "diff|شابه|مشابه",
+      "before": "جملة ، وان ",
+      "core": "شابه",
+      "after": " من وجه واحد",
+      "pos": 499,
+      "base": "e063cd08e473",
+      "place": "",
+      "at": "2026-11-15T12:27:39Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ]
+    },
+    "p503-b2e5526b3c": {
+      "kind": "diff",
+      "page": 503,
+      "verdict": "fix",
+      "fp": "diff|اوطت ساحها|اوطيت ساحتها",
+      "before": "في البانياس إذا ",
+      "core": "أوطت ساحها",
+      "after": " …\n| خوف",
+      "pos": 925,
+      "base": "e063cd08e473",
+      "place": "",
+      "at": "2026-11-15T12:27:39Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "أوطئت ساحتها"
+    },
+    "p503-a49f11e314": {
+      "kind": "diff",
+      "page": 503,
+      "verdict": "keep",
+      "fp": "diff|محققا|محقق",
+      "before": "عليه\n\n( قال ",
+      "core": "محققاً",
+      "after": " الكتاب في هامشه",
+      "pos": 1189,
+      "base": "e063cd08e473",
+      "place": "",
+      "at": "2026-11-15T12:27:39Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ]
+    },
+    "p503-6d89f4fcd0": {
+      "kind": "diff",
+      "page": 503,
+      "verdict": "keep",
+      "fp": "diff|القافيه|الققافيه",
+      "before": "سخطاً عليه\n\nونرى ",
+      "core": "القافية",
+      "after": " مكررة بكلمة «",
+      "pos": 1282,
+      "base": "e063cd08e473",
+      "place": "",
+      "at": "2026-11-15T12:27:39Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ]
+    },
+    "p503-9b78dbefd0": {
+      "kind": "diff",
+      "page": 503,
+      "verdict": "keep",
+      "fp": "diff|القافيه|الققافيه",
+      "before": "هذا الخطأ ويكرر ",
+      "core": "القافية",
+      "after": " بنصها في بيتين",
+      "pos": 1364,
+      "base": "e063cd08e473",
+      "place": "",
+      "at": "2026-11-15T12:27:39Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ]
+    },
+    "p503-3ba63216e3": {
+      "kind": "diff",
+      "page": 503,
+      "verdict": "keep",
+      "fp": "diff|ادواء|ادواره",
+      "before": "وهما من أعظم ",
+      "core": "أدواء",
+      "after": " الكلام ، وفيهما",
+      "pos": 1650,
+      "base": "e063cd08e473",
+      "place": "",
+      "at": "2026-11-15T12:27:39Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ]
+    },
+    "p503-25ea5d8764": {
+      "kind": "diff",
+      "page": 503,
+      "verdict": "fix",
+      "fp": "diff|يحيي|يحي",
+      "before": "يقول جعفر بن ",
+      "core": "يحيى",
+      "after": " : إن قدرتم",
+      "pos": 1735,
+      "base": "e063cd08e473",
+      "place": "",
+      "at": "2026-11-15T12:27:39Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "يحي"
+    },
+    "p503-b1295cbca8": {
+      "kind": "diff",
+      "page": 503,
+      "verdict": "fix",
+      "fp": "diff|الجهد|الجد",
+      "before": ": الزيادة في ",
+      "core": "الجهد",
+      "after": " نقصان . وقال",
+      "pos": 1809,
+      "base": "e063cd08e473",
+      "place": "",
+      "at": "2026-11-15T12:27:39Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "الجد"
+    },
+    "p503-4fa2a1279a": {
+      "kind": "diff",
+      "page": 503,
+      "verdict": "keep",
+      "fp": "diff|الامين|الامن",
+      "before": ". وقال محمد ",
+      "core": "الأمين",
+      "after": " عليكم بالإيجاز فأن",
+      "pos": 1834,
+      "base": "e063cd08e473",
+      "place": "",
+      "at": "2026-11-15T12:27:39Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ]
+    },
+    "p503-52e0ebffb5": {
+      "kind": "diff",
+      "page": 503,
+      "verdict": "fix",
+      "fp": "diff|استهاما|استهباما",
+      "before": "له إفهاماً وللإطالة ",
+      "core": "استهاماً",
+      "after": " وقيل لبعضهم ما",
+      "pos": 1872,
+      "base": "e063cd08e473",
+      "place": "",
+      "at": "2026-11-15T12:27:39Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "استبهاماً"
+    },
+    "p503-ec792c2af3": {
+      "kind": "diff",
+      "page": 503,
+      "verdict": "keep",
+      "fp": "diff|يمر|مر",
+      "before": "معنى ، فبينا ",
+      "core": "يمر",
+      "after": " فيه يأخذ في",
+      "pos": 2035,
+      "base": "e063cd08e473",
+      "place": "",
+      "at": "2026-11-15T12:27:39Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ]
+    },
+    "p503-c442682cba": {
+      "kind": "diff",
+      "page": 503,
+      "verdict": "keep",
+      "fp": "diff|احياها|احيها",
+      "before": "« إن الذي ",
+      "core": "أحياها",
+      "after": " لمحي الموتى »",
+      "pos": 2254,
+      "base": "e063cd08e473",
+      "place": "",
+      "at": "2026-11-15T12:27:39Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ]
+    },
+    "p503-e88208ab94": {
+      "kind": "diff",
+      "page": 503,
+      "verdict": "keep",
+      "fp": "diff||1 روايه الديوان في هامش الاصل",
+      "before": "عن قدرته على",
+      "core": "",
+      "after": "",
+      "pos": 2291,
+      "base": "e063cd08e473",
+      "place": "",
+      "at": "2026-11-15T12:27:39Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ]
+    }
+  }
+}
