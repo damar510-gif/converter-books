@@ -395,25 +395,26 @@
  "review_conflicts_new": 0,
  "review_seen": "",
  "free_left": true,
- "free_done": 0,
+ "free_done": 1,
  "stages": {
-  "unread": 194,
-  "read1": 185
+  "unread": 65,
+  "read1": 313,
+  "done": 1
  },
  "needs": {
   "read1": {
-   "gemma-4-31b-it": 379
+   "gemma-4-31b-it": 378
   },
   "read2": {
-   "gemini-3.1-flash-lite,gemini-3.5-flash-lite": 194
+   "gemini-3.1-flash-lite,gemini-3.5-flash-lite": 65
   },
   "settle": {}
  },
  "book": "تهذيب طريق الهجرتين وباب السعادتين - ابن القيم",
  "epub": "تهذيب طريق الهجرتين وباب السعادتين - ابن القيم.epub",
- "updated_at": "2026-11-15T16:40:00Z",
+ "updated_at": "2026-11-15T17:27:41Z",
  "quota_day": "2026-11-15",
  "waiting_for": "helper",
- "run_id": 43732418969,
- "run_number": 488
+ "run_id": 43737097756,
+ "run_number": 489
 }
