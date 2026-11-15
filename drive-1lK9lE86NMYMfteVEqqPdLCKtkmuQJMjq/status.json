@@ -1,40 +1,34 @@
 {
- "state": "done",
- "pages_total": 336,
- "pages_done": 336,
- "pages_helper": [],
- "pages_unsure": [
-  33,
-  43,
-  219,
-  336
- ],
- "pages_missing": [],
- "pages_waiting": [],
- "pages_retry": [],
- "pages_human": [],
- "helper_checked": 0,
- "review_items": 21,
- "review_applied": 0,
- "review_kept": 0,
- "review_conflicts_new": 0,
- "review_seen": "",
- "free_left": false,
- "free_done": 1,
- "stages": {
-  "done": 332,
-  "unsure": 4
- },
- "needs": {
-  "read1": {
-   "gemma-4-31b-it": 4
+  "state": "done",
+  "pages_total": 336,
+  "pages_done": 336,
+  "pages_helper": [],
+  "pages_unsure": [
+    336
+  ],
+  "pages_missing": [],
+  "pages_waiting": [],
+  "pages_retry": [],
+  "pages_human": [
+    33,
+    43,
+    219,
+    336
+  ],
+  "helper_checked": 0,
+  "review_items": 1,
+  "review_applied": 10,
+  "review_kept": 11,
+  "review_conflicts_new": 0,
+  "review_seen": "2026-11-15T11:35:56.144Z",
+  "stages": {
+    "done": 336
   },
-  "read2": {},
-  "settle": {}
- },
- "book": "خواطر باسكال",
- "epub": "خواطر باسكال.epub",
- "updated_at": "2026-11-15T08:11:27Z",
- "run_id": 43692724557,
- "run_number": 477
+  "requests": {},
+  "models_out": [],
+  "book": "خواطر باسكال",
+  "epub": "خواطر باسكال.epub",
+  "updated_at": "2026-11-15T11:37:24Z",
+  "run_id": 43709728055,
+  "run_number": 479
 }
