@@ -1,28 +1,26 @@
 {
  "state": "paused",
  "pages_total": 260,
- "pages_done": 57,
- "pages_helper": [],
- "pages_unsure": [
-  24,
-  26,
-  33,
-  51
- ],
- "pages_missing": [],
- "pages_waiting": [
-  60,
-  61,
+ "pages_done": 62,
+ "pages_helper": [
   62,
   63,
   64,
   65,
-  66,
   67,
   68,
-  69,
   70,
-  71,
+  71
+ ],
+ "pages_unsure": [
+  24,
+  26,
+  33,
+  51,
+  53
+ ],
+ "pages_missing": [],
+ "pages_waiting": [
   72,
   73,
   74,
@@ -213,13 +211,12 @@
   260
  ],
  "pages_retry": [
-  53,
-  55,
-  59
+  66,
+  69
  ],
  "pages_human": [],
  "helper_checked": 0,
- "review_items": 10,
+ "review_items": 15,
  "review_applied": 0,
  "review_kept": 0,
  "review_conflicts_new": 0,
@@ -227,22 +224,25 @@
  "free_left": true,
  "free_done": 0,
  "stages": {
-  "done": 53,
-  "unsure": 4,
-  "read1": 203
+  "done": 57,
+  "unsure": 5,
+  "helper": 8,
+  "read1": 190
  },
  "needs": {
   "read1": {
-   "gemma-4-31b-it": 203
+   "gemma-4-31b-it": 190
   },
   "read2": {},
-  "settle": {}
+  "settle": {
+   "gemini-3.5-flash,gemini-3.6-flash,gemini-3.7-flash,gemini-3.8-flash": 8
+  }
  },
  "book": "تهذيب حادي الأرواح إلى بلاد الأفراح - ابن القيم",
  "epub": "تهذيب حادي الأرواح إلى بلاد الأفراح - ابن القيم.epub",
- "updated_at": "2026-11-15T18:58:43Z",
+ "updated_at": "2026-11-15T19:45:09Z",
  "quota_day": "2026-11-15",
  "waiting_for": "helper",
- "run_id": 43745842580,
- "run_number": 491
+ "run_id": 43750251629,
+ "run_number": 492
 }
