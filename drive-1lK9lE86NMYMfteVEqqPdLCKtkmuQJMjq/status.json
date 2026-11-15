@@ -1,7 +1,7 @@
 {
- "state": "paused",
+ "state": "done",
  "pages_total": 336,
- "pages_done": 335,
+ "pages_done": 336,
  "pages_helper": [],
  "pages_unsure": [
   33,
@@ -10,9 +10,7 @@
   336
  ],
  "pages_missing": [],
- "pages_waiting": [
-  333
- ],
+ "pages_waiting": [],
  "pages_retry": [],
  "pages_human": [],
  "helper_checked": 0,
@@ -22,25 +20,21 @@
  "review_conflicts_new": 0,
  "review_seen": "",
  "free_left": false,
- "free_done": 0,
+ "free_done": 1,
  "stages": {
-  "done": 331,
-  "unsure": 4,
-  "read2": 1
+  "done": 332,
+  "unsure": 4
  },
  "needs": {
   "read1": {
    "gemma-4-31b-it": 4
   },
   "read2": {},
-  "settle": {
-   "gemini-3.5-flash,gemini-3.6-flash,gemini-3.7-flash,gemini-3.8-flash": 1
-  }
+  "settle": {}
  },
  "book": "خواطر باسكال",
  "epub": "خواطر باسكال.epub",
- "updated_at": "2026-11-14T22:39:08Z",
- "quota_day": "2026-11-14",
- "run_id": 43648736587,
- "run_number": 476
+ "updated_at": "2026-11-15T08:11:27Z",
+ "run_id": 43692724557,
+ "run_number": 477
 }

@@ -3978,10 +3978,10 @@ POUR LA TRADUCTION DES CHEFS-D'ŒUVRE
 BEYROUTH []{#pg-333 .pagebreak}TOUS DROITS RÉSERVÉS
 POUR TOUS PAYS
 
-Copyright by
-Commission Libanaise
-pour la Traduction des Chefs-d' Œuvre
-B.P. 1145, Beyrouth (Liban)
+*Copyright by*
+*Commission Libanaise*
+*pour la Traduction des Chefs-d'Œuvre*
+*B.P. 1145, Beyrouth (Liban)*
 
 ## PENSÉES
 DE
