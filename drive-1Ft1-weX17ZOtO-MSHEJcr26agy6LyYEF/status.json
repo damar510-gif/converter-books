@@ -6,7 +6,6 @@
  "pages_unsure": [],
  "pages_missing": [],
  "pages_waiting": [
-  1,
   2,
   3,
   4,
@@ -275,7 +274,9 @@
   268,
   269
  ],
- "pages_retry": [],
+ "pages_retry": [
+  1
+ ],
  "pages_human": [],
  "helper_checked": 0,
  "review_items": 0,
@@ -298,8 +299,8 @@
  },
  "book": "تهذيب روضة المحبين ونزهة المشتاقين - ابن القيم",
  "epub": "تهذيب روضة المحبين ونزهة المشتاقين - ابن القيم.epub",
- "updated_at": "2026-11-16T03:56:51Z",
+ "updated_at": "2026-11-16T04:43:40Z",
  "quota_day": "2026-11-15",
- "run_id": 43796920706,
- "run_number": 502
+ "run_id": 43801775615,
+ "run_number": 503
 }
