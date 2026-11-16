@@ -103,14 +103,15 @@
     "settle": {}
   },
   "requests": {
-    "gemma-4-31b-it": 30
+    "gemma-4-31b-it": 22,
+    "gemini-3.6-flash": 17,
+    "gemini-3.5-flash": 16,
+    "gemini-3.8-flash": 12,
+    "gemini-3.7-flash": 13
   },
   "models_out": [
     "gemini-3.5-flash",
-    "gemini-3.5-flash-lite",
-    "gemini-3.6-flash",
-    "gemini-3.7-flash",
-    "gemini-3.8-flash"
+    "gemini-3.6-flash"
   ],
   "free_models": [
     "gemini-3.5-flash-lite",
@@ -161,8 +162,8 @@
   },
   "book": "تراث الانسانية 8_k2opt",
   "epub": "تراث الانسانية 8_k2opt.epub",
-  "updated_at": "2026-11-16T07:55:04Z",
-  "quota_day": "2026-11-15",
-  "run_id": 43822298472,
-  "run_number": 507
+  "updated_at": "2026-11-16T08:43:39Z",
+  "quota_day": "2026-11-16",
+  "run_id": 43828250042,
+  "run_number": 508
 }
