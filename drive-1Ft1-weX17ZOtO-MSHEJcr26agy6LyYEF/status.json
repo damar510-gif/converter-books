@@ -1,17 +1,14 @@
 {
  "state": "paused",
  "pages_total": 269,
- "pages_done": 1,
- "pages_helper": [],
+ "pages_done": 3,
+ "pages_helper": [
+  3,
+  4
+ ],
  "pages_unsure": [],
  "pages_missing": [],
  "pages_waiting": [
-  2,
-  3,
-  4,
-  5,
-  6,
-  7,
   8,
   9,
   10,
@@ -275,7 +272,9 @@
   269
  ],
  "pages_retry": [
-  1
+  5,
+  6,
+  7
  ],
  "pages_human": [],
  "helper_checked": 0,
@@ -284,23 +283,27 @@
  "review_kept": 0,
  "review_conflicts_new": 0,
  "review_seen": "",
- "free_left": false,
- "free_done": 0,
+ "free_left": true,
+ "free_done": 2,
  "stages": {
-  "read1": 266,
-  "done": 3
+  "done": 5,
+  "helper": 2,
+  "read1": 262
  },
  "needs": {
   "read1": {
-   "gemma-4-31b-it": 266
+   "gemma-4-31b-it": 262
   },
   "read2": {},
-  "settle": {}
+  "settle": {
+   "gemini-3.5-flash,gemini-3.6-flash,gemini-3.7-flash,gemini-3.8-flash": 2
+  }
  },
  "book": "تهذيب روضة المحبين ونزهة المشتاقين - ابن القيم",
  "epub": "تهذيب روضة المحبين ونزهة المشتاقين - ابن القيم.epub",
- "updated_at": "2026-11-16T04:43:40Z",
+ "updated_at": "2026-11-16T05:36:25Z",
  "quota_day": "2026-11-15",
- "run_id": 43801775615,
- "run_number": 503
+ "waiting_for": "helper",
+ "run_id": 43806797588,
+ "run_number": 504
 }
