@@ -76,14 +76,12 @@
   85,
   86,
   87,
-  88
+  88,
+  90
  ],
  "pages_unsure": [],
  "pages_missing": [],
  "pages_waiting": [
-  91,
-  92,
-  93,
   94,
   95,
   96,
@@ -264,7 +262,9 @@
   81,
   83,
   89,
-  90
+  91,
+  92,
+  93
  ],
  "pages_human": [],
  "helper_checked": 0,
@@ -277,23 +277,23 @@
  "free_done": 0,
  "stages": {
   "done": 15,
-  "helper": 74,
-  "read1": 180
+  "helper": 75,
+  "read1": 179
  },
  "needs": {
   "read1": {
-   "gemma-4-31b-it": 180
+   "gemma-4-31b-it": 179
   },
   "read2": {},
   "settle": {
-   "gemini-3.5-flash,gemini-3.6-flash,gemini-3.7-flash,gemini-3.8-flash": 74
+   "gemini-3.5-flash,gemini-3.6-flash,gemini-3.7-flash,gemini-3.8-flash": 75
   }
  },
  "book": "تهذيب روضة المحبين ونزهة المشتاقين - ابن القيم",
  "epub": "تهذيب روضة المحبين ونزهة المشتاقين - ابن القيم.epub",
- "updated_at": "2026-11-16T12:55:11Z",
+ "updated_at": "2026-11-16T13:44:46Z",
  "quota_day": "2026-11-16",
  "waiting_for": "helper",
- "run_id": 43864642995,
- "run_number": 513
+ "run_id": 43872189540,
+ "run_number": 514
 }
