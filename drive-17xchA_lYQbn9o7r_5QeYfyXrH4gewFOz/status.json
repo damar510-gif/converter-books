@@ -2,7 +2,10 @@
  "state": "paused",
  "pages_total": 379,
  "pages_done": 5,
- "pages_helper": [
+ "pages_helper": [],
+ "pages_unsure": [],
+ "pages_missing": [],
+ "pages_waiting": [
   1,
   2,
   3,
@@ -49,6 +52,7 @@
   49,
   50,
   51,
+  52,
   53,
   54,
   56,
@@ -56,14 +60,9 @@
   59,
   60,
   61,
-  62
- ],
- "pages_unsure": [],
- "pages_missing": [],
- "pages_waiting": [
+  62,
   63,
   64,
-  65,
   66,
   67,
   68,
@@ -380,9 +379,9 @@
   379
  ],
  "pages_retry": [
-  52,
   55,
-  58
+  58,
+  65
  ],
  "pages_human": [],
  "helper_checked": 0,
@@ -391,27 +390,25 @@
  "review_kept": 0,
  "review_conflicts_new": 0,
  "review_seen": "",
- "free_left": true,
- "free_done": 0,
  "stages": {
-  "helper": 54,
+  "read2": 67,
   "done": 6,
-  "read1": 319
+  "read1": 306
  },
  "needs": {
   "read1": {
-   "gemma-4-31b-it": 319
+   "gemma-4-31b-it": 306
   },
   "read2": {},
   "settle": {
-   "gemini-3.5-flash,gemini-3.6-flash,gemini-3.7-flash,gemini-3.8-flash": 54
+   "gemini-3.5-flash,gemini-3.6-flash,gemini-3.7-flash,gemini-3.8-flash": 67
   }
  },
  "book": "تهذيب طريق الهجرتين وباب السعادتين - ابن القيم",
  "epub": "تهذيب طريق الهجرتين وباب السعادتين - ابن القيم.epub",
- "updated_at": "2026-11-17T10:44:56Z",
+ "updated_at": "2026-11-17T11:38:51Z",
  "quota_day": "2026-11-17",
- "waiting_for": "helper",
- "run_id": 44061299784,
- "run_number": 539
+ "waiting_for": "time",
+ "run_id": 44069013992,
+ "run_number": 540
 }
