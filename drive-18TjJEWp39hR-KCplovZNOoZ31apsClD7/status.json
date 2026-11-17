@@ -101,7 +101,7 @@
     "settle": {}
   },
   "requests": {
-    "gemma-4-31b-it": 28
+    "gemma-4-31b-it": 30
   },
   "models_out": [
     "gemini-3.5-flash",
@@ -158,9 +158,9 @@
   },
   "book": "تراث الانسانية 8_k2opt",
   "epub": "تراث الانسانية 8_k2opt.epub",
-  "updated_at": "2026-11-17T14:07:14Z",
+  "updated_at": "2026-11-17T14:57:52Z",
   "quota_day": "2026-11-17",
   "waiting_for": "time",
-  "run_id": 44092342016,
-  "run_number": 543
+  "run_id": 44100864983,
+  "run_number": 544
 }
