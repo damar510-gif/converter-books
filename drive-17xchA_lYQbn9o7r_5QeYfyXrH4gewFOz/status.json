@@ -84,6 +84,7 @@
   81,
   82,
   84,
+  85,
   86,
   88,
   89,
@@ -92,19 +93,17 @@
   92,
   93,
   94,
+  95,
   96,
-  98,
+  97,
   99,
   100,
-  101,
   102,
   103,
-  104,
   105,
   106,
   107,
   108,
-  109,
   110,
   111,
   112,
@@ -377,9 +376,10 @@
   379
  ],
  "pages_retry": [
-  85,
-  95,
-  97
+  98,
+  101,
+  104,
+  109
  ],
  "pages_human": [],
  "helper_checked": 0,
@@ -389,24 +389,24 @@
  "review_conflicts_new": 0,
  "review_seen": "",
  "stages": {
-  "read2": 87,
+  "read2": 99,
   "done": 8,
-  "read1": 284
+  "read1": 272
  },
  "needs": {
   "read1": {
-   "gemma-4-31b-it": 284
+   "gemma-4-31b-it": 272
   },
   "read2": {},
   "settle": {
-   "gemini-3.5-flash,gemini-3.6-flash,gemini-3.7-flash,gemini-3.8-flash": 87
+   "gemini-3.5-flash,gemini-3.6-flash,gemini-3.7-flash,gemini-3.8-flash": 99
   }
  },
  "book": "تهذيب طريق الهجرتين وباب السعادتين - ابن القيم",
  "epub": "تهذيب طريق الهجرتين وباب السعادتين - ابن القيم.epub",
- "updated_at": "2026-11-17T13:17:24Z",
+ "updated_at": "2026-11-17T14:07:27Z",
  "quota_day": "2026-11-17",
  "waiting_for": "time",
- "run_id": 44084320104,
- "run_number": 542
+ "run_id": 44092342016,
+ "run_number": 543
 }
