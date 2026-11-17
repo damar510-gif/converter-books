@@ -1,7 +1,7 @@
 {
  "state": "paused",
  "pages_total": 269,
- "pages_done": 31,
+ "pages_done": 34,
  "pages_helper": [],
  "pages_unsure": [],
  "pages_missing": [],
@@ -203,7 +203,9 @@
   220,
   222,
   223,
+  224,
   225,
+  226,
   227,
   228,
   229,
@@ -218,7 +220,11 @@
   242,
   243,
   245,
+  246,
+  247,
+  248,
   249,
+  250,
   251,
   252,
   253,
@@ -226,11 +232,6 @@
   255,
   256,
   257,
-  258,
-  259,
-  260,
-  261,
-  262,
   263,
   264,
   265,
@@ -240,12 +241,8 @@
   269
  ],
  "pages_retry": [
-  224,
-  226,
-  246,
-  247,
-  248,
-  250
+  258,
+  262
  ],
  "pages_human": [],
  "helper_checked": 0,
@@ -255,24 +252,24 @@
  "review_conflicts_new": 0,
  "review_seen": "",
  "stages": {
-  "done": 33,
-  "read2": 211,
-  "read1": 25
+  "done": 36,
+  "read2": 224,
+  "read1": 9
  },
  "needs": {
   "read1": {
-   "gemma-4-31b-it": 25
+   "gemma-4-31b-it": 9
   },
   "read2": {},
   "settle": {
-   "gemini-3.5-flash,gemini-3.6-flash,gemini-3.7-flash,gemini-3.8-flash": 211
+   "gemini-3.5-flash,gemini-3.6-flash,gemini-3.7-flash,gemini-3.8-flash": 224
   }
  },
  "book": "تهذيب روضة المحبين ونزهة المشتاقين - ابن القيم",
  "epub": "تهذيب روضة المحبين ونزهة المشتاقين - ابن القيم.epub",
- "updated_at": "2026-11-17T04:59:16Z",
+ "updated_at": "2026-11-17T05:49:30Z",
  "quota_day": "2026-11-16",
  "waiting_for": "time",
- "run_id": 44015713995,
- "run_number": 532
+ "run_id": 44021424997,
+ "run_number": 533
 }
