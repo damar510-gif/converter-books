@@ -50,19 +50,17 @@
   50,
   51,
   53,
-  54
+  54,
+  56,
+  57,
+  59,
+  60,
+  61,
+  62
  ],
  "pages_unsure": [],
  "pages_missing": [],
  "pages_waiting": [
-  55,
-  56,
-  57,
-  58,
-  59,
-  60,
-  61,
-  62,
   63,
   64,
   65,
@@ -382,7 +380,9 @@
   379
  ],
  "pages_retry": [
-  52
+  52,
+  55,
+  58
  ],
  "pages_human": [],
  "helper_checked": 0,
@@ -394,24 +394,24 @@
  "free_left": true,
  "free_done": 0,
  "stages": {
-  "helper": 48,
+  "helper": 54,
   "done": 6,
-  "read1": 325
+  "read1": 319
  },
  "needs": {
   "read1": {
-   "gemma-4-31b-it": 325
+   "gemma-4-31b-it": 319
   },
   "read2": {},
   "settle": {
-   "gemini-3.5-flash,gemini-3.6-flash,gemini-3.7-flash,gemini-3.8-flash": 48
+   "gemini-3.5-flash,gemini-3.6-flash,gemini-3.7-flash,gemini-3.8-flash": 54
   }
  },
  "book": "تهذيب طريق الهجرتين وباب السعادتين - ابن القيم",
  "epub": "تهذيب طريق الهجرتين وباب السعادتين - ابن القيم.epub",
- "updated_at": "2026-11-17T09:55:48Z",
+ "updated_at": "2026-11-17T10:44:56Z",
  "quota_day": "2026-11-17",
  "waiting_for": "helper",
- "run_id": 44053623238,
- "run_number": 538
+ "run_id": 44061299784,
+ "run_number": 539
 }
