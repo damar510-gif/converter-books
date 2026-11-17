@@ -1,18 +1,8 @@
 {
  "state": "paused",
  "pages_total": 260,
- "pages_done": 246,
+ "pages_done": 256,
  "pages_helper": [
-  247,
-  248,
-  249,
-  250,
-  251,
-  252,
-  253,
-  254,
-  255,
-  256,
   257,
   258,
   259
@@ -46,24 +36,24 @@
  "review_conflicts_new": 0,
  "review_seen": "",
  "free_left": false,
- "free_done": 0,
+ "free_done": 1,
  "stages": {
-  "done": 232,
+  "done": 242,
   "unsure": 14,
   "read2": 1,
-  "helper": 13
+  "helper": 3
  },
  "needs": {
   "read1": {},
   "read2": {},
   "settle": {
-   "gemini-3.5-flash,gemini-3.6-flash,gemini-3.7-flash,gemini-3.8-flash": 14
+   "gemini-3.5-flash,gemini-3.6-flash,gemini-3.7-flash,gemini-3.8-flash": 4
   }
  },
  "book": "تهذيب حادي الأرواح إلى بلاد الأفراح - ابن القيم",
  "epub": "تهذيب حادي الأرواح إلى بلاد الأفراح - ابن القيم.epub",
- "updated_at": "2026-11-17T08:14:49Z",
+ "updated_at": "2026-11-17T09:06:05Z",
  "quota_day": "2026-11-17",
- "run_id": 44039650060,
- "run_number": 536
+ "run_id": 44046381797,
+ "run_number": 537
 }
