@@ -1,36 +1,30 @@
 {
- "state": "done",
- "pages_total": 288,
- "pages_done": 288,
- "pages_helper": [],
- "pages_unsure": [
-  3,
-  284
- ],
- "pages_missing": [],
- "pages_waiting": [],
- "pages_retry": [],
- "pages_human": [],
- "helper_checked": 0,
- "review_items": 10,
- "review_applied": 0,
- "review_kept": 0,
- "review_conflicts_new": 0,
- "review_seen": "",
- "free_left": false,
- "free_done": 1,
- "stages": {
-  "done": 286,
-  "unsure": 2
- },
- "needs": {
-  "read1": {},
-  "read2": {},
-  "settle": {}
- },
- "book": "كتاب الإكسير",
- "epub": "كتاب الإكسير.epub",
- "updated_at": "2026-11-15T15:51:26Z",
- "run_id": 43727735392,
- "run_number": 487
+  "state": "done",
+  "pages_total": 288,
+  "pages_done": 288,
+  "pages_helper": [],
+  "pages_unsure": [],
+  "pages_missing": [],
+  "pages_waiting": [],
+  "pages_retry": [],
+  "pages_human": [
+    3,
+    284
+  ],
+  "helper_checked": 0,
+  "review_items": 0,
+  "review_applied": 1,
+  "review_kept": 9,
+  "review_conflicts_new": 0,
+  "review_seen": "2026-11-15T15:56:54Z",
+  "stages": {
+    "done": 288
+  },
+  "requests": {},
+  "models_out": [],
+  "book": "كتاب الإكسير",
+  "epub": "كتاب الإكسير.epub",
+  "updated_at": "2026-11-18T19:34:56Z",
+  "run_id": 44381766380,
+  "run_number": 582
 }

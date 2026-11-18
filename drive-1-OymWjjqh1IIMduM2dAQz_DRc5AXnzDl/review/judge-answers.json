@@ -1,0 +1,166 @@
+{
+  "v": 1,
+  "answers": {
+    "p3-4b78c14f85": {
+      "kind": "diff",
+      "page": 3,
+      "verdict": "keep",
+      "fp": "diff|عبدالرحمن|عبد الرحمن",
+      "before": "النشر\nالبسام، حازم ",
+      "core": "عبدالرحمن",
+      "after": "\nالإكسير.. خلاصة أعمال",
+      "pos": 72,
+      "base": "6bb788d43f56",
+      "place": "",
+      "at": "2026-11-15T15:55:54Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ]
+    },
+    "p3-8e9e86f749": {
+      "kind": "diff",
+      "page": 3,
+      "verdict": "keep",
+      "fp": "diff|عبدالرحمن|عبد الرحمن",
+      "before": "القيم. / حازم ",
+      "core": "عبدالرحمن",
+      "after": " البسام.، ط٣- الرياض",
+      "pos": 153,
+      "base": "6bb788d43f56",
+      "place": "",
+      "at": "2026-11-15T15:55:54Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ]
+    },
+    "p3-4fed88f66b": {
+      "kind": "diff",
+      "page": 3,
+      "verdict": "keep",
+      "fp": "diff|2122|2212",
+      "before": "أ. العنوان\nديوي ",
+      "core": "٢١٢,٢",
+      "after": "\n١٤٤١/٦٣٠٠\n\nرقم الإيداع:",
+      "pos": 285,
+      "base": "6bb788d43f56",
+      "place": "",
+      "at": "2026-11-15T15:55:54Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ]
+    },
+    "p3-9e17a71cfd": {
+      "kind": "diff",
+      "page": 3,
+      "verdict": "keep",
+      "fp": "diff|14416300|1441 6300",
+      "before": "١٤٤١/٦٣٠٠\n\nرقم الإيداع: ",
+      "core": "١٤٤١/٦٣٠٠",
+      "after": "\nردمك: ٢-٦٨-٨٢٩٠-٦٠٣-٩٧٨\n\nحقوق",
+      "pos": 307,
+      "base": "6bb788d43f56",
+      "place": "",
+      "at": "2026-11-15T15:55:54Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ]
+    },
+    "p3-07ab5b1733": {
+      "kind": "diff",
+      "page": 3,
+      "verdict": "keep",
+      "fp": "diff|1441ه 2020م|1441ه2020م",
+      "before": "محفوظة\nالطبعة الثالثة\n",
+      "core": "١٤٤١هـ / ٢٠٢٠م",
+      "after": "\n\nدار الحضارة للنشر",
+      "pos": 377,
+      "base": "6bb788d43f56",
+      "place": "",
+      "at": "2026-11-15T15:55:54Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ]
+    },
+    "p3-ed95dff8e3": {
+      "kind": "diff",
+      "page": 3,
+      "verdict": "fix",
+      "fp": "diff|10283|102823",
+      "before": "للنشر والتوزيع\nص.ب ",
+      "core": "١٠٢٨٣",
+      "after": " الرياض ١١٦٨٥\nهاتف:",
+      "pos": 427,
+      "base": "6bb788d43f56",
+      "place": "",
+      "at": "2026-11-15T15:55:54Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ],
+      "text": "١٠٢٨٢٣"
+    },
+    "p3-e836f29a0c": {
+      "kind": "diff",
+      "page": 3,
+      "verdict": "keep",
+      "fp": "diff|2416139 11 00966 242258 11 00966 فاكس 2702719 00966|00966 11 2416139 00966 11 2422508 00966 11 فاكس 00966 2702719",
+      "before": "الرياض ١١٦٨٥\nهاتف: ",
+      "core": "٢٤١٦١٣٩ ١١ ٠٠٩٦٦ - ٢٤٢٢٥٨ ١١ ٠٠٩٦٦\nفاكس: ٢٧٠٢٧١٩ ٠٠٩٦٦",
+      "after": " - تحويلة: ١٠٣",
+      "pos": 452,
+      "base": "6bb788d43f56",
+      "place": "",
+      "at": "2026-11-15T15:55:54Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ]
+    },
+    "p3-9dbfd5b6bc": {
+      "kind": "diff",
+      "page": 3,
+      "verdict": "keep",
+      "fp": "diff|504180453 00966 الغربيه|00966 504180453 الغربيه 00966",
+      "before": "تحويلة: ١٠٣\nالمبيعات: ",
+      "core": "٥٠٤١٨٠٤٥٣ ٠٠٩٦٦ - الغربية:",
+      "after": " ٥٠٧٧٧٠٤٢١ ٠٠٩٦٦\nموقعنا",
+      "pos": 528,
+      "base": "6bb788d43f56",
+      "place": "",
+      "at": "2026-11-15T15:55:54Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ]
+    },
+    "p3-6244b82885": {
+      "kind": "diff",
+      "page": 3,
+      "verdict": "keep",
+      "fp": "diff|واخراج العتبي|و اخراج",
+      "before": "الإنترنت www.daralhadarah.com\n\nتصميم ",
+      "core": "وإخراج العتبي",
+      "after": " 0500594538",
+      "pos": 604,
+      "base": "6bb788d43f56",
+      "place": "",
+      "at": "2026-11-15T15:55:54Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ]
+    },
+    "p284-392031414f": {
+      "kind": "diff",
+      "page": 284,
+      "verdict": "keep",
+      "fp": "diff|الاكسير|الاكسجين The oxygen or oxygen is a chemical element with the symbol O and atomic number 8 It is a colorless odorless and tasteless gas at room temperature and temperature It is the third most abundant element in the universe after hydrogen and helium and the most abundant element by mass in the Earths crust Oxygen is essential for the life of most organisms on Earth It is used in respiration where it is used to produce energy from nutrients It is used in combustion a process that allows energy to be used for heating and power generation Oxygen is produced by plants and other photosynthetic organisms during photosynthesis It is released into the atmosphere as a byproduct of this process Oxygen is used in a variety of industrial processes including the production of steel the production of chemicals and the medical use of oxygen therapy Oxygen is a highly reactive element and readily forms compounds with most other elements The most common oxygen compounds are oxides which are formed when oxygen reacts with metals or nonmetals Oxygen is a powerful oxidizing agent and is used in a variety of applications including rocket propulsion and water treatment Oxygen is a crucial element for life on Earth and its importance cannot be overstated It is essential for respiration combustion and the maintenance of the Earths atmosphere",
+      "before": "# ",
+      "core": "الإكسير",
+      "after": "",
+      "pos": 0,
+      "base": "331b2c0e674e",
+      "place": "",
+      "at": "2026-11-15T15:56:54Z",
+      "by": [
+        "agy|gemini-4-argon"
+      ]
+    }
+  }
+}
