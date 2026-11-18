@@ -1,55 +1,109 @@
 {
- "state": "paused",
- "pages_total": 260,
- "pages_done": 259,
- "pages_helper": [],
- "pages_unsure": [
-  24,
-  26,
-  33,
-  51,
-  53,
-  64,
-  67,
-  90,
-  110,
-  111,
-  120,
-  137,
-  139,
-  149,
-  259
- ],
- "pages_missing": [],
- "pages_waiting": [
-  185
- ],
- "pages_retry": [],
- "pages_human": [],
- "helper_checked": 0,
- "review_items": 67,
- "review_applied": 0,
- "review_kept": 0,
- "review_conflicts_new": 0,
- "review_seen": "",
- "free_left": false,
- "free_done": 0,
- "stages": {
-  "done": 244,
-  "unsure": 15,
-  "read2": 1
- },
- "needs": {
-  "read1": {},
-  "read2": {},
-  "settle": {
-   "gemini-3.5-flash,gemini-3.6-flash,gemini-3.7-flash,gemini-3.8-flash": 1
-  }
- },
- "book": "تهذيب حادي الأرواح إلى بلاد الأفراح - ابن القيم",
- "epub": "تهذيب حادي الأرواح إلى بلاد الأفراح - ابن القيم.epub",
- "updated_at": "2026-11-18T19:11:36Z",
- "quota_day": "2026-11-18",
- "run_id": 44376475234,
- "run_number": 579
+  "state": "paused",
+  "pages_total": 260,
+  "pages_done": 259,
+  "pages_helper": [],
+  "pages_unsure": [
+    24,
+    26,
+    33,
+    51,
+    53,
+    64,
+    67,
+    90,
+    110,
+    111,
+    120,
+    137,
+    139,
+    149,
+    259
+  ],
+  "pages_missing": [],
+  "pages_waiting": [
+    185
+  ],
+  "pages_retry": [],
+  "pages_human": [],
+  "helper_checked": 0,
+  "review_items": 67,
+  "review_applied": 0,
+  "review_kept": 0,
+  "review_conflicts_new": 0,
+  "review_seen": "",
+  "free_left": false,
+  "free_done": 0,
+  "stages": {
+    "done": 244,
+    "unsure": 15,
+    "read2": 1
+  },
+  "needs": {
+    "read1": {},
+    "read2": {},
+    "settle": {
+      "gemini-3.5-flash,gemini-3.6-flash,gemini-3.7-flash,gemini-3.8-flash": 1
+    }
+  },
+  "requests": {},
+  "models_out": [
+    "gemini-3.5-flash",
+    "gemini-3.6-flash",
+    "gemini-3.7-flash",
+    "gemini-3.8-flash"
+  ],
+  "free_models": [
+    "gemini-3.5-flash-lite",
+    "gemini-3.1-flash-lite",
+    "gemini-2.5-flash-lite",
+    "gemini-3.8-flash",
+    "gemini-3.7-flash",
+    "gemini-3.6-flash",
+    "gemini-3.5-flash",
+    "gemini-2.5-flash",
+    "gemini-2.5-pro",
+    "gemma-4-31b-it",
+    "gemma-4-26b-a4b-it"
+  ],
+  "free_default": {
+    "read1": [
+      "gemini-3.5-flash-lite",
+      "gemini-3.1-flash-lite"
+    ],
+    "read2": [
+      "gemini-3.1-flash-lite",
+      "gemini-3.5-flash-lite"
+    ],
+    "settle": [
+      "gemini-3.8-flash",
+      "gemini-3.7-flash",
+      "gemini-3.6-flash",
+      "gemini-3.5-flash",
+      "gemini-3-flash",
+      "gemini-3.5-flash-lite",
+      "gemini-3.1-flash-lite"
+    ]
+  },
+  "boxes": {
+    "read1": [
+      "gemma-4-31b-it"
+    ],
+    "read2": [
+      "gemini-3.1-flash-lite",
+      "gemini-3.5-flash-lite"
+    ],
+    "settle": [
+      "gemini-3.6-flash",
+      "gemini-3.5-flash",
+      "gemini-3.8-flash",
+      "gemini-3.7-flash"
+    ]
+  },
+  "book": "تهذيب حادي الأرواح إلى بلاد الأفراح - ابن القيم",
+  "epub": "تهذيب حادي الأرواح إلى بلاد الأفراح - ابن القيم.epub",
+  "updated_at": "2026-11-18T19:46:12Z",
+  "quota_day": "2026-11-18",
+  "run_id": 44383310519,
+  "run_number": 583
 }
