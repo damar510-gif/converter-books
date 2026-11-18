@@ -32,6 +32,8 @@
  "review_kept": 0,
  "review_conflicts_new": 0,
  "review_seen": "",
+ "free_left": false,
+ "free_done": 0,
  "stages": {
   "done": 244,
   "unsure": 15,
@@ -46,9 +48,8 @@
  },
  "book": "تهذيب حادي الأرواح إلى بلاد الأفراح - ابن القيم",
  "epub": "تهذيب حادي الأرواح إلى بلاد الأفراح - ابن القيم.epub",
- "updated_at": "2026-11-18T03:27:57Z",
+ "updated_at": "2026-11-18T04:15:35Z",
  "quota_day": "2026-11-17",
- "waiting_for": "time",
- "run_id": 44225378366,
- "run_number": 559
+ "run_id": 44231315879,
+ "run_number": 560
 }
