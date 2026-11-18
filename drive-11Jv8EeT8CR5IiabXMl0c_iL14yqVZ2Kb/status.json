@@ -148,7 +148,7 @@
  "review_kept": 0,
  "review_conflicts_new": 0,
  "review_seen": "",
- "free_left": true,
+ "free_left": false,
  "free_done": 0,
  "stages": {
   "read1": 133,
@@ -163,9 +163,8 @@
  },
  "book": "تهذيب كتاب الصلاة - ابن القيم",
  "epub": "تهذيب كتاب الصلاة - ابن القيم.epub",
- "updated_at": "2026-11-18T05:06:32Z",
+ "updated_at": "2026-11-18T05:59:03Z",
  "quota_day": "2026-11-17",
- "waiting_for": "helper",
- "run_id": 44237031452,
- "run_number": 561
+ "run_id": 44242885764,
+ "run_number": 562
 }
