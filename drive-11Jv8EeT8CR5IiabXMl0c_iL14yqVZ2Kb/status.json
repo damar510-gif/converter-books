@@ -99,25 +99,24 @@
   100,
   101,
   102,
+  103,
   104,
   105,
+  107,
   108,
   109,
-  110
- ],
- "pages_unsure": [],
- "pages_missing": [],
- "pages_waiting": [
+  110,
   111,
-  112,
   113,
   114,
   115,
   116,
-  117,
   118,
-  119,
-  120,
+  119
+ ],
+ "pages_unsure": [],
+ "pages_missing": [],
+ "pages_waiting": [
   121,
   122,
   123,
@@ -135,9 +134,10 @@
   136
  ],
  "pages_retry": [
-  103,
   106,
-  107
+  112,
+  117,
+  120
  ],
  "pages_human": [],
  "helper_checked": 0,
@@ -149,24 +149,24 @@
  "free_left": true,
  "free_done": 0,
  "stages": {
-  "helper": 101,
+  "helper": 110,
   "done": 7,
-  "read1": 28
+  "read1": 19
  },
  "needs": {
   "read1": {
-   "gemma-4-31b-it": 28
+   "gemma-4-31b-it": 19
   },
   "read2": {},
   "settle": {
-   "gemini-3.5-flash,gemini-3.6-flash,gemini-3.7-flash,gemini-3.8-flash": 101
+   "gemini-3.5-flash,gemini-3.6-flash,gemini-3.7-flash,gemini-3.8-flash": 110
   }
  },
  "book": "تهذيب كتاب الصلاة - ابن القيم",
  "epub": "تهذيب كتاب الصلاة - ابن القيم.epub",
- "updated_at": "2026-11-18T16:46:25Z",
+ "updated_at": "2026-11-18T17:34:50Z",
  "quota_day": "2026-11-18",
  "waiting_for": "helper",
- "run_id": 44342873302,
- "run_number": 575
+ "run_id": 44352484887,
+ "run_number": 576
 }
