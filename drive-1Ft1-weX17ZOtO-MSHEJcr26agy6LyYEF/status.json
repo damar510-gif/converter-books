@@ -47,12 +47,16 @@
     "read2": {},
     "settle": {}
   },
-  "requests": {},
+  "requests": {
+    "gemini-3.6-flash": 13,
+    "gemini-3.5-flash": 16,
+    "gemini-3.8-flash": 15,
+    "gemini-3.7-flash": 11
+  },
   "models_out": [
     "gemini-3.5-flash",
     "gemini-3.6-flash",
-    "gemini-3.7-flash",
-    "gemini-3.8-flash"
+    "gemini-3.7-flash"
   ],
   "free_models": [
     "gemini-3.5-flash-lite",
@@ -103,8 +107,8 @@
   },
   "book": "تهذيب روضة المحبين ونزهة المشتاقين - ابن القيم",
   "epub": "تهذيب روضة المحبين ونزهة المشتاقين - ابن القيم.epub",
-  "updated_at": "2026-11-19T22:38:02Z",
-  "quota_day": "2026-11-19",
-  "run_id": 44630059201,
-  "run_number": 586
+  "updated_at": "2026-11-20T08:47:23Z",
+  "quota_day": "2026-11-20",
+  "run_id": 44699585247,
+  "run_number": 587
 }
