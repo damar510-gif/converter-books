@@ -5,11 +5,7 @@
 - قراءة واحدة فقط: 3
 - فارغة/صور: 3
 - قُرئت ولم تُراجع بعد: 127
-- طلبات gemini-3.6-flash في هذا التشغيل: 13
-- طلبات gemini-3.5-flash في هذا التشغيل: 16
-- طلبات gemini-3.8-flash في هذا التشغيل: 15
-- طلبات gemini-3.7-flash في هذا التشغيل: 11
-- طلبات gemini-3.5-flash-lite في هذا التشغيل: 1
+- طلبات gemini-3.8-flash في هذا التشغيل: 6
 - القراءة الأولى (من صفحة الحالة): gemma-4-31b-it
 - القراءة الثانية (من صفحة الحالة): gemini-3.1-flash-lite، gemini-3.5-flash-lite
 - الحسم (من صفحة الحالة): gemini-3.6-flash، gemini-3.5-flash، gemini-3.8-flash، gemini-3.7-flash
