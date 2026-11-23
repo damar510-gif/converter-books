@@ -1,7 +1,7 @@
 {
  "state": "paused",
  "pages_total": 379,
- "pages_done": 376,
+ "pages_done": 378,
  "pages_helper": [],
  "pages_unsure": [
   3,
@@ -162,6 +162,7 @@
   372,
   375,
   376,
+  377,
   378,
   379
  ],
@@ -169,33 +170,27 @@
  "pages_waiting": [
   158
  ],
- "pages_retry": [
-  359,
-  377
- ],
+ "pages_retry": [],
  "pages_human": [],
  "helper_checked": 0,
- "review_items": 588,
+ "review_items": 594,
  "review_applied": 0,
  "review_kept": 0,
  "review_conflicts_new": 0,
  "review_seen": "",
  "stages": {
-  "done": 217,
-  "unsure": 160,
-  "read2": 2
+  "done": 218,
+  "unsure": 161
  },
  "needs": {
   "read1": {},
   "read2": {},
-  "settle": {
-   "gemini-3.5-flash,gemini-3.6-flash,gemini-3.7-flash,gemini-3.8-flash": 2
-  }
+  "settle": {}
  },
  "book": "تهذيب طريق الهجرتين وباب السعادتين - ابن القيم",
  "epub": "تهذيب طريق الهجرتين وباب السعادتين - ابن القيم.epub",
- "updated_at": "2026-11-22T08:40:55Z",
- "quota_day": "2026-11-22",
- "run_id": 45001062956,
- "run_number": 590
+ "updated_at": "2026-11-23T08:44:44Z",
+ "quota_day": "2026-11-23",
+ "run_id": 45135608343,
+ "run_number": 591
 }
