@@ -1,13 +1,13 @@
 {
  "state": "paused",
  "pages_total": 136,
- "pages_done": 43,
- "pages_helper": [],
- "pages_unsure": [
-  3
- ],
- "pages_missing": [],
- "pages_waiting": [
+ "pages_done": 63,
+ "pages_helper": [
+  1,
+  19,
+  20,
+  42,
+  43,
   44,
   45,
   46,
@@ -50,30 +50,10 @@
   83,
   84,
   85,
-  86,
   87,
-  88,
-  89,
-  90,
-  92,
   94,
-  95,
-  96,
-  97,
-  98,
-  99,
-  100,
-  101,
   102,
-  103,
-  104,
-  105,
-  106,
-  107,
-  108,
-  109,
   110,
-  111,
   113,
   114,
   115,
@@ -97,36 +77,39 @@
   135,
   136
  ],
- "pages_retry": [
-  1,
-  19,
-  20,
-  42,
-  43
+ "pages_unsure": [
+  3,
+  86
  ],
+ "pages_missing": [],
+ "pages_waiting": [],
+ "pages_retry": [],
  "pages_human": [],
  "helper_checked": 0,
- "review_items": 4,
+ "review_items": 10,
  "review_applied": 0,
  "review_kept": 0,
  "review_conflicts_new": 0,
  "review_seen": "",
+ "free_left": false,
+ "free_done": 20,
  "stages": {
-  "read2": 93,
-  "done": 42,
-  "unsure": 1
+  "helper": 73,
+  "done": 61,
+  "unsure": 2
  },
  "needs": {
   "read1": {},
   "read2": {},
   "settle": {
-   "gemini-3.5-flash,gemini-3.6-flash,gemini-3.7-flash,gemini-3.8-flash": 93
+   "gemini-3.5-flash,gemini-3.6-flash,gemini-3.7-flash,gemini-3.8-flash": 73
   }
  },
  "book": "تهذيب كتاب الصلاة - ابن القيم",
  "epub": "تهذيب كتاب الصلاة - ابن القيم.epub",
- "updated_at": "2026-11-23T08:44:44Z",
- "quota_day": "2026-11-23",
- "run_id": 45135608343,
- "run_number": 591
+ "updated_at": "2026-11-24T08:32:44Z",
+ "quota_day": "2026-11-24",
+ "waiting_for": "helper",
+ "run_id": 45352847607,
+ "run_number": 592
 }

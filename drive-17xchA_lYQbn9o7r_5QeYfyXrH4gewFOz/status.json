@@ -178,6 +178,8 @@
  "review_kept": 0,
  "review_conflicts_new": 0,
  "review_seen": "",
+ "free_left": false,
+ "free_done": 0,
  "stages": {
   "done": 218,
   "unsure": 161
@@ -189,8 +191,8 @@
  },
  "book": "تهذيب طريق الهجرتين وباب السعادتين - ابن القيم",
  "epub": "تهذيب طريق الهجرتين وباب السعادتين - ابن القيم.epub",
- "updated_at": "2026-11-23T08:44:44Z",
- "quota_day": "2026-11-23",
- "run_id": 45135608343,
- "run_number": 591
+ "updated_at": "2026-11-24T08:32:44Z",
+ "quota_day": "2026-11-24",
+ "run_id": 45352847607,
+ "run_number": 592
 }
